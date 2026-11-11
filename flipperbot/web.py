@@ -270,12 +270,18 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .t-real_good { color: var(--rg); background: var(--rg-bg); } .t-good { color: var(--g); background: var(--g-bg); }
 .t-mid { color: var(--mid); background: var(--mid-bg); } .t-suspect { color: var(--sus); background: var(--sus-bg); }
 .t-bad { color: var(--bad); background: var(--bad-bg); }
-.price { font-size: 19px; font-weight: 700; margin-left: auto; font-variant-numeric: tabular-nums; }
 .title { font-weight: 600; color: var(--ink); text-decoration: none; }
 .title:hover { text-decoration: underline; }
 .reason { color: var(--muted); font-size: 13px; }
-.money { font-size: 13px; font-variant-numeric: tabular-nums; }
-.money b { color: var(--rg); }
+.prices { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.prices > div { padding: 8px 10px; }
+.prices > div + div { border-left: 1px solid var(--line); }
+.prices .k { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.prices .n { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; white-space: nowrap; letter-spacing: -0.01em; }
+.prices .n.na { font-size: 14px; font-weight: 500; color: var(--muted); padding-top: 4px; }
+.prices .src { font-size: 11px; color: var(--muted); }
+.profit { grid-column: 1 / -1; border-top: 1px solid var(--line); font-size: 13px; font-variant-numeric: tabular-nums; }
+.profit b { color: var(--rg); } .profit b.neg { color: var(--sus); }
 .ai { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .ai .v { font-weight: 700; }
 .v-buy { color: var(--rg); } .v-negotiate { color: var(--mid); } .v-skip { color: var(--sus); }
@@ -354,6 +360,30 @@ function aiBox(a) {
     a.summary && h("div", { class: "reason" }, a.summary));
 }
 
+// Asking price next to what it's worth: the bot's market estimate, else Claude's resale range.
+function priceBox(l) {
+  const a = l.ai && !l.ai.error ? l.ai : null;
+  let worth, src, profit = l.profit;
+  if (l.value) {
+    worth = "~" + lei(l.value); src = "from similar listings";
+  } else if (a && a.resale_ron_high) {
+    worth = a.resale_ron_low && a.resale_ron_low !== a.resale_ron_high
+      ? `${a.resale_ron_low.toLocaleString("ro-RO")}–${lei(a.resale_ron_high)}` : "~" + lei(a.resale_ron_high);
+    src = "Claude's estimate";
+    const mid = ((a.resale_ron_low || a.resale_ron_high) + a.resale_ron_high) / 2;
+    profit = Math.round(mid - l.price - (a.repair_cost_ron || 0));
+  }
+  return h("div", { class: "prices" },
+    h("div", {}, h("div", { class: "k" }, "Price"), h("div", { class: "n" }, lei(l.price)),
+      h("div", { class: "src" }, l.negotiable ? "negotiable" : "asking")),
+    h("div", {}, h("div", { class: "k" }, "Est. value"),
+      worth ? h("div", { class: "n" }, worth) : h("div", { class: "n na" }, "not enough data yet"),
+      worth ? h("div", { class: "src" }, src) : null),
+    profit != null && worth ? h("div", { class: "profit" }, "profit ",
+      h("b", { class: profit < 0 ? "neg" : "" }, (profit < 0 ? "−" : "~") + lei(Math.abs(profit))),
+      l.value && a && a.resale_ron_high ? ` · Claude says ${lei(a.resale_ron_low)}–${lei(a.resale_ron_high)}` : "") : null);
+}
+
 function card(l) {
   const el = h("article", { class: "card" });
   const draw = () => {
@@ -365,10 +395,10 @@ function card(l) {
     el.replaceChildren(
       h("a", { class: "ph", href: l.url, target: "_blank", rel: "noopener noreferrer" }, img),
       h("div", { class: "body" },
-        h("div", { class: "row" }, h("span", { class: "pill t-" + l.tier }, LABEL[l.tier] || l.tier), h("span", { class: "price" }, lei(l.price))),
+        h("div", { class: "row" }, h("span", { class: "pill t-" + l.tier }, LABEL[l.tier] || l.tier)),
+        priceBox(l),
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
-        l.profit ? h("div", { class: "money" }, `resale ~${lei(l.value)} · profit `, h("b", {}, "~" + lei(l.profit))) : null,
         l.ai ? aiBox(l.ai) : null,
         h("div", { class: "meta" }, [l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         h("div", { class: "actions" },

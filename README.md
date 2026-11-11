@@ -20,7 +20,7 @@ Runs on your Mac, in the background.
 3. It walks you through Telegram: open **@BotFather** in Telegram, send `/newbot`, pick a name,
    paste the token it gives you, then press **Start** in your new bot. It finds the rest by itself.
 4. Answer **Enter** to "Start flipperbot now…". Done: it runs in the background, starts again
-   whenever you log in, and messages you on Telegram.
+   whenever you log in, messages you on Telegram, and opens your dashboard at http://localhost:8765.
 
 It ships with a starter price book, so it knows market prices from its first check.
 
@@ -34,11 +34,21 @@ Then type `claude`, log in, type `/exit`. The bot uses it by itself from then on
 
 ## Using it
 
-Mostly you don't: the deals come to Telegram. Good and real good right away, the "maybe" ones in a
-summary at 20:00. For more, open Terminal:
+**Dashboard: http://localhost:8765** on the Mac (bookmark it). Every deal with its photo, price,
+why the bot rated it, and Claude's verdict. Tabs for Deals, Maybe, Likely fake, Starred, Claude
+checked; buttons to star, hide, or *Ask Claude* about any listing. It's served by the bot itself,
+so it's there whenever the bot runs. `flipperbot open` opens it.
+
+On your phone you get the same deals on Telegram: good and real good right away, the "maybe" ones in a
+summary at 20:00. (To open the dashboard on your phone too, on the same Wi-Fi, set
+`dashboard_lan = true` in the settings file; then it's at `http://<your-mac-name>.local:8765`.
+Anyone on that Wi-Fi could see it, so only at home.)
+
+From Terminal:
 
 | command | what it does |
 |---|---|
+| `flipperbot open` | open the dashboard |
 | `flipperbot show` | the best listings found, with why |
 | `flipperbot show --tier mid -n 100` | one tier |
 | `flipperbot ai <olx link>` | Claude-check one listing now |
@@ -58,7 +68,8 @@ To update to the newest version, paste the install command again.
   gets installed. uv and Claude Code come from their makers' official installers. `install.sh`
   is 20 lines: read it before running if you like.
 - **It only talks to**: OLX (listings and photos), Telegram (your alerts), and Claude Code on
-  your Mac.
+  your Mac. The dashboard is only reachable from the Mac itself (unless you turn on `dashboard_lan`),
+  and other websites can't use it.
 - **It never logs in anywhere**, never contacts sellers, never buys anything.
 - **Claude is locked down.** Listing text is written by strangers, so a listing could try to
   give Claude instructions. Claude is told the text is just data, and it's started with only two

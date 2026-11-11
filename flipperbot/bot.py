@@ -29,7 +29,7 @@ NOT_WATCHES = ["opel", "jante", "anvelope", "telefon", "apartament", "masina", "
 WATCH_CATEGORIES = ["1677", "1676"]
 WATCH_WORDS = ["ceas", "watch", "chrono", "cronograf", "cronometru", "automatic", "mecanic", "quartz", "diver"]
 NOT_WATCHES = [
-    "bord", "perete", "pendul", "cuc", "desteptator", "smart", "smartwatch", "apple watch", "galaxy watch",
+    "bord", "perete", "pendul", "cuc", "de masa", "masa", "semineu", "desteptator", "smart", "smartwatch", "apple watch", "galaxy watch",
     "opel", "jante", "anvelope", "telefon", "apartament", "masina", "autoturism", "bicicleta", "parfum",
 ]
 
@@ -117,6 +117,7 @@ def fetch_all(searches: list[tuple[str | None, str | None]], s: Settings, pages:
 
 def poll(db: DB, s: Settings, log: Callable[[str], None] = print) -> list[Any]:
     listings = fetch_all(pick_searches(db, s), s, log=log)
+    db.kv_set("last_poll", {"at": datetime.now().isoformat(timespec="seconds"), "listings": len(listings)})
     learn_categories(db, listings)
     return process(db, listings, s)
 
@@ -150,6 +151,9 @@ def digest(db: DB, s: Settings) -> int:
 
 
 def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
+    from . import web
+
+    web.serve(s, background=True)
     while True:
         stamp = datetime.now().strftime("%H:%M")
         try:

@@ -46,6 +46,12 @@ class DB:
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        # Columns added after the first release: add them to older databases.
+        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
+        for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0"):
+            if col.split()[0] not in have:
+                self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
+        self.conn.commit()
 
     # -- listings ------------------------------------------------------------
 
@@ -90,6 +96,11 @@ class DB:
                 verdict.tier, verdict.est_value_ron, verdict.profit_ron, verdict.reason, key,
             ),
         )
+        self.conn.commit()
+
+    def set_flag(self, key: str, flag: str, value: bool) -> None:
+        assert flag in ("starred", "hidden")
+        self.conn.execute(f"UPDATE listings SET {flag}=? WHERE key=?", (int(value), key))
         self.conn.commit()
 
     def mark_notified(self, key: str, tier: str) -> None:

@@ -1,5 +1,6 @@
 """flipperbot <command>
 
+  open             open the dashboard in your browser (http://localhost:8765)
   setup            first-time setup: Telegram (guided) and a check that Claude Code is there
   run              poll forever (every 5-10 min), alert, AI-check, daily summary at 20:00
   poll             one poll, then exit
@@ -20,7 +21,7 @@ import argparse
 import json
 import sys
 
-from . import ai, autostart, bot, config, notify, seed
+from . import ai, autostart, bot, config, notify, seed, web
 from .db import DB, TIER_RANK
 from .sources import olx
 
@@ -42,6 +43,8 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("target")
     sub.add_parser("telegram-setup")
     sub.add_parser("stats")
+    sub.add_parser("open")
+    sub.add_parser("dashboard")  # serve the dashboard only, without polling
     sub.add_parser("start")
     sub.add_parser("stop")
     sub.add_parser("log")
@@ -56,6 +59,23 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "setup":
         _setup(s)
+
+    elif args.cmd in ("open", "dashboard"):
+        import subprocess
+        import urllib.request
+
+        try:
+            urllib.request.urlopen(web.url(s) + "/api/stats", timeout=2)
+            running = True
+        except Exception:
+            running = False
+        if args.cmd == "open":
+            opener = "open" if sys.platform == "darwin" else "xdg-open"
+            subprocess.run([opener, web.url(s)], capture_output=True)
+            print(f"Opened {web.url(s)}")
+        if not running:
+            print("The bot isn't running, so the dashboard is served from here until you press Ctrl + C.")
+            web.serve(s)
 
     elif args.cmd == "start":
         autostart.enable()
@@ -192,7 +212,13 @@ def _setup(s: config.Settings) -> None:
         answer = input("Start flipperbot now, in the background, and every time you log in? [Y/n] ").strip().lower()
         if answer in ("", "y", "yes", "d", "da"):
             autostart.enable()
-            notify.send(s, "🚀 flipperbot started. Checking OLX every 5-10 minutes.")
+            notify.send(s, f"🚀 flipperbot started. Checking OLX every 5-10 minutes. Dashboard on your Mac: {web.url(s)}")
+            import subprocess
+            import time
+
+            time.sleep(4)
+            subprocess.run(["open", web.url(s)], capture_output=True)
+            print(f"\nYour dashboard: {web.url(s)}  (it just opened in your browser; `flipperbot open` brings it back)")
             return
     print("All set. Start the bot with:  flipperbot run")
 

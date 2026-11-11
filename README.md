@@ -1,10 +1,10 @@
 # flipperbot
 
 Watches OLX.ro for underpriced watches (single ones, lots, broken ones),
-sorts every listing into **bad / suspect / mid / good / real good**, and sends
-the good ones to your phone on Telegram. Claude then looks at the photos of
-those and searches the web for what that model really sells for, using your
-Claude subscription.
+sorts every listing into **bad / suspect / mid / good / real good**, and shows them
+on a dashboard. Claude (on your Claude subscription) reads the real good ones'
+descriptions and photos and checks what the model really sells for; only the deals
+it confirms are sent to your phone on Telegram.
 
 Runs on your Mac, in the background.
 
@@ -20,7 +20,8 @@ Runs on your Mac, in the background.
 3. It walks you through Telegram: open **@BotFather** in Telegram, send `/newbot`, pick a name,
    paste the token it gives you, then press **Start** in your new bot. It finds the rest by itself.
 4. Answer **Enter** to "Start flipperbot now…". Done: it runs in the background, starts again
-   whenever you log in, messages you on Telegram, and opens your dashboard (usually http://localhost:8789).
+   whenever you log in, and opens your dashboard (usually http://localhost:8789). Telegram stays quiet
+   until Claude confirms a real good deal.
 
 It ships with a starter price book, so it knows market prices from its first check.
 
@@ -34,7 +35,7 @@ Then type `claude`, log in, type `/exit`. The bot uses it by itself from then on
 
 ## Using it
 
-**Dashboard: http://localhost:8789** on the Mac (bookmark it; if another app already uses that port, it takes the next free one and tells you which on Telegram. `flipperbot open` always finds it). Every deal with its photo, price,
+**Dashboard: http://localhost:8789** on the Mac (bookmark it; if another app already uses that port, it takes the next free one; `flipperbot open` always finds it). Every deal with its photo, price,
 why the bot rated it, and Claude's verdict. Tabs for Deals, Maybe, Likely fake, Starred, Claude
 checked; buttons to star, hide, or *Ask Claude* about any listing. It's served by the bot itself,
 so it's there whenever the bot runs. `flipperbot open` opens it.

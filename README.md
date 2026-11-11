@@ -84,6 +84,11 @@ To update to the newest version, paste the install command again.
   The bot reads public listings through the same data feed the OLX website uses, a few requests every
   5–10 minutes. The realistic worst case is OLX blocking your home IP for a while.
 
+**Lots** (several watches sold together, often old and unnamed) are where good watches hide, so Claude
+goes through every one: photos at full size, each cut into four zoomed quarters, watch by watch (dial
+text, logos, movements), naming and valuing each and checking with web search. If its total makes the
+lot a real good deal and it's confident, you get it on Telegram with the watches that make it worth it.
+
 ## How it decides
 
 See `flipperbot/tiers.py`. In short: once 4+ listings of the same model are in the
@@ -94,7 +99,7 @@ asking), minus repair (a battery ~40 lei, a broken Seiko ~250, a broken Swiss ~6
 |---|---|---|
 | real good | ≥50% under market and ≥300 lei profit | Claude checks it; Telegram only if Claude confirms (≥50% sure) |
 | good | ≥30% under and ≥150 lei profit; or broken/lot luxury | dashboard; Claude checks with leftover budget |
-| mid | ≥15% under; or interesting but no price history | dashboard ("Maybe"), re-judged if the price drops |
+| mid | ≥15% under; or interesting but no price history; every lot | dashboard ("Maybe"), re-judged if the price drops |
 | suspect | luxury brand far too cheap, or a seller with a row of them | dashboard ("Likely fake") |
 | bad | fashion brands, replicas, "cumpar" ads, parts, over budget, not cheap | ignored |
 

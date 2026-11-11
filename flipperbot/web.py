@@ -279,12 +279,14 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .prices > div + div { border-left: 1px solid var(--line); }
 .prices .k { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .prices .n { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; white-space: nowrap; letter-spacing: -0.01em; }
+.prices .n.range { font-size: 15px; padding-top: 2px; }
 .prices .n.na { font-size: 14px; font-weight: 500; color: var(--muted); padding-top: 4px; }
 .prices .src { font-size: 11px; color: var(--muted); }
 .profit { grid-column: 1 / -1; border-top: 1px solid var(--line); font-size: 13px; font-variant-numeric: tabular-nums; }
 .profit b { color: var(--rg); } .profit b.neg { color: var(--sus); }
 .ai { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .ai .v { font-weight: 700; }
+.ai .lot { display: flex; flex-direction: column; gap: 2px; }
 .v-buy { color: var(--rg); } .v-negotiate { color: var(--mid); } .v-skip { color: var(--sus); }
 .meta { color: var(--muted); font-size: 12px; margin-top: auto; padding-top: 4px; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -350,9 +352,16 @@ async function api(path, opts) {
 }
 const act = (action, key) => api(`/api/${action}/${encodeURIComponent(key)}`, { method: "POST", headers: { "X-Flipperbot": "1" } });
 
-function aiBox(a) {
+function aiBox(a, l) {
   if (a.error) return h("div", { class: "ai" }, h("span", { class: "err" }, "Claude couldn't check it: " + String(a.error).slice(0, 160)));
-  const names = (a.watches || []).map(w => [w.brand, w.model, w.reference].filter(Boolean).join(" ")).filter(Boolean).join("; ");
+  const isLot = (l.flags || []).includes("lot");
+  const ws = (a.watches || []).slice().sort((x, y) => (y.notable === true) - (x.notable === true) || (y.value_ron || 0) - (x.value_ron || 0));
+  const label = w => [w.brand, w.model, w.reference].filter(Boolean).join(" ") || "unidentified";
+  const names = isLot
+    ? h("div", { class: "lot" }, ws.slice(0, 8).map(w => h("div", {}, (w.notable ? "⭐ " : "• ") + label(w),
+        w.value_ron ? ` ~${lei(w.value_ron)}` : "", w.photo ? h("span", { class: "reason" }, ` (photo ${w.photo})`) : null)),
+        ws.length > 8 ? h("div", { class: "reason" }, `+${ws.length - 8} more`) : null)
+    : ws.map(label).join("; ");
   const v = (a.verdict || "?").toLowerCase();
   return h("div", { class: "ai" },
     h("div", {}, "🤖 ", h("span", { class: "v v-" + v }, v.toUpperCase()),
@@ -379,7 +388,7 @@ function priceBox(l) {
     h("div", {}, h("div", { class: "k" }, "Price"), h("div", { class: "n" }, lei(l.price)),
       h("div", { class: "src" }, l.negotiable ? "negotiable" : "asking")),
     h("div", {}, h("div", { class: "k" }, "Est. value"),
-      worth ? h("div", { class: "n" }, worth) : h("div", { class: "n na" }, "not enough data yet"),
+      worth ? h("div", { class: "n" + (worth.includes("–") ? " range" : "") }, worth) : h("div", { class: "n na" }, "not enough data yet"),
       worth ? h("div", { class: "src" }, src) : null),
     profit != null && worth ? h("div", { class: "profit" }, "profit ",
       h("b", { class: profit < 0 ? "neg" : "" }, (profit < 0 ? "−" : "~") + lei(Math.abs(profit))),
@@ -401,7 +410,7 @@ function card(l) {
         priceBox(l),
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
-        l.ai ? aiBox(l.ai) : null,
+        l.ai ? aiBox(l.ai, l) : null,
         h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         h("div", { class: "actions" },
           h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.source === "facebook" ? "Open on Facebook ↗" : "Open on OLX ↗"),

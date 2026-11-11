@@ -75,7 +75,7 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
         return html.escape(x, quote=False)
 
     lines = [
-        f"{EMOJI.get(row['tier'], '')} <b>{LABEL.get(row['tier'], row['tier'])}</b> · {row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''}",
+        f"{EMOJI.get(row['tier'], '')} <b>{LABEL.get(row['tier'], row['tier'])}</b>{' · LOT' if 'lot' in (row['flags'] or '') else ''} · {row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''}",
         f"<b>{e(row['title'])}</b>",
         e(row["city"] or ""),
         e(row["reason"] or ""),
@@ -83,10 +83,16 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
     if row["profit_ron"]:
         lines.append(f"est. resale ~{row['est_value_ron']} lei · profit ~{row['profit_ron']} lei")
     lines.append("")
+    is_lot = "lot" in (row["flags"] or "")
     if ai and "error" not in ai:
-        watches = "; ".join(
-            " ".join(x for x in (w.get("brand"), w.get("model"), w.get("reference")) if x)
-            for w in ai.get("watches") or []
+        ws = ai.get("watches") or []
+        if is_lot:  # the notable ones, with Claude's value for each
+            ws = sorted(ws, key=lambda w: (not w.get("notable"), -(w.get("value_ron") or 0)))[:6]
+        watches = ("\n" if is_lot else "; ").join(
+            ("• " if is_lot else "") + (" ".join(x for x in (w.get("brand"), w.get("model"), w.get("reference")) if x) or "unidentified")
+            + (f" ~{w['value_ron']} lei" if is_lot and w.get("value_ron") else "")
+            + (" ⭐" if is_lot and w.get("notable") else "")
+            for w in ws
         )
         sure = f" · {ai['confidence']}% sure" if isinstance(ai.get("confidence"), (int, float)) else ""
         lines.append(f"🤖 <b>Claude: {e((ai.get('verdict') or '?').upper())}</b>{sure}" + (f" · offer {ai['offer_ron']} lei" if ai.get("offer_ron") else ""))

@@ -17,6 +17,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -55,9 +56,9 @@ Then:
 6. confidence: 0-100, how sure you are that this is a genuine watch AND a profitable flip at the asking or
    offer price. Be honest: with blurry photos, no caseback/movement photos or a vague description, stay low.
 
-Answer with ONLY one JSON object, no other text:
+{lot_block}Answer with ONLY one JSON object, no other text:
 {{
-  "watches": [{{"brand": "", "model": "", "reference": "", "movement": "", "confidence": "high|medium|low"}}],
+  "watches": [{{"brand": "", "model": "", "reference": "", "movement": "", "confidence": "high|medium|low", "photo": "", "value_ron": 0, "notable": false}}],
   "authenticity": "likely_genuine|unsure|likely_fake",
   "authenticity_notes": "",
   "condition": "",
@@ -71,6 +72,51 @@ Answer with ONLY one JSON object, no other text:
   "confidence": 0,
   "summary": "two sentences, in Romanian-English mix is fine, for a phone notification"
 }}"""
+
+
+LOT_BLOCK = """THIS IS A LOT: several watches sold together, often old, dirty and unnamed in the listing. Good ones
+hide in these. Go through it carefully:
+- Every photo, then its zoomed quarters (files named like 3_q1.jpg ... 3_q4.jpg are the four quarters of 3.jpg,
+  for reading small dials). Count the watches.
+- For EACH watch: read the dial text, logo, case shape, crown, hands; if a caseback or movement is visible, the
+  calibre and markings. Name brand/model/reference as far as you can, even if the seller didn't. Use web search on
+  the dial text or model you read to confirm it and to price it (sold prices: OLX, Okazii, eBay, Chrono24).
+- Give each watch a value_ron (as is, used; 0 for junk) and set notable=true for any worth more than about 300 lei
+  or collectible (Swiss vintage, gold, early Seiko/Citizen automatics, chronographs, military/Soviet rarities).
+  Put which photo it's in, in "photo".
+- resale_ron_low/high = the whole lot if you sold the good ones separately and the rest as a batch.
+- Say in summary which watches make the lot worth it.
+
+"""
+
+
+def tiles(photo: Path) -> list[Path]:
+    """Four zoomed quarters of a photo (macOS `sips`), so small dials in a lot are readable.
+    Nothing on other systems or if sips fails: Claude then works from the whole photos."""
+    if sys.platform != "darwin":
+        return []
+    try:
+        out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(photo)], capture_output=True, text=True, timeout=30).stdout
+        w = int(re.search(r"pixelWidth: (\d+)", out).group(1))
+        h = int(re.search(r"pixelHeight: (\d+)", out).group(1))
+    except Exception:
+        return []
+    made = []
+    hw, hh = w // 2, h // 2
+    for n, (y, x) in enumerate([(0, 0), (0, hw), (hh, 0), (hh, hw)], 1):
+        dest = photo.with_name(f"{photo.stem}_q{n}.jpg")
+        if not dest.exists():
+            r = subprocess.run(["sips", "-c", str(hh), str(hw), "--cropOffset", str(y), str(x), str(photo), "--out", str(dest)],
+                               capture_output=True, timeout=30)
+            if r.returncode != 0 or not dest.exists():
+                continue
+        made.append(dest)
+    return made
+
+
+def big(url: str) -> str:
+    """The largest size of an OLX photo (its links are templated ';s=WxH')."""
+    return re.sub(r";s=\d+x\d+", ";s=2000x2000", url)
 
 
 def CLAUDE_ARGS(claude_bin: str) -> list[str]:
@@ -123,12 +169,17 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
     if not available(s) or used_today(db) >= s.ai_daily_limit:
         return None
     folder = s.photos_dir / row["key"].replace(":", "_")
-    photos = download_photos(json.loads(row["photos"] or "[]"), folder)
+    is_lot = "lot" in json.loads(row["flags"] or "[]")
+    urls = json.loads(row["photos"] or "[]")
+    photos = download_photos([big(u) for u in urls] if is_lot else urls, folder, max_photos=10 if is_lot else 8)
+    if is_lot:
+        photos += [t for p in photos[:6] for t in tiles(p)]
     prompt = PROMPT.format(
         source=row["source"], url=row["url"], title=row["title"], price=row["price_ron"],
         negotiable=" (negotiable)" if row["negotiable"] else "", city=row["city"],
         reason=row["reason"], description=(row["description"] or "")[:3000],
         photos=", ".join(p.name for p in photos) or "(no photos)", eur=s.eur_to_ron,
+        lot_block=LOT_BLOCK if is_lot else "",
     )
     db.kv_set(f"ai_used:{date.today().isoformat()}", used_today(db) + 1)
     try:

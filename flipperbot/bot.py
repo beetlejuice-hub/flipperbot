@@ -183,14 +183,41 @@ def pending_alerts(db: DB, s: Settings) -> list[Any]:
 
 
 def pending_ai(db: DB, s: Settings) -> list[Any]:
-    """Listings Claude should look at that won't go to Telegram (good ones): dashboard only."""
+    """What Claude looks at besides real good deals, lots first: every lot (unnamed old lots hide
+    good watches), then good deals by profit. Results land on the dashboard; one that Claude values
+    as a real good deal gets promoted and, if confirmed, sent."""
     tiers = [t for t in s.ai_tiers if t not in s.alert_tiers]
-    if not tiers:
-        return []
-    q = f"""SELECT * FROM listings WHERE ai IS NULL AND tier IN ({','.join('?' * len(tiers))})
-            AND first_seen >= ? AND last_seen >= datetime('now', '-2 days') AND hidden = 0
-            ORDER BY COALESCE(profit_ron, 0) DESC"""
+    q = f"""SELECT * FROM listings WHERE ai IS NULL AND hidden = 0
+            AND (tier IN ({','.join('?' * len(tiers)) or "''"}) OR (flags LIKE '%"lot"%' AND tier IN ('mid', 'good')))
+            AND first_seen >= ? AND last_seen >= datetime('now', '-2 days')
+            ORDER BY (flags LIKE '%"lot"%') DESC, COALESCE(profit_ron, 0) DESC"""
     return db.conn.execute(q, [*tiers, _fresh(db)]).fetchall()
+
+
+def claude_value(db: DB, row: Any, result: dict[str, Any], s: Settings) -> str | None:
+    """Re-tier a listing from Claude's own valuation (how lots and unnamed watches get priced).
+    Only ever upgrades. Returns the new tier if it changed."""
+    if not result or "error" in result or not result.get("resale_ron_high"):
+        return None
+    low = result.get("resale_ron_low") or result["resale_ron_high"]
+    worth = (low + result["resale_ron_high"]) / 2
+    profit = round(low - row["price_ron"] - (result.get("repair_cost_ron") or 0))  # the cautious end
+    discount = 1 - row["price_ron"] / worth if worth else 0
+    tier = None
+    if discount >= s.real_good_discount and profit >= s.real_good_profit_ron:
+        tier = "real_good"
+    elif discount >= s.good_discount and profit >= s.good_profit_ron:
+        tier = "good"
+    if not tier or TIER_RANK[tier] <= TIER_RANK.get(row["tier"], 0):
+        return None
+    notable = [w for w in result.get("watches") or [] if w.get("notable")]
+    what = f"{len(notable)} notable watches inside" if "lot" in (row["flags"] or "") and notable else "Claude's valuation"
+    db.conn.execute(
+        "UPDATE listings SET tier=?, est_value_ron=?, profit_ron=?, reason=? WHERE key=?",
+        (tier, round(worth), profit, f"Claude: worth ~{round(worth)} lei ({what}) · was: {row['reason']}", row["key"]),
+    )
+    db.conn.commit()
+    return tier
 
 
 def ai_skip_reason(db: DB, s: Settings) -> str | None:
@@ -254,8 +281,17 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
     for r in pending_ai(db, s)[:extra_ai]:
         if ai_skip_reason(db, s):
             return
-        log(f"  Claude checking for the dashboard: {r['title']}")
-        ai.check(db, r, s)
+        log(f"  Claude checking {'a lot' if 'lot' in (r['flags'] or '') else 'for the dashboard'}: {r['title']}")
+        result = ai.check(db, r, s)
+        if result and claude_value(db, r, result, s) == "real_good":
+            row = db.get(r["key"])
+            ok, why = confirmed(result, s)
+            if ok:
+                notify.send(s, notify.deal_text(row, result), (json.loads(row["photos"] or "[]") or [None])[0])
+                log(f"  Claude found a real good deal, sent ({confidence(result)}% sure): {row['title']}")
+            else:
+                log(f"  Claude values it as real good but didn't confirm ({why}): {row['title']}")
+            db.mark_notified(row["key"], "real_good")
 
 
 def digest(db: DB, s: Settings) -> int:

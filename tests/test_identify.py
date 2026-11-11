@@ -114,3 +114,8 @@ def test_swap_brands_in_title_are_ignored():
     i = identify("Ceas Mondaine swiss made automatic 25 rubine sch. Seiko citizen omega zenith poljot")
     assert i.brand is None or i.brand.name != "Seiko"
     assert "lot" not in i.flags
+
+
+def test_limited_edition_count_is_not_a_lot():
+    assert "lot" not in identify("Carl F Bucherer full gold editie limitata 125buc").flags
+    assert "lot" in identify("Lot 15 buc ceasuri vechi").flags

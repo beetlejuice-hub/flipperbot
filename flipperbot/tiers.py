@@ -94,7 +94,8 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
             return Verdict("mid", f"{n} with {names}")
         if ident.lot_count and price / ident.lot_count <= 30:
             return Verdict("mid", f"{n} at {round(price / ident.lot_count)} lei each ({names})")
-        return Verdict("mid" if price <= 500 else "bad", f"{n}, {names}")
+        # Unnamed old lots are where good watches hide: always a look, and Claude goes through the photos.
+        return Verdict("mid", f"{n}, {names}: Claude will go through the photos")
 
     # --- priced against the market -------------------------------------------------
     market = market_price(comps) if len(comps) >= s.min_comps else None

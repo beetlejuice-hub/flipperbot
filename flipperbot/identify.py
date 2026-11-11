@@ -219,6 +219,8 @@ def identify(title: str, description: str = "") -> Identity:
 
     lot_count = None
     m = LOT_COUNT.search(title_n)  # descriptions count other things ("2 buc curele")
+    if m and re.search(r"limitat|editie|editia|serie|din \d", title_n):
+        m = None  # "editie limitata 125 buc" is how many were made, not how many are for sale
     if m and int(m.group(1)) >= 2:
         lot_count = int(m.group(1))
     if _any(title_n, LOT) or (lot_count and lot_count >= 2):

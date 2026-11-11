@@ -64,7 +64,7 @@ def listing_json(r: Any) -> dict[str, Any]:
     photos = json.loads(r["photos"] or "[]")
     a = json.loads(r["ai"]) if r["ai"] else None
     return {
-        "key": r["key"], "url": r["url"], "title": r["title"], "price": r["price_ron"],
+        "key": r["key"], "source": r["source"], "url": r["url"], "title": r["title"], "price": r["price_ron"],
         "negotiable": bool(r["negotiable"]), "city": r["city"], "tier": r["tier"], "reason": r["reason"],
         "value": r["est_value_ron"], "profit": r["profit_ron"], "model": r["model_key"],
         "flags": json.loads(r["flags"] or "[]"), "delivery": bool(r["delivery"]),
@@ -117,6 +117,7 @@ def stats(db: DB, s: Settings) -> dict[str, Any]:
         "last_poll": db.kv_get("last_poll"),
         "ai_used": ai.used_today(db), "ai_limit": s.ai_daily_limit, "ai_available": ai.available(s),
         "telegram": notify.enabled(s),
+        "facebook": {k: v for k, v in (db.kv_get("facebook") or {}).items() if k in ("state", "at", "listings")},
         "today": date.today().isoformat(),
     }
 
@@ -401,9 +402,9 @@ function card(l) {
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
         l.ai ? aiBox(l.ai) : null,
-        h("div", { class: "meta" }, [l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
+        h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         h("div", { class: "actions" },
-          h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, "Open on OLX ↗"),
+          h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.source === "facebook" ? "Open on Facebook ↗" : "Open on OLX ↗"),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),
           h("button", { onclick: async () => { await act(l.hidden ? "unhide" : "hide", l.key); el.remove(); refreshStats(); } }, l.hidden ? "Unhide" : "Hide"),
           aiBtn)));
@@ -434,7 +435,11 @@ async function refreshStats() {
     p ? `${fresh ? "running" : "not running"} · last check ${ago(p.at)}` : "waiting for the first check",
     ` · ${stats.total.toLocaleString("ro-RO")} listings tracked · ${stats.priced_models} models priced`,
     stats.ai_available ? ` · Claude ${stats.ai_used}/${stats.ai_limit} today` : " · Claude not installed",
-    stats.telegram ? "" : " · Telegram not set up");
+    stats.telegram ? "" : " · Telegram not set up",
+    !stats.facebook.state ? " · Facebook not set up" :
+      stats.facebook.state === "logged_out" ? " · Facebook logged out: run flipperbot facebook-login" :
+      stats.facebook.state === "error" ? " · Facebook: last run failed, retrying" :
+      stats.facebook.at ? ` · Facebook checked ${ago(stats.facebook.at)}` : " · Facebook on");
   drawTabs();
 }
 

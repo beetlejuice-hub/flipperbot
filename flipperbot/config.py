@@ -44,6 +44,11 @@ class Settings:
     search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))
     eur_to_ron: float = 5.0
 
+    # Facebook Marketplace (needs `flipperbot facebook-login` once, with a second account)
+    facebook_every_min: tuple[int, int] = (30, 60)  # slow on purpose: a busy account gets checkpointed
+    facebook_searches_per_run: int = 2
+    facebook_max_details: int = 8  # new watch-looking listings opened per run for description + photos
+
     # Money
     budget_ron: int = 5000  # skip anything above what you'd pay
     resale_haircut: float = 0.85  # listings ask more than things sell for

@@ -5,6 +5,10 @@ description = "Finds underpriced watches on Romanian marketplaces"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+# Facebook Marketplace: a real browser (Playwright), via danyk20's scraper. Needs Python 3.13.
+facebook = ["facebook-marketplace-scraper>=0.4.5; python_version >= '3.13'"]
+
 [project.scripts]
 flipperbot = "flipperbot.cli:main"
 

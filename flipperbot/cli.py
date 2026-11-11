@@ -11,6 +11,8 @@
   ai <url|key>     run the Claude check on one stored listing now
   telegram-setup   find your Telegram chat id after you've messaged your bot
   stats            what's in the database
+  facebook-login   set up Facebook Marketplace: log in once with your SECOND account
+  facebook-poll    one Facebook search run now (to test it), then exit
   start / stop     (Mac) run in the background from login on / stop that
   log              (Mac) follow what the background bot is doing
 """
@@ -46,6 +48,8 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("stats")
     sub.add_parser("open")
     sub.add_parser("dashboard")  # serve the dashboard only, without polling
+    sub.add_parser("facebook-login")
+    sub.add_parser("facebook-poll")
     sub.add_parser("start")
     sub.add_parser("stop")
     sub.add_parser("log")
@@ -76,6 +80,33 @@ def main(argv: list[str] | None = None) -> None:
                 threading.Event().wait()
             except KeyboardInterrupt:
                 pass
+
+    elif args.cmd == "facebook-login":
+        from .sources import facebook
+
+        if not facebook.installed():
+            sys.exit("Facebook support isn't installed. Paste the install command again, then retry.")
+        print("Getting the browser Facebook needs (once, ~150 MB)...")
+        import subprocess
+
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+        facebook.login()
+        db.kv_set("facebook", {"state": "ok", "next_at": 0})
+        if autostart.running():
+            subprocess.run(["launchctl", "kickstart", "-k", f"gui/{__import__('os').getuid()}/{autostart.LABEL}"], capture_output=True)
+        print("The bot will now also check Facebook every 30-60 minutes.")
+
+    elif args.cmd == "facebook-poll":
+        from .sources import facebook
+
+        if not facebook.installed():
+            sys.exit("Facebook support isn't installed. Paste the install command again, then retry.")
+        state = db.kv_get("facebook", {})
+        db.kv_set("facebook", {**state, "state": state.get("state") or "ok"})
+        n = bot.poll_facebook(db, s)
+        print(f"facebook: {n} listings. State: {db.kv_get('facebook', {}).get('state')}")
+        for r in db.conn.execute("SELECT tier, price_ron, title FROM listings WHERE source='facebook' ORDER BY first_seen DESC LIMIT 15"):
+            print(f"  {r['tier']:<9} {r['price_ron'] or '?':>6} lei  {r['title'][:70]}")
 
     elif args.cmd == "start":
         autostart.enable()

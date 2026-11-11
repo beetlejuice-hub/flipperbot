@@ -12,7 +12,7 @@ if [ -z "$UV" ]; then
   UV="$HOME/.local/bin/uv"
 fi
 echo "Installing flipperbot..."
-"$UV" tool install --force --python 3.12 "flipperbot @ https://github.com/beetlejuice-hub/flipperbot/archive/refs/heads/$BRANCH.zip"
+"$UV" tool install --force --python 3.13 "flipperbot[facebook] @ https://github.com/beetlejuice-hub/flipperbot/archive/refs/heads/$BRANCH.zip"
 "$UV" tool update-shell >/dev/null 2>&1 || true
 echo
 "$HOME/.local/bin/flipperbot" setup </dev/tty

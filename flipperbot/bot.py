@@ -51,7 +51,9 @@ def is_watch(l: Listing, cats: list[str]) -> bool:
     t = normalize(l.title)
     if any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", t) for w in NOT_WATCHES):
         return False
-    if l.category_id in cats:
+    if l.source == "olx" and l.category_id in cats:
+        return True
+    if l.source != "olx" and "ceas" in t.split():  # no watch categories elsewhere: the word will do
         return True
     # Outside the watch categories ("Opel Omega" parts, a Tissot filed under Jewellery):
     # it needs a watch brand and a watch word in the title.
@@ -127,6 +129,43 @@ def poll(db: DB, s: Settings, log: Callable[[str], None] = print) -> list[Any]:
     db.kv_set("last_poll", {"at": datetime.now().isoformat(timespec="seconds"), "listings": len(listings)})
     learn_categories(db, listings)
     return process(db, listings, s)
+
+
+def facebook_due(db: DB, s: Settings) -> bool:
+    from .sources import facebook
+
+    state = db.kv_get("facebook", {})
+    if not facebook.installed() or state.get("state") not in ("ok", "error"):
+        return False  # not set up, or logged out: waits for `flipperbot facebook-login`
+    return time.time() >= state.get("next_at", 0)
+
+
+def poll_facebook(db: DB, s: Settings, log: Callable[[str], None] = print) -> int:
+    """One Facebook run: a couple of searches, new watch-looking listings opened for details,
+    then the same judging as OLX. Returns how many listings it saw."""
+    from .sources import facebook
+
+    state = db.kv_get("facebook", {})
+    next_at = time.time() + random.uniform(*s.facebook_every_min) * 60
+    try:
+        listings = list(facebook.search(
+            random.sample(facebook.QUERIES, s.facebook_searches_per_run),
+            is_new=lambda key: db.get(key) is None,
+            looks_like_watch=lambda l: is_watch(l, []),
+            max_details=s.facebook_max_details, eur_to_ron=s.eur_to_ron, log=log,
+        ))
+    except facebook.NotLoggedIn as e:
+        db.kv_set("facebook", {**state, "state": "logged_out", "error": str(e)[:200], "at": datetime.now().isoformat(timespec="seconds")})
+        log("  facebook: logged out. Run `flipperbot facebook-login` to log in again.")
+        return 0
+    except Exception as e:
+        db.kv_set("facebook", {**state, "state": "error", "error": f"{type(e).__name__}: {e}"[:200], "next_at": next_at,
+                               "at": datetime.now().isoformat(timespec="seconds")})
+        log(f"  facebook error: {e!r}")
+        return 0
+    process(db, listings, s)
+    db.kv_set("facebook", {"state": "ok", "next_at": next_at, "at": datetime.now().isoformat(timespec="seconds"), "listings": len(listings)})
+    return len(listings)
 
 
 def _fresh(db: DB) -> str:
@@ -237,6 +276,8 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
         try:
             print(f"[{stamp}] polling")
             poll(db, s)
+            if facebook_due(db, s):
+                poll_facebook(db, s)
             deliver(db, s)
             today = datetime.now().date().isoformat()
             if s.digest_telegram and datetime.now().hour >= digest_hour and db.kv_get("last_digest") != today:

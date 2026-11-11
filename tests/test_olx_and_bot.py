@@ -62,29 +62,68 @@ def test_search_params():
     assert p == {"offset": "0", "limit": "40", "query": "lot ceasuri", "sort_by": "created_at:desc", "filter_float_price:to": "5000"}
 
 
-def test_poll_end_to_end(capsys):
-    s = Settings()
+def setup_deal(s):
     db = DB(":memory:")
     market = [offer(100 + i, "Ceas Seiko SKX007 automatic", p) for i, p in enumerate([1000, 1100, 950, 1050, 1000])]
+    good = offer(150, "Ceas Seiko SKX007 diver", 650)
     deal = offer(200, "Ceas Seiko SKX007 diver", 420)
     junk = offer(201, "Ceas Michael Kors dama", 150)
     car = offer(202, "Opel Omega 2.0 piese", 500, cat=999)
-    listings = [olx.parse_offer(o) for o in [*market, deal, junk, car]]
-
+    listings = [olx.parse_offer(o) for o in [*market, good, deal, junk, car]]
     bot.learn_categories(db, listings)
     for_ai = bot.process(db, listings, s)
+    return db, for_ai, deal
+
+
+def test_poll_end_to_end_without_claude(capsys):
+    s = Settings()
+    s.claude_bin = "no-such-claude"
+    db, for_ai, deal = setup_deal(s)
 
     assert db.get("olx:202") is None  # not a watch
     assert db.get("olx:201")["tier"] == "bad"
     # The deal came after the market listings in the same batch, so it is priced against them.
-    row = db.get("olx:200")
-    assert row["tier"] == "real_good", row["reason"]
-    assert [r["key"] for r in for_ai] == ["olx:200"]
-    assert "REAL GOOD" in capsys.readouterr().out  # no Telegram configured: alert printed
+    assert db.get("olx:200")["tier"] == "real_good", db.get("olx:200")["reason"]
+    assert db.get("olx:150")["tier"] == "good"
+    assert {r["key"] for r in for_ai} == {"olx:150", "olx:200"}
+    assert "REAL GOOD" not in capsys.readouterr().out  # nothing sent until deliver()
 
-    # Seen again at the same price: nothing new. At a lower price: re-judged.
-    assert bot.process(db, [olx.parse_offer(deal)], s) == []
+    bot.deliver(db, s)
+    out = capsys.readouterr().out  # no Telegram configured: messages print here
+    assert out.count("REAL GOOD") == 1 and "SKX007 diver" in out
+    assert "Not checked by Claude: Claude Code isn't installed" in out
+    assert "650 lei" not in out  # good ones stay on the dashboard
     assert db.get("olx:200")["notified_tier"] == "real_good"
+
+    # Seen again at the same price: nothing new, no second alert.
+    assert bot.process(db, [olx.parse_offer(deal)], s) == []
+    bot.deliver(db, s)
+    assert "REAL GOOD" not in capsys.readouterr().out
+
+
+def test_claude_checks_before_the_alert_and_its_notes_go_in_it(capsys, monkeypatch):
+    s = Settings()
+    db, _, _ = setup_deal(s)
+    order = []
+
+    def fake_check(db_, row, s_):
+        order.append(("claude", row["key"]))
+        result = {"verdict": "skip", "authenticity": "likely_fake", "authenticity_notes": "wrong dial font",
+                  "watches": [{"brand": "Seiko", "model": "SKX007"}], "resale_ron_low": 0, "resale_ron_high": 0,
+                  "summary": "Fake: dial text is off."}
+        db_.set_ai(row["key"], result)
+        return result
+
+    monkeypatch.setattr(bot.ai, "available", lambda s_: True)
+    monkeypatch.setattr(bot.ai, "check", fake_check)
+    monkeypatch.setattr(bot.notify, "send", lambda s_, text, photo=None: order.append(("telegram", text)))
+    bot.deliver(db, s, extra_ai=1)
+
+    assert order[0] == ("claude", "olx:200")
+    kind, text = order[1]
+    assert kind == "telegram" and "LIKELY FAKE" in text and "wrong dial font" in text and "Claude: SKIP" in text
+    assert order[2] == ("claude", "olx:150")  # then a good one, for the dashboard only
+    assert len([o for o in order if o[0] == "telegram"]) == 1
 
 
 def test_mid_rejudged_on_price_drop():

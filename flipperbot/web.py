@@ -127,9 +127,7 @@ def _ai_in_background(s: Settings, key: str) -> None:
         row = db.get(key)
         if row:
             s.ai_daily_limit = max(s.ai_daily_limit, ai.used_today(db) + 1)  # you asked: it runs
-            result = ai.check(db, row, s)
-            if result:
-                notify.send(s, notify.ai_text(db.get(key), result))
+            ai.check(db, row, s)  # the result shows on the dashboard; Telegram is for real good deals only
     finally:
         with _lock:
             _running_ai.discard(key)

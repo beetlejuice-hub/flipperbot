@@ -98,12 +98,9 @@ def process(db: DB, listings: list[Listing], s: Settings, *, alert: bool = True)
         if change == "seen" and prev is not None and prev["tier"]:
             continue
         row = evaluate(db, l, s)
-        tier = row["tier"]
-        already = TIER_RANK.get(row["notified_tier"] or "", -1)
-        if alert and tier in s.alert_tiers and TIER_RANK[tier] > already:
-            notify.send(s, notify.listing_text(row, change), (json.loads(row["photos"] or "[]") or [None])[0])
-            db.mark_notified(l.key, tier)
-        if tier in s.ai_tiers and not row["ai"]:
+        if not alert:  # backfill: price book only, never alert on these
+            db.mark_notified(l.key, row["tier"])
+        elif row["tier"] in s.ai_tiers and not row["ai"]:
             for_ai.append(row)
     return for_ai
 
@@ -132,24 +129,63 @@ def poll(db: DB, s: Settings, log: Callable[[str], None] = print) -> list[Any]:
     return process(db, listings, s)
 
 
-def run_ai(db: DB, rows: list[Any], s: Settings, limit: int = 1, log: Callable[[str], None] = print) -> None:
-    rows = sorted(rows, key=lambda r: (-TIER_RANK[r["tier"]], -(r["profit_ron"] or 0)))
-    for r in rows[:limit]:
-        if not ai.available(s):
-            return
-        if ai.used_today(db) >= s.ai_daily_limit:
-            log("  AI: daily limit reached")
-            return
-        log(f"  AI checking: {r['title']}")
-        result = ai.check(db, r, s)
-        if result is not None:
-            notify.send(s, notify.ai_text(db.get(r["key"]), result))
+def _fresh(db: DB) -> str:
+    """Only listings found after the starter price book was loaded can alert or use Claude."""
+    return db.kv_get("seeded_at") or "0"
+
+
+def pending_alerts(db: DB, s: Settings) -> list[Any]:
+    rank = "CASE {c} WHEN 'real_good' THEN 4 WHEN 'good' THEN 3 WHEN 'mid' THEN 2 WHEN 'suspect' THEN 1 WHEN 'bad' THEN 0 ELSE -1 END"
+    q = f"""SELECT * FROM listings WHERE tier IN ({','.join('?' * len(s.alert_tiers))})
+            AND {rank.format(c='tier')} > {rank.format(c='notified_tier')}
+            AND first_seen >= ? AND last_seen >= datetime('now', '-1 day') AND hidden = 0
+            ORDER BY COALESCE(profit_ron, 0) DESC"""
+    return db.conn.execute(q, [*s.alert_tiers, _fresh(db)]).fetchall()
 
 
 def pending_ai(db: DB, s: Settings) -> list[Any]:
-    q = f"""SELECT * FROM listings WHERE ai IS NULL AND tier IN ({','.join('?' * len(s.ai_tiers))})
-            AND last_seen >= datetime('now', '-2 days')"""
-    return db.conn.execute(q, s.ai_tiers).fetchall()
+    """Listings Claude should look at that won't go to Telegram (good ones): dashboard only."""
+    tiers = [t for t in s.ai_tiers if t not in s.alert_tiers]
+    if not tiers:
+        return []
+    q = f"""SELECT * FROM listings WHERE ai IS NULL AND tier IN ({','.join('?' * len(tiers))})
+            AND first_seen >= ? AND last_seen >= datetime('now', '-2 days') AND hidden = 0
+            ORDER BY COALESCE(profit_ron, 0) DESC"""
+    return db.conn.execute(q, [*tiers, _fresh(db)]).fetchall()
+
+
+def ai_skip_reason(db: DB, s: Settings) -> str | None:
+    if not s.ai_enabled:
+        return "Claude checks are turned off"
+    if not ai.available(s):
+        return "Claude Code isn't installed on the Mac"
+    if ai.used_today(db) >= s.ai_daily_limit:
+        return f"today's {s.ai_daily_limit} Claude checks are used up"
+    return None
+
+
+def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: int = 1) -> None:
+    """Real good deals: Claude reads the listing and photos first (real or fake? worth it?),
+    then ONE Telegram message with the deal and Claude's notes. If Claude can't check it,
+    the deal still goes out, saying why it wasn't checked. Then, with budget left, Claude
+    looks at a good one for the dashboard."""
+    for r in pending_alerts(db, s):
+        result = None
+        if r["tier"] in s.ai_tiers and not r["ai"]:
+            why_not = ai_skip_reason(db, s)
+            if why_not is None:
+                log(f"  Claude checking before alert: {r['title']}")
+                result = ai.check(db, r, s)
+        row = db.get(r["key"])
+        result = result or (json.loads(row["ai"]) if row["ai"] else None)
+        note = None if result else (ai_skip_reason(db, s) or "Claude's check didn't finish")
+        notify.send(s, notify.deal_text(row, result, note), (json.loads(row["photos"] or "[]") or [None])[0])
+        db.mark_notified(row["key"], row["tier"])
+    for r in pending_ai(db, s)[:extra_ai]:
+        if ai_skip_reason(db, s):
+            return
+        log(f"  Claude checking for the dashboard: {r['title']}")
+        ai.check(db, r, s)
 
 
 def digest(db: DB, s: Settings) -> int:
@@ -170,9 +206,9 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
         try:
             print(f"[{stamp}] polling")
             poll(db, s)
-            run_ai(db, pending_ai(db, s), s)
+            deliver(db, s)
             today = datetime.now().date().isoformat()
-            if datetime.now().hour >= digest_hour and db.kv_get("last_digest") != today:
+            if s.digest_telegram and datetime.now().hour >= digest_hour and db.kv_get("last_digest") != today:
                 n = digest(db, s)
                 db.kv_set("last_digest", today)
                 print(f"  digest sent: {n}")

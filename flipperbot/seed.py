@@ -12,7 +12,7 @@ import gzip
 import json
 from pathlib import Path
 
-from .db import DB
+from .db import DB, now
 
 SEED = Path(__file__).parent / "seed" / "listings.json.gz"
 FIELDS = [
@@ -45,4 +45,5 @@ def load_if_empty(db: DB, path: Path = SEED) -> int:
     q = f"INSERT OR IGNORE INTO listings ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})"
     db.conn.executemany(q, [[r.get(f) for f in FIELDS] + [r.get("tier"), 1, "{}", ""] for r in rows])
     db.conn.commit()
+    db.kv_set("seeded_at", now())
     return len(rows)

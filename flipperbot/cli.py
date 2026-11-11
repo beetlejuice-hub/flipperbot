@@ -99,8 +99,8 @@ def main(argv: list[str] | None = None) -> None:
         bot.run_forever(db, s)
 
     elif args.cmd == "poll":
-        rows = bot.poll(db, s)
-        bot.run_ai(db, rows, s)
+        bot.poll(db, s)
+        bot.deliver(db, s)
 
     elif args.cmd == "backfill":
         for i, term in enumerate(s.search_pool):
@@ -140,8 +140,6 @@ def main(argv: list[str] | None = None) -> None:
         s.ai_daily_limit = max(s.ai_daily_limit, ai.used_today(db) + 1)  # a manual check always runs
         res = ai.check(db, row, s)
         print(json.dumps(res, indent=2, ensure_ascii=False))
-        if res:
-            notify.send(s, notify.ai_text(db.get(row["key"]), res))
 
     elif args.cmd == "telegram-setup":
         if not s.telegram_token:

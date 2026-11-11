@@ -56,51 +56,52 @@ def send(s: Settings, text: str, photo: str | None = None) -> None:
         print(text.replace("<b>", "").replace("</b>", ""))
         return
     try:
-        if photo:
-            _call(s, "sendPhoto", chat_id=s.telegram_chat_id, photo=photo, caption=text[:1024], parse_mode="HTML")
+        if photo and len(text) <= 1024:
+            _call(s, "sendPhoto", chat_id=s.telegram_chat_id, photo=photo, caption=text, parse_mode="HTML")
         else:
-            _call(s, "sendMessage", chat_id=s.telegram_chat_id, text=text[:4096], parse_mode="HTML", disable_web_page_preview="true")
+            # Too long for a photo caption: a message, with the OLX link's preview (its photo) shown.
+            _call(s, "sendMessage", chat_id=s.telegram_chat_id, text=text[:4096], parse_mode="HTML",
+                  disable_web_page_preview="false" if photo else "true")
     except Exception as e:  # never let a failed alert stop the bot
         print(f"telegram failed: {e}\n{text}")
 
 
-def listing_text(row: Any, change: str = "new") -> str:
-    e = html.escape
-    tier = row["tier"]
-    head = f"{EMOJI.get(tier, '')} <b>{LABEL.get(tier, tier)}</b>"
-    if change == "price_drop":
-        head += " · price dropped"
+AUTH = {"likely_genuine": "✅ looks genuine", "unsure": "❓ can't tell if it's genuine", "likely_fake": "⚠️ LIKELY FAKE"}
+
+
+def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> str:
+    """The one Telegram message for a real good deal: the deal, then Claude's notes."""
+    def e(x: str) -> str:  # Telegram's HTML only needs <, > and & escaped
+        return html.escape(x, quote=False)
+
     lines = [
-        head,
+        f"{EMOJI.get(row['tier'], '')} <b>{LABEL.get(row['tier'], row['tier'])}</b> · {row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''}",
         f"<b>{e(row['title'])}</b>",
-        f"{row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''} · {e(row['city'] or '')}",
+        e(row["city"] or ""),
         e(row["reason"] or ""),
     ]
     if row["profit_ron"]:
         lines.append(f"est. resale ~{row['est_value_ron']} lei · profit ~{row['profit_ron']} lei")
-    lines.append(row["url"])
-    return "\n".join(lines)
-
-
-def ai_text(row: Any, ai: dict[str, Any]) -> str:
-    e = html.escape
-    if "error" in ai:
-        return f"🤖 Claude couldn't check <b>{e(row['title'])}</b>: {e(str(ai['error'])[:300])}"
-    watches = "; ".join(
-        " ".join(x for x in (w.get("brand"), w.get("model"), w.get("reference")) if x) + f" ({w.get('confidence', '?')})"
-        for w in ai.get("watches") or []
-    )
-    verdict = (ai.get("verdict") or "?").upper()
-    lines = [
-        f"🤖 <b>{verdict}</b> · {e(row['title'])}",
-        f"{e(watches)}",
-        f"authenticity: {e(str(ai.get('authenticity', '?')))}",
-        f"resale {ai.get('resale_ron_low', '?')}–{ai.get('resale_ron_high', '?')} lei · repair ~{ai.get('repair_cost_ron', 0)} lei · asking {row['price_ron']}",
-    ]
-    if ai.get("offer_ron"):
-        lines.append(f"offer: {ai['offer_ron']} lei")
-    if ai.get("summary"):
-        lines.append(e(ai["summary"]))
+    lines.append("")
+    if ai and "error" not in ai:
+        watches = "; ".join(
+            " ".join(x for x in (w.get("brand"), w.get("model"), w.get("reference")) if x)
+            for w in ai.get("watches") or []
+        )
+        lines.append(f"🤖 <b>Claude: {e((ai.get('verdict') or '?').upper())}</b>" + (f" · offer {ai['offer_ron']} lei" if ai.get("offer_ron") else ""))
+        if watches:
+            lines.append(e(watches))
+        lines.append(AUTH.get(ai.get("authenticity"), f"authenticity: {e(str(ai.get('authenticity', '?')))}")
+                     + (f": {e(str(ai.get('authenticity_notes'))[:200])}" if ai.get("authenticity_notes") else ""))
+        if ai.get("condition"):
+            lines.append(f"condition: {e(str(ai['condition'])[:150])}")
+        lines.append(f"resale {ai.get('resale_ron_low', '?')}–{ai.get('resale_ron_high', '?')} lei" + (f" · repair ~{ai['repair_cost_ron']} lei" if ai.get("repair_cost_ron") else ""))
+        if ai.get("summary"):
+            lines.append(e(str(ai["summary"])[:400]))
+    elif ai:
+        lines.append(f"🤖 Claude couldn't check it: {e(str(ai['error'])[:200])}")
+    else:
+        lines.append(f"🤖 Not checked by Claude: {e(note or 'unknown reason')}")
     lines.append(row["url"])
     return "\n".join(lines)
 

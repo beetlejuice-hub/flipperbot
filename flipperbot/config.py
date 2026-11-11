@@ -61,6 +61,8 @@ class Settings:
     # AI (Claude Code on this machine, on your subscription)
     ai_enabled: bool = True
     ai_daily_limit: int = 15  # a $20 plan runs out fast; raise it if you never hit limits
+    # Claude looks at every real_good before it's sent to Telegram, then at good ones with what's left
+    # of the day's budget (those only show on the dashboard).
     ai_tiers: list[str] = field(default_factory=lambda: ["real_good", "good"])
     ai_timeout_s: int = 420
     claude_bin: str = "claude"
@@ -74,7 +76,8 @@ class Settings:
     # Telegram
     telegram_token: str = ""
     telegram_chat_id: str = ""
-    alert_tiers: list[str] = field(default_factory=lambda: ["real_good", "good"])
+    alert_tiers: list[str] = field(default_factory=lambda: ["real_good"])  # Telegram; the rest is on the dashboard
+    digest_telegram: bool = False  # the 20:00 summary of mids on Telegram (they're on the dashboard anyway)
 
     @property
     def db_path(self) -> Path:

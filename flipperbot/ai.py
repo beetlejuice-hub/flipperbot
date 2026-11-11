@@ -46,7 +46,9 @@ Read every photo. Zoom in on dials, logos, casebacks, crowns, movements and any 
 
 Then:
 1. Identify the watch: brand, model, reference and movement if you can. If this is a lot, go through the watches one by one.
-2. Authenticity: look for signs of a fake (wrong fonts, logo, date window, caseback, cheap movement, price far too low for the model).
+2. Authenticity: real or fake? Check the photos (wrong fonts, logo, date window, caseback, cheap movement) and read the
+   description for red flags (words like replica/AAA/copie/1:1, "nu stiu daca e original", no box or papers for an
+   expensive model, stock photos, a price far too low for the model, a seller with many similar luxury watches).
 3. Condition: what's visibly wrong, and what a repair would need and roughly cost in Romania.
 4. Value: use web search to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
 5. Decide: buy, negotiate (and to what price), or skip.

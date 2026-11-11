@@ -22,6 +22,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from . import net
 from .config import Settings
 from .db import DB
 
@@ -94,7 +95,7 @@ def download_photos(urls: list[str], folder: Path, max_photos: int = 8) -> list[
         if not path.exists():
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=30) as r:
+                with net.urlopen(req, timeout=30) as r:
                     path.write_bytes(r.read())
             except Exception:
                 continue

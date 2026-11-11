@@ -172,22 +172,44 @@ def _setup(s: config.Settings) -> None:
     cfg = config.HOME / "config.toml"
     print(f"Settings file: {cfg}\n")
     print("== Telegram: alerts on your phone ==")
-    if not s.telegram_token:
+    me = None
+    if s.telegram_token:
+        me, why = notify.check_token(s)
+        if not me:
+            print(f"The saved token didn't work: {why}\n")
+    if not me:
         print("1. In Telegram, search for @BotFather and open it.")
         print("2. Send it:  /newbot")
         print("3. It asks for a name, then a username ending in 'bot' (e.g. arnold_flipper_bot).")
-        print("4. It answers with a token: a long code like 123456789:AAH...\n")
-        s.telegram_token = input("Paste the token here and press Enter: ").strip()
-    try:
-        me = notify._call(s, "getMe")["result"]
-    except Exception:
-        sys.exit("That token didn't work. Copy it again from @BotFather and rerun: flipperbot setup")
+        print("4. It answers with a message containing a token: a long code like 123456789:AAH...")
+        print("   Copy that message (all of it is fine) and paste it here.\n")
+    tries = 0
+    while not me:
+        tries += 1
+        pasted = input("Paste the token and press Enter: ")
+        token = notify.find_token(pasted)
+        if not token:
+            print("  That doesn't look like a token. It's digits, a colon, then ~35 letters/digits,")
+            print("  like 123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw. Try copying it again.\n")
+        else:
+            s.telegram_token = token
+            me, why = notify.check_token(s)
+            if not me:
+                print(f"  {why}\n")
+                if "reach" in why:
+                    print("  This is a connection problem, not your token. Check the Mac is online and try again.\n")
+        if not me and tries >= 5:
+            sys.exit("Stopping here. Paste the install command again to retry, or send me the message above.")
+    print(f"  Token works: your bot is @{me['username']}.")
     config.set_value("telegram_token", s.telegram_token)
     if not s.telegram_chat_id:
         print(f"\nNow open your bot in Telegram: https://t.me/{me['username']} and press Start (or send 'hi').")
         print("Waiting for your message", end="", flush=True)
         for _ in range(100):  # ~5 minutes
-            updates = notify._call(s, "getUpdates").get("result", [])
+            try:
+                updates = notify._call(s, "getUpdates").get("result", [])
+            except Exception:
+                updates = []
             chats = [u["message"]["chat"]["id"] for u in updates if "message" in u]
             if chats:
                 s.telegram_chat_id = str(chats[-1])
@@ -196,7 +218,7 @@ def _setup(s: config.Settings) -> None:
             time.sleep(3)
         print()
         if not s.telegram_chat_id:
-            sys.exit("Didn't see a message. Send your bot 'hi' and run: flipperbot setup")
+            sys.exit("Didn't see a message. Send your bot 'hi', then paste the install command again.")
         config.set_value("telegram_chat_id", s.telegram_chat_id)
     notify.send(s, "✅ flipperbot is connected. Deals will show up here.")
     print("Telegram works: check your phone.\n")

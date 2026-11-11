@@ -26,6 +26,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Iterator
 
+from .. import net
 from ..models import Listing
 
 GATEWAY = "https://www.olx.ro/apigateway/graphql"
@@ -73,7 +74,7 @@ def _post(params: list[dict[str, str]], timeout: float = 25) -> dict[str, Any]:
         headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "flipperbot/0.1"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with net.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code in (403, 429):

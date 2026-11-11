@@ -6,10 +6,13 @@ from __future__ import annotations
 
 import html
 import json
+import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
 
+from . import net
 from .config import Settings
 
 EMOJI = {"real_good": "🔥🔥", "good": "🔥", "mid": "🤔", "suspect": "⚠️", "bad": "·"}
@@ -19,8 +22,29 @@ LABEL = {"real_good": "REAL GOOD", "good": "GOOD", "mid": "mid", "suspect": "sus
 def _call(s: Settings, method: str, **params: Any) -> dict[str, Any]:
     url = f"https://api.telegram.org/bot{s.telegram_token}/{method}"
     data = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None}).encode()
-    with urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=30) as r:
+    with net.urlopen(urllib.request.Request(url, data=data), timeout=30) as r:
         return json.loads(r.read().decode())
+
+
+TOKEN = re.compile(r"\d{5,}:[A-Za-z0-9_-]{30,}")
+
+
+def find_token(text: str) -> str | None:
+    """The token out of whatever was pasted: just the token, or BotFather's whole message."""
+    m = TOKEN.search(text or "")
+    return m.group(0) if m else None
+
+
+def check_token(s: Settings) -> tuple[dict[str, Any] | None, str]:
+    """(bot info, "") if Telegram accepts the token, else (None, why not in plain words)."""
+    try:
+        return _call(s, "getMe")["result"], ""
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 404):
+            return None, "Telegram says that token is wrong (maybe a character is missing)."
+        return None, f"Telegram had a problem: {net.explain(e)}"
+    except Exception as e:
+        return None, f"Couldn't reach Telegram: {net.explain(e)}"
 
 
 def enabled(s: Settings) -> bool:

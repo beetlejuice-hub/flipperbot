@@ -75,7 +75,7 @@ def setup_deal(s):
     return db, for_ai, deal
 
 
-def test_poll_end_to_end_without_claude(capsys):
+def test_without_claude_nothing_is_sent_and_the_deal_waits(capsys):
     s = Settings()
     s.claude_bin = "no-such-claude"
     db, for_ai, deal = setup_deal(s)
@@ -86,44 +86,54 @@ def test_poll_end_to_end_without_claude(capsys):
     assert db.get("olx:200")["tier"] == "real_good", db.get("olx:200")["reason"]
     assert db.get("olx:150")["tier"] == "good"
     assert {r["key"] for r in for_ai} == {"olx:150", "olx:200"}
-    assert "REAL GOOD" not in capsys.readouterr().out  # nothing sent until deliver()
 
     bot.deliver(db, s)
-    out = capsys.readouterr().out  # no Telegram configured: messages print here
-    assert out.count("REAL GOOD") == 1 and "SKX007 diver" in out
-    assert "Not checked by Claude: Claude Code isn't installed" in out
-    assert "650 lei" not in out  # good ones stay on the dashboard
-    assert db.get("olx:200")["notified_tier"] == "real_good"
-
-    # Seen again at the same price: nothing new, no second alert.
-    assert bot.process(db, [olx.parse_offer(deal)], s) == []
-    bot.deliver(db, s)
-    assert "REAL GOOD" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "REAL GOOD" not in out  # no message without Claude's confirmation
+    assert "waiting for Claude (Claude Code isn't installed" in out
+    assert db.get("olx:200")["notified_tier"] is None  # still pending: checked when Claude can
 
 
-def test_claude_checks_before_the_alert_and_its_notes_go_in_it(capsys, monkeypatch):
+def deliver_with(monkeypatch, verdict):
     s = Settings()
     db, _, _ = setup_deal(s)
     order = []
 
     def fake_check(db_, row, s_):
         order.append(("claude", row["key"]))
-        result = {"verdict": "skip", "authenticity": "likely_fake", "authenticity_notes": "wrong dial font",
-                  "watches": [{"brand": "Seiko", "model": "SKX007"}], "resale_ron_low": 0, "resale_ron_high": 0,
-                  "summary": "Fake: dial text is off."}
+        result = {"watches": [{"brand": "Seiko", "model": "SKX007"}], "resale_ron_low": 800, "resale_ron_high": 1000,
+                  "summary": "notes", **verdict}
         db_.set_ai(row["key"], result)
         return result
 
     monkeypatch.setattr(bot.ai, "available", lambda s_: True)
     monkeypatch.setattr(bot.ai, "check", fake_check)
     monkeypatch.setattr(bot.notify, "send", lambda s_, text, photo=None: order.append(("telegram", text)))
-    bot.deliver(db, s, extra_ai=1)
+    bot.deliver(db, s, extra_ai=1, log=lambda m: None)
+    return db, order
 
-    assert order[0] == ("claude", "olx:200")
+
+def test_confirmed_deal_is_sent_once_with_claudes_notes(monkeypatch):
+    db, order = deliver_with(monkeypatch, {"verdict": "buy", "authenticity": "likely_genuine", "confidence": 70})
+    assert order[0] == ("claude", "olx:200")  # Claude first
     kind, text = order[1]
-    assert kind == "telegram" and "LIKELY FAKE" in text and "wrong dial font" in text and "Claude: SKIP" in text
+    assert kind == "telegram" and "Claude: BUY" in text and "70% sure" in text and "looks genuine" in text
     assert order[2] == ("claude", "olx:150")  # then a good one, for the dashboard only
     assert len([o for o in order if o[0] == "telegram"]) == 1
+    assert db.get("olx:200")["notified_tier"] == "real_good"
+
+
+def test_unconfirmed_deals_stay_on_the_dashboard(monkeypatch):
+    for verdict in (
+        {"verdict": "buy", "authenticity": "likely_fake", "confidence": 90},  # fake
+        {"verdict": "skip", "authenticity": "likely_genuine", "confidence": 80},  # not worth it
+        {"verdict": "negotiate", "authenticity": "unsure", "confidence": 40},  # under half sure
+        {"error": "timeout"},
+    ):
+        db, order = deliver_with(monkeypatch, verdict)
+        assert not [o for o in order if o[0] == "telegram"], verdict
+        assert db.get("olx:200")["notified_tier"] == "real_good"  # decided: not asked about again
+        assert db.get("olx:200")["ai"]  # Claude's notes are on the dashboard
 
 
 def test_mid_rejudged_on_price_drop():

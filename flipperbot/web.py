@@ -354,7 +354,8 @@ function aiBox(a) {
   const names = (a.watches || []).map(w => [w.brand, w.model, w.reference].filter(Boolean).join(" ")).filter(Boolean).join("; ");
   const v = (a.verdict || "?").toLowerCase();
   return h("div", { class: "ai" },
-    h("div", {}, "🤖 ", h("span", { class: "v v-" + v }, v.toUpperCase()), a.offer_ron ? ` · offer ${lei(a.offer_ron)}` : ""),
+    h("div", {}, "🤖 ", h("span", { class: "v v-" + v }, v.toUpperCase()),
+      typeof a.confidence === "number" ? ` · ${a.confidence}% sure` : "", a.offer_ron ? ` · offer ${lei(a.offer_ron)}` : ""),
     names && h("div", {}, names),
     h("div", {}, `authenticity: ${a.authenticity || "?"} · resale ${lei(a.resale_ron_low)}–${lei(a.resale_ron_high)}` + (a.repair_cost_ron ? ` · repair ~${lei(a.repair_cost_ron)}` : "")),
     a.summary && h("div", { class: "reason" }, a.summary));

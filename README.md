@@ -39,11 +39,12 @@ why the bot rated it, and Claude's verdict. Tabs for Deals, Maybe, Likely fake, 
 checked; buttons to star, hide, or *Ask Claude* about any listing. It's served by the bot itself,
 so it's there whenever the bot runs. `flipperbot open` opens it.
 
-**Telegram gets only the real good deals**, and only after Claude has read the listing's description
-and photos: one message with the deal and Claude's notes (real or fake, condition, resale, what to
-offer). If Claude can't check one (daily limit, not installed), it still comes, saying so. Everything
-else (good, maybe, likely fake) is on the dashboard; Claude also checks good ones there with what's
-left of the day's budget. (To open the dashboard on your phone too, on the same Wi-Fi, set
+**Telegram stays quiet except for confirmed deals.** A real good deal is sent only after Claude has
+read its description and photos and says: not fake, buy or negotiate, and at least 50% sure
+(`alert_min_confidence`). One message: the deal and Claude's notes (how sure, real or fake, condition,
+resale, what to offer). Everything else, including real good deals Claude didn't confirm, is on the
+dashboard with Claude's notes. A real good deal waiting for Claude (daily limit used up) is checked at
+the next chance. Claude also checks good ones on the dashboard with what's left of the day's budget. (To open the dashboard on your phone too, on the same Wi-Fi, set
 `dashboard_lan = true` in the settings file; then it's at `http://<your-mac-name>.local:8789`.
 Anyone on that Wi-Fi could see it, so only at home.)
 
@@ -90,7 +91,7 @@ asking), minus repair (a battery ~40 lei, a broken Seiko ~250, a broken Swiss ~6
 
 | tier | rule (default) | what happens |
 |---|---|---|
-| real good | ≥50% under market and ≥300 lei profit | Claude checks it, then one Telegram message |
+| real good | ≥50% under market and ≥300 lei profit | Claude checks it; Telegram only if Claude confirms (≥50% sure) |
 | good | ≥30% under and ≥150 lei profit; or broken/lot luxury | dashboard; Claude checks with leftover budget |
 | mid | ≥15% under; or interesting but no price history | dashboard ("Maybe"), re-judged if the price drops |
 | suspect | luxury brand far too cheap, or a seller with a row of them | dashboard ("Likely fake") |

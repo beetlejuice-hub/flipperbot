@@ -88,7 +88,8 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
             " ".join(x for x in (w.get("brand"), w.get("model"), w.get("reference")) if x)
             for w in ai.get("watches") or []
         )
-        lines.append(f"🤖 <b>Claude: {e((ai.get('verdict') or '?').upper())}</b>" + (f" · offer {ai['offer_ron']} lei" if ai.get("offer_ron") else ""))
+        sure = f" · {ai['confidence']}% sure" if isinstance(ai.get("confidence"), (int, float)) else ""
+        lines.append(f"🤖 <b>Claude: {e((ai.get('verdict') or '?').upper())}</b>{sure}" + (f" · offer {ai['offer_ron']} lei" if ai.get("offer_ron") else ""))
         if watches:
             lines.append(e(watches))
         lines.append(AUTH.get(ai.get("authenticity"), f"authenticity: {e(str(ai.get('authenticity', '?')))}")

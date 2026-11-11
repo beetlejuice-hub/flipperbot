@@ -52,6 +52,8 @@ Then:
 3. Condition: what's visibly wrong, and what a repair would need and roughly cost in Romania.
 4. Value: use web search to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
 5. Decide: buy, negotiate (and to what price), or skip.
+6. confidence: 0-100, how sure you are that this is a genuine watch AND a profitable flip at the asking or
+   offer price. Be honest: with blurry photos, no caseback/movement photos or a vague description, stay low.
 
 Answer with ONLY one JSON object, no other text:
 {{
@@ -66,6 +68,7 @@ Answer with ONLY one JSON object, no other text:
   "price_sources": ["url or short description"],
   "verdict": "buy|negotiate|skip",
   "offer_ron": 0,
+  "confidence": 0,
   "summary": "two sentences, in Romanian-English mix is fine, for a phone notification"
 }}"""
 

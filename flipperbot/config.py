@@ -77,6 +77,9 @@ class Settings:
     telegram_token: str = ""
     telegram_chat_id: str = ""
     alert_tiers: list[str] = field(default_factory=lambda: ["real_good"])  # Telegram; the rest is on the dashboard
+    # Telegram only gets a real_good deal once Claude has confirmed it: not likely fake, verdict buy or
+    # negotiate, and at least this sure (0-100). Unchecked or unconfirmed deals stay on the dashboard.
+    alert_min_confidence: int = 50
     digest_telegram: bool = False  # the 20:00 summary of mids on Telegram (they're on the dashboard anyway)
 
     @property

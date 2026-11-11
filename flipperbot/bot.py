@@ -164,23 +164,54 @@ def ai_skip_reason(db: DB, s: Settings) -> str | None:
     return None
 
 
+def confidence(result: dict[str, Any]) -> int:
+    c = result.get("confidence")
+    if isinstance(c, (int, float)):
+        return int(c)
+    return {"likely_genuine": 60, "unsure": 40}.get(result.get("authenticity"), 0)  # older checks had no number
+
+
+def confirmed(result: dict[str, Any] | None, s: Settings) -> tuple[bool, str]:
+    """Is Claude sure enough about this deal to message you?"""
+    if not result:
+        return False, "not checked by Claude"
+    if "error" in result:
+        return False, "Claude's check failed"
+    if result.get("authenticity") == "likely_fake":
+        return False, "Claude thinks it's fake"
+    if (result.get("verdict") or "").lower() not in ("buy", "negotiate"):
+        return False, f"Claude says {result.get('verdict') or 'skip'}"
+    if confidence(result) < s.alert_min_confidence:
+        return False, f"Claude only {confidence(result)}% sure"
+    return True, ""
+
+
 def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: int = 1) -> None:
-    """Real good deals: Claude reads the listing and photos first (real or fake? worth it?),
-    then ONE Telegram message with the deal and Claude's notes. If Claude can't check it,
-    the deal still goes out, saying why it wasn't checked. Then, with budget left, Claude
-    looks at a good one for the dashboard."""
+    """Real good deals: Claude reads the listing and photos (real or fake? worth it?). Only the
+    ones it confirms (not fake, buy/negotiate, at least alert_min_confidence% sure) go to
+    Telegram, as one message with Claude's notes. The rest stay on the dashboard with Claude's
+    notes there. A deal Claude can't check yet (daily limit) waits for the next chance.
+    Then, with budget left, Claude looks at a good one for the dashboard."""
     for r in pending_alerts(db, s):
-        result = None
-        if r["tier"] in s.ai_tiers and not r["ai"]:
+        if r["ai"]:
+            result = json.loads(r["ai"])
+        else:
             why_not = ai_skip_reason(db, s)
-            if why_not is None:
-                log(f"  Claude checking before alert: {r['title']}")
-                result = ai.check(db, r, s)
+            if why_not:
+                log(f"  real good deal waiting for Claude ({why_not}): {r['title']}")
+                continue
+            log(f"  Claude checking a real good deal: {r['title']}")
+            result = ai.check(db, r, s)
+            if result is None:
+                continue
         row = db.get(r["key"])
-        result = result or (json.loads(row["ai"]) if row["ai"] else None)
-        note = None if result else (ai_skip_reason(db, s) or "Claude's check didn't finish")
-        notify.send(s, notify.deal_text(row, result, note), (json.loads(row["photos"] or "[]") or [None])[0])
-        db.mark_notified(row["key"], row["tier"])
+        ok, why = confirmed(result, s)
+        if ok:
+            notify.send(s, notify.deal_text(row, result), (json.loads(row["photos"] or "[]") or [None])[0])
+            log(f"  sent to Telegram ({confidence(result)}% sure): {row['title']}")
+        else:
+            log(f"  not sent ({why}): {row['title']}")
+        db.mark_notified(row["key"], row["tier"])  # decided either way; it's on the dashboard
     for r in pending_ai(db, s)[:extra_ai]:
         if ai_skip_reason(db, s):
             return
@@ -200,7 +231,7 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
     from . import web
 
     web.serve(s, background=True)
-    notify.send(s, f"🚀 flipperbot is running. Checking OLX every 5-10 minutes. Dashboard on your Mac: {web.url(s)}")
+    print(f"flipperbot is running. Dashboard: {web.url(s)}")
     while True:
         stamp = datetime.now().strftime("%H:%M")
         try:

@@ -218,8 +218,7 @@ def _setup(s: config.Settings) -> None:
         if not s.telegram_chat_id:
             sys.exit("Didn't see a message. Send your bot 'hi', then paste the install command again.")
         config.set_value("telegram_chat_id", s.telegram_chat_id)
-    notify.send(s, "✅ flipperbot is connected. Deals will show up here.")
-    print("Telegram works: check your phone.\n")
+    print("Telegram is connected. You'll only hear from it when Claude confirms a real good deal.\n")
 
     print("== Claude: checks photos and real prices of the good finds ==")
     if shutil.which(s.claude_bin):

@@ -164,6 +164,7 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
     from . import web
 
     web.serve(s, background=True)
+    notify.send(s, f"🚀 flipperbot is running. Checking OLX every 5-10 minutes. Dashboard on your Mac: {web.url(s)}")
     while True:
         stamp = datetime.now().strftime("%H:%M")
         try:

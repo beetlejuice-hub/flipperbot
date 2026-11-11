@@ -1,6 +1,6 @@
 """flipperbot <command>
 
-  open             open the dashboard in your browser (http://localhost:8765)
+  open             open the dashboard in your browser (usually http://localhost:8789)
   setup            first-time setup: Telegram (guided) and a check that Claude Code is there
   run              poll forever (every 5-10 min), alert, AI-check, daily summary at 20:00
   poll             one poll, then exit
@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
 
 from . import ai, autostart, bot, config, notify, seed, web
 from .db import DB, TIER_RANK
@@ -62,20 +63,19 @@ def main(argv: list[str] | None = None) -> None:
 
     elif args.cmd in ("open", "dashboard"):
         import subprocess
-        import urllib.request
 
-        try:
-            urllib.request.urlopen(web.url(s) + "/api/stats", timeout=2)
-            running = True
-        except Exception:
-            running = False
-        if args.cmd == "open":
-            opener = "open" if sys.platform == "darwin" else "xdg-open"
-            subprocess.run([opener, web.url(s)], capture_output=True)
-            print(f"Opened {web.url(s)}")
-        if not running:
+        server = None
+        if not web.is_flipperbot(web.url(s)):
             print("The bot isn't running, so the dashboard is served from here until you press Ctrl + C.")
-            web.serve(s)
+            server = web.serve(s, background=True)
+        if args.cmd == "open":
+            subprocess.run(["open" if sys.platform == "darwin" else "xdg-open", web.url(s)], capture_output=True)
+            print(f"Opened {web.url(s)}")
+        if server:
+            try:
+                threading.Event().wait()
+            except KeyboardInterrupt:
+                pass
 
     elif args.cmd == "start":
         autostart.enable()
@@ -233,12 +233,18 @@ def _setup(s: config.Settings) -> None:
     if sys.platform == "darwin":
         answer = input("Start flipperbot now, in the background, and every time you log in? [Y/n] ").strip().lower()
         if answer in ("", "y", "yes", "d", "da"):
-            autostart.enable()
-            notify.send(s, f"🚀 flipperbot started. Checking OLX every 5-10 minutes. Dashboard on your Mac: {web.url(s)}")
             import subprocess
             import time
 
-            time.sleep(4)
+            try:
+                web._url_file().unlink()  # the bot writes the address it really gets
+            except OSError:
+                pass
+            autostart.enable()
+            for _ in range(30):  # wait for the background bot's dashboard to come up
+                if web.is_flipperbot(web.url(s)):
+                    break
+                time.sleep(1)
             subprocess.run(["open", web.url(s)], capture_output=True)
             print(f"\nYour dashboard: {web.url(s)}  (it just opened in your browser; `flipperbot open` brings it back)")
             return

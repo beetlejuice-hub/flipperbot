@@ -1,4 +1,4 @@
-"""The dashboard: http://localhost:8765 on the Mac running the bot.
+"""The dashboard: http://localhost:8789 (or the next free port) on the Mac running the bot.
 
 Every judged listing with its photo, price, why the bot rated it so, and
 Claude's verdict; star, hide, or ask Claude about any of them. Served by the
@@ -16,8 +16,10 @@ from __future__ import annotations
 import json
 import re
 import threading
+import urllib.request
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -30,8 +32,28 @@ _running_ai: set[str] = set()
 _lock = threading.Lock()
 
 
+def _url_file() -> Path:
+    from . import config
+
+    return config.HOME / "dashboard.url"
+
+
 def url(s: Settings) -> str:
-    return f"http://localhost:{s.dashboard_port}"
+    """Where the running bot serves the dashboard. Its port moves on if the usual one
+    is taken by another app, so the bot writes down the one it got."""
+    try:
+        return _url_file().read_text().strip()
+    except OSError:
+        return f"http://localhost:{s.dashboard_port}"
+
+
+def is_flipperbot(u: str) -> bool:
+    """Is flipperbot's dashboard answering at `u` (and not some other app on that port)?"""
+    try:
+        with urllib.request.urlopen(u + "/api/stats", timeout=2) as r:
+            return "priced_models" in json.loads(r.read())
+    except Exception:
+        return False
 
 
 def _small_photo(u: str) -> str:
@@ -180,12 +202,20 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
 
 def serve(s: Settings, background: bool = False) -> ThreadingHTTPServer | None:
     host = "0.0.0.0" if s.dashboard_lan else "127.0.0.1"
-    try:
-        server = ThreadingHTTPServer((host, s.dashboard_port), make_handler(s))
-    except OSError:
-        print(f"dashboard: port {s.dashboard_port} is busy (already running?): {url(s)}")
+    server = None
+    for port in range(s.dashboard_port, s.dashboard_port + 30):  # another app may hold the usual port
+        try:
+            server = ThreadingHTTPServer((host, port), make_handler(s))
+            break
+        except OSError:
+            continue
+    if server is None:
+        print(f"dashboard: no free port between {s.dashboard_port} and {s.dashboard_port + 29}")
         return None
-    print(f"dashboard: {url(s)}")
+    address = f"http://localhost:{server.server_address[1]}"
+    _url_file().parent.mkdir(parents=True, exist_ok=True)
+    _url_file().write_text(address)
+    print(f"dashboard: {address}")
     if background:
         threading.Thread(target=server.serve_forever, daemon=True).start()
     else:

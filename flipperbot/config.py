@@ -65,9 +65,10 @@ class Settings:
     ai_timeout_s: int = 420
     claude_bin: str = "claude"
 
-    # Dashboard (http://localhost:8765). dashboard_lan = true also serves it to your phone
-    # on the same Wi-Fi, at http://<your-mac-name>.local:8765 (anyone on that Wi-Fi can see it).
-    dashboard_port: int = 8765
+    # Dashboard (http://localhost:8789; if another app has that port, the next free one:
+    # `flipperbot open` always finds it). dashboard_lan = true also serves it to your phone
+    # on the same Wi-Fi, at http://<your-mac-name>.local:<port> (anyone on that Wi-Fi can see it).
+    dashboard_port: int = 8789
     dashboard_lan: bool = False
 
     # Telegram

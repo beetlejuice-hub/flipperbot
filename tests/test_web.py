@@ -66,3 +66,25 @@ def test_actions_need_the_header_and_a_local_host(server):
 
 def test_page_never_uses_innerhtml():
     assert "innerHTML" not in web.PAGE and "insertAdjacentHTML" not in web.PAGE
+
+
+def test_busy_port_moves_on_and_open_finds_the_real_one(tmp_path, monkeypatch):
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+    from flipperbot import config
+
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(Settings, "db_path", property(lambda self: tmp_path / "f.db"))
+    vault = HTTPServer(("127.0.0.1", 0), SimpleHTTPRequestHandler)  # some other app on "our" port
+    threading.Thread(target=vault.serve_forever, daemon=True).start()
+    s = Settings()
+    s.dashboard_port = vault.server_address[1]
+    assert not web.is_flipperbot(f"http://localhost:{s.dashboard_port}")
+    srv = web.serve(s, background=True)
+    try:
+        assert srv.server_address[1] != s.dashboard_port
+        assert web.url(s) == f"http://localhost:{srv.server_address[1]}"
+        assert web.is_flipperbot(web.url(s))
+    finally:
+        srv.shutdown()
+        vault.shutdown()

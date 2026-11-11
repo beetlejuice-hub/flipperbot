@@ -20,7 +20,7 @@ Runs on your Mac, in the background.
 3. It walks you through Telegram: open **@BotFather** in Telegram, send `/newbot`, pick a name,
    paste the token it gives you, then press **Start** in your new bot. It finds the rest by itself.
 4. Answer **Enter** to "Start flipperbot now…". Done: it runs in the background, starts again
-   whenever you log in, messages you on Telegram, and opens your dashboard at http://localhost:8765.
+   whenever you log in, messages you on Telegram, and opens your dashboard (usually http://localhost:8789).
 
 It ships with a starter price book, so it knows market prices from its first check.
 
@@ -34,14 +34,14 @@ Then type `claude`, log in, type `/exit`. The bot uses it by itself from then on
 
 ## Using it
 
-**Dashboard: http://localhost:8765** on the Mac (bookmark it). Every deal with its photo, price,
+**Dashboard: http://localhost:8789** on the Mac (bookmark it; if another app already uses that port, it takes the next free one and tells you which on Telegram. `flipperbot open` always finds it). Every deal with its photo, price,
 why the bot rated it, and Claude's verdict. Tabs for Deals, Maybe, Likely fake, Starred, Claude
 checked; buttons to star, hide, or *Ask Claude* about any listing. It's served by the bot itself,
 so it's there whenever the bot runs. `flipperbot open` opens it.
 
 On your phone you get the same deals on Telegram: good and real good right away, the "maybe" ones in a
 summary at 20:00. (To open the dashboard on your phone too, on the same Wi-Fi, set
-`dashboard_lan = true` in the settings file; then it's at `http://<your-mac-name>.local:8765`.
+`dashboard_lan = true` in the settings file; then it's at `http://<your-mac-name>.local:8789`.
 Anyone on that Wi-Fi could see it, so only at home.)
 
 From Terminal:

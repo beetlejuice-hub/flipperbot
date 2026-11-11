@@ -1,0 +1,16 @@
+# Copy to ~/.flipperbot/config.toml and fill in. Anything left out keeps its default
+# (see flipperbot/config.py for every setting).
+
+telegram_token = ""      # from @BotFather
+telegram_chat_id = ""    # from `flipperbot telegram-setup`
+
+budget_ron = 5000
+ai_daily_limit = 15      # Claude checks per day on your subscription
+poll_every_min = [5, 10]
+
+# Tier thresholds: how far under market, and minimum profit in lei
+real_good_discount = 0.50
+real_good_profit_ron = 300
+good_discount = 0.30
+good_profit_ron = 150
+mid_discount = 0.15

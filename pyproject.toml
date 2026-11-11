@@ -1,0 +1,19 @@
+[project]
+name = "flipperbot"
+version = "0.1.0"
+description = "Finds underpriced watches on Romanian marketplaces"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+flipperbot = "flipperbot.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

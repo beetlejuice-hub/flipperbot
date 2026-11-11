@@ -119,17 +119,22 @@ BATTERY = [
 ]
 REPLICA = [
     "replica", "copie", "clona", "clone", "aaa", "aaa+", "imitatie", "nu este original", "nu e original",
-    "inspired", "homage", "fake", "super clone",
+    "inspired", "homage", "fake", "super clone", "superclone", "clone", "1:1", "mirror",
 ]
 WANTED = ["cumpar", "cumparam", "caut ceas", "caut ceasuri", "achizitionez", "achizitionam"]
 SERVICE = ["reparatii ceasuri", "service ceasuri", "reparam ceasuri", "schimb baterii", "atelier"]
 PART_START = [
     "curea", "bratara", "cutie", "geam", "coroana", "mecanism", "cadran", "baterie", "baterii",
     "suport", "husa", "folie", "incarcator", "cablu", "cutii", "zale", "catarama",
+    "capac", "capace", "capacitori", "cadrane", "mecanisme", "coroane", "geamuri", "ace", "curele",
+    "bratari", "piese", "sticla", "sticle", "rotor", "ax", "arc", "set", "kit", "scule", "unelte",
 ]
 BOX_PAPERS = ["full set", "fullset", "cutie si acte", "cutie si certificat", "cu acte", "certificat de garantie", "box and papers", "card garantie"]
 GOLD = re.compile(r"(?<![a-z0-9])(aur|gold)(?![a-z0-9])[^.]{0,20}(14k|18k|14 k|18 k|585|750|masiv)|(14k|18k|585|750)[^.]{0,15}(aur|gold)")
 PLATED = ["placat", "placata", "aurit", "aurita", "gold plated", "gold filled", "dublat", "laminat"]
+VINTAGE = ["vintage", "vechi", "veche", "de colectie", "colectie", "antic", "antica", "retro", "sovietic", "rusesc", "urss", "cccp"]
+VINTAGE_YEAR = re.compile(r"(?<![0-9])(?:an(?:ul|ii)?\s*)?(?:18[5-9]\d|19[0-8]\d|anii\s*[2-8]0)(?![0-9])")
+POCKET = ["buzunar", "pocket watch", "ceas de buzunar"]
 LOT = ["lot", "loturi", "colectie de ceasuri", "colectie ceasuri", "mai multe ceasuri", "set ceasuri", "set de ceasuri", "lot de ceasuri", "ceasuri vechi", "ceasuri de colectie"]
 LOT_COUNT = re.compile(r"(?<![a-z0-9])(\d{1,3})\s*(?:buc|bucati|ceasuri|bc)(?![a-z])")
 
@@ -142,6 +147,7 @@ class Identity:
     family: str | None
     flags: set[str] = field(default_factory=set)
     lot_count: int | None = None
+    brand_in_title: bool = False  # False: only the description names it, a weaker signal
 
     @property
     def model_key(self) -> str | None:
@@ -160,13 +166,23 @@ class Identity:
         return self.brand.segment if self.brand else None
 
 
+# "Ceas Mondaine automatic sch. Seiko citizen omega": brands after "sch"/"schimb" are what
+# the seller would swap for, not what's for sale.
+_SWAP = re.compile(r"(?<![a-z])(?:sch|schb|schimb|schimbat|schimbare|accept schimb|sau schimb)(?![a-z]).*$")
+
+
 def identify(title: str, description: str = "") -> Identity:
+    title = _SWAP.sub("", normalize(title)).strip() or title
     title_n = normalize(title)
     full_n = normalize(f"{title} . {description}")
 
     # The title is what the seller is selling; the description often name-drops
     # other brands ("like Rolex"), so it only counts if the title has none.
-    brands = find_brands(title) or find_brands(description)
+    title_brands = find_brands(title)
+    brands = title_brands or find_brands(description)
+    # "Audemars Piguet x Swatch Royal Pop", "Omega x Swatch MoonSwatch": it's a Swatch.
+    if any(b.name == "Swatch" for b in brands) or "moonswatch" in title_n:
+        brands = [b for b in BRANDS if b.name == "Swatch"] + [b for b in brands if b.name != "Swatch"]
     brand = brands[0] if brands else None
     refs = find_refs(title, brand) or find_refs(description, brand)
     family = None
@@ -194,14 +210,21 @@ def identify(title: str, description: str = "") -> Identity:
         flags.add("box_papers")
     if GOLD.search(full_n) and not _any(full_n, PLATED):
         flags.add("solid_gold")
+    if _any(full_n, VINTAGE) or VINTAGE_YEAR.search(full_n):
+        flags.add("vintage")
+    if _any(full_n, POCKET):
+        flags.add("pocket")
     if "automatic" in full_n or "automat" in full_n:
         flags.add("automatic")
 
     lot_count = None
-    m = LOT_COUNT.search(title_n) or LOT_COUNT.search(full_n)
+    m = LOT_COUNT.search(title_n)  # descriptions count other things ("2 buc curele")
     if m and int(m.group(1)) >= 2:
         lot_count = int(m.group(1))
-    if _any(title_n, LOT) or (lot_count and lot_count >= 2) or len(find_brands(title)) >= 3:
+    if _any(title_n, LOT) or (lot_count and lot_count >= 2):
         flags.add("lot")
 
-    return Identity(brand=brand, brands=brands, refs=refs, family=family, flags=flags, lot_count=lot_count)
+    return Identity(
+        brand=brand, brands=brands, refs=refs, family=family, flags=flags, lot_count=lot_count,
+        brand_in_title=bool(title_brands),
+    )

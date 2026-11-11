@@ -97,3 +97,20 @@ def test_lot_names_several_brands():
     i = identify("Lot ceasuri Seiko, Orient, Poljot, Casio")
     assert "lot" in i.flags
     assert [b.name for b in i.brands] == ["Seiko", "Orient", "Poljot", "Casio"]
+
+
+def test_swatch_collabs_are_swatch():
+    assert identify("Ceas Audemars Piguet x Swatch Royal Pop").brand.name == "Swatch"
+    assert identify("Omega x Swatch MoonSwatch Mission to Mars").brand.name == "Swatch"
+
+
+def test_vintage_and_pocket():
+    i = identify("Omega ceas buzunar an aprox 1900 cadran alb")
+    assert {"vintage", "pocket"} <= i.flags
+    assert "replica" in identify("Ceas Rolex Daytona Oysterflex superclone").flags
+
+
+def test_swap_brands_in_title_are_ignored():
+    i = identify("Ceas Mondaine swiss made automatic 25 rubine sch. Seiko citizen omega zenith poljot")
+    assert i.brand is None or i.brand.name != "Seiko"
+    assert "lot" not in i.flags

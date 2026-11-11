@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import time
 from collections import Counter
 from datetime import datetime
@@ -18,47 +19,58 @@ from .models import Listing
 from .sources import olx
 from .tiers import judge
 
+WATCH_WORDS = ["ceas", "watch", "chrono", "cronograf", "cronometru", "automatic", "mecanic", "quartz", "diver"]
 NOT_WATCHES = ["opel", "jante", "anvelope", "telefon", "apartament", "masina", "autoturism", "bicicleta", "parfum"]
 
 
+# OLX.ro categories: 1677 = men's watches, 1676 = women's watches (checked November 2026).
+# Elsewhere "ceas" also means car dashboard clocks, wall clocks, smartwatches; those are skipped
+# unless the title names a watch brand (a Tissot filed under the wrong category still counts).
+WATCH_CATEGORIES = ["1677", "1676"]
+WATCH_WORDS = ["ceas", "watch", "chrono", "cronograf", "cronometru", "automatic", "mecanic", "quartz", "diver"]
+NOT_WATCHES = [
+    "bord", "perete", "pendul", "cuc", "desteptator", "smart", "smartwatch", "apple watch", "galaxy watch",
+    "opel", "jante", "anvelope", "telefon", "apartament", "masina", "autoturism", "bicicleta", "parfum",
+]
+
+
 def watch_categories(db: DB) -> list[str]:
-    """OLX categories that hold watches, learned from what 'ceas' listings are filed under."""
-    counts: dict[str, int] = db.kv_get("olx_watch_categories", {})
-    total = sum(counts.values())
-    if total < 40:
-        return []
-    return [c for c, n in counts.items() if n >= 20 and n / total >= 0.15]
+    return WATCH_CATEGORIES
 
 
 def learn_categories(db: DB, listings: list[Listing]) -> None:
-    counts = Counter(db.kv_get("olx_watch_categories", {}))
+    """Counts which categories 'ceas' listings are filed under, for `flipperbot stats`."""
+    counts = Counter(db.kv_get("olx_ceas_categories", {}))
     for l in listings:
         if l.category_id and "ceas" in normalize(l.title).split():
             counts[l.category_id] += 1
-    db.kv_set("olx_watch_categories", dict(counts))
+    db.kv_set("olx_ceas_categories", dict(counts))
 
 
 def is_watch(l: Listing, cats: list[str]) -> bool:
     t = normalize(l.title)
-    if any(w in t.split() for w in NOT_WATCHES):
+    if any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", t) for w in NOT_WATCHES):
         return False
-    if "ceas" in t:
+    if l.category_id in cats:
         return True
-    if cats:
-        return l.category_id in cats
-    return bool(find_brands(l.title))
+    # Outside the watch categories ("Opel Omega" parts, a Tissot filed under Jewellery):
+    # it needs a watch brand and a watch word in the title.
+    return bool(find_brands(l.title)) and any(w in t for w in WATCH_WORDS)
 
 
 def row_to_listing(r: Any) -> Listing:
     return Listing(
         source=r["source"], source_id=r["source_id"], url=r["url"], title=r["title"],
         description=r["description"] or "", price_ron=r["price_ron"], negotiable=bool(r["negotiable"]),
+        params=json.loads(r["params"] or "{}"),
         city=r["city"] or "", photos=json.loads(r["photos"] or "[]"), category_id=r["category_id"] or "",
     )
 
 
 def evaluate(db: DB, l: Listing, s: Settings) -> Any:
-    ident = identify(l.title, l.description)
+    # OLX has its own "brand" field on watch listings; count it as part of the description.
+    brand_field = l.params.get("brand") if isinstance(l.params.get("brand"), str) else ""
+    ident = identify(l.title, f"{l.description} {brand_field}")
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key) if ident.model_key else []
     verdict = judge(l, ident, comps, s)
     db.set_verdict(l.key, ident, verdict)

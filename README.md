@@ -6,51 +6,66 @@ the good ones to your phone on Telegram. Claude then looks at the photos of
 those and searches the web for what that model really sells for, using your
 Claude subscription.
 
-Runs on your Mac. OLX blocks cloud servers, so it has to run from home.
+Runs on your Mac, in a Terminal window you leave open.
 
-## Setup on the Mac (once)
+## Setup, step by step (once, ~20 minutes)
 
-1. Install uv (it runs Python projects, no other installs needed):
+**Open Terminal**: press ⌘ + Space, type `Terminal`, press Enter. You paste each command
+below into it and press Enter. Wait for one to finish before the next.
 
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
+**1. Get the code onto your Mac.** The repo is private, so the easiest way is GitHub Desktop:
+download it from desktop.github.com, sign in, then *File → Clone Repository → flipperbot → Clone*.
+It lands in `Documents/GitHub/flipperbot`. Then in Terminal:
 
-2. Get the code:
+```bash
+cd ~/Documents/GitHub/flipperbot
+```
 
-   ```bash
-   git clone https://github.com/beetlejuice-hub/flipperbot && cd flipperbot
-   ```
+**2. Install uv**, the tool that runs the bot (it fetches the right Python by itself; no admin password needed):
 
-3. Check that OLX answers and the bot understands it. This does one poll and prints what it found:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-   ```bash
-   uv run flipperbot poll
-   ```
+Close Terminal and open it again (so it finds uv), and `cd ~/Documents/GitHub/flipperbot` again.
 
-4. Build the price book: reads ~5 pages for every search term once, no alerts. Takes ~25 minutes.
+**3. Try it.** One search round; it prints what it finds:
 
-   ```bash
-   uv run flipperbot backfill
-   ```
+```bash
+uv run flipperbot poll
+```
 
-5. Telegram alerts: on Telegram, message **@BotFather**, send `/newbot`, pick a name, copy the token.
+**4. Teach it prices.** Reads ~5 pages for each of ~50 searches, slowly. ~25 minutes, no alerts:
 
-   ```bash
-   mkdir -p ~/.flipperbot && cp config.example.toml ~/.flipperbot/config.toml && open -e ~/.flipperbot/config.toml
-   ```
+```bash
+uv run flipperbot backfill
+```
 
-   Paste the token as `telegram_token`, save. Send your new bot any message on Telegram, then:
+**5. Telegram, so alerts reach your phone.**
+- In Telegram, search **@BotFather**, send `/newbot`, give it any name. It replies with a *token* (a long code).
+- Make the settings file and open it:
 
-   ```bash
-   uv run flipperbot telegram-setup
-   ```
+  ```bash
+  mkdir -p ~/.flipperbot && cp config.example.toml ~/.flipperbot/config.toml && open -e ~/.flipperbot/config.toml
+  ```
 
-   Put the chat id it prints into the config as `telegram_chat_id`.
+- Paste the token between the quotes after `telegram_token =`, save (⌘S), close.
+- In Telegram, open your new bot and send it "hi". Then:
 
-6. Claude checks: Claude Code must be installed and logged in on the Mac (`claude` in a terminal
-   should open it). The bot runs it headless for good and real-good listings, max 15 a day
-   (`ai_daily_limit`), on your subscription.
+  ```bash
+  uv run flipperbot telegram-setup
+  ```
+
+- It prints a chat id. Put it after `telegram_chat_id =` in the same file, save.
+
+**6. Claude checks (optional, uses your Claude plan).** Install Claude Code and log in once:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Then type `claude`, log in with your Claude account, and quit it (`/exit`). The bot uses it by itself
+from then on, up to 15 checks a day.
 
 ## Running it
 
@@ -58,9 +73,9 @@ Runs on your Mac. OLX blocks cloud servers, so it has to run from home.
 caffeinate -i uv run flipperbot run
 ```
 
-`caffeinate -i` keeps the Mac from sleeping while it runs. It polls every 5–10 minutes,
-alerts on good and real good, has Claude check one listing per poll, and sends the
-daily second-look summary (mids, suspects) at 20:00.
+Leave that Terminal window open. `caffeinate -i` stops the Mac sleeping while it runs. Every 5–10
+minutes it checks OLX, alerts you on good and real good finds, has Claude check one of them, and at
+20:00 sends a summary of the "maybe" ones. Stop it with Ctrl + C.
 
 Other commands:
 
@@ -68,12 +83,27 @@ Other commands:
 |---|---|
 | `uv run flipperbot show` | the best listings found, with why |
 | `uv run flipperbot show --tier mid -n 100` | one tier |
-| `uv run flipperbot ai <olx url>` | Claude-check one listing now |
+| `uv run flipperbot ai <olx link>` | Claude-check one listing now |
 | `uv run flipperbot rescore` | re-judge everything (after changing thresholds) |
 | `uv run flipperbot stats` | what's in the database |
 | `uv run flipperbot digest` | send the summary now |
 
 Data lives in `~/.flipperbot/` (database, downloaded photos, config).
+
+## Is it safe to run?
+
+- **No extra packages.** The bot only uses Python's own standard library: nothing third-party
+  gets installed. uv and Claude Code come from their makers' official installers.
+- **It only talks to**: OLX (listings and photos), Telegram (your alerts), and Claude Code on
+  your Mac.
+- **It never logs in anywhere**, never contacts sellers, never buys anything.
+- **Claude is locked down.** Listing text is written by strangers, so a listing could try to
+  give Claude instructions. Claude is told the text is just data, and it's started with only two
+  tools: reading the photos and web search. No shell, no file edits, no opening web pages, so it
+  can't act on a malicious listing or send anything anywhere (see `CLAUDE_ARGS` in `flipperbot/ai.py`).
+- **OLX's rules**: like most marketplaces, OLX's terms most likely forbid automated collection.
+  The bot reads public listings through the same data feed the OLX website uses, a few requests every
+  5–10 minutes. The realistic worst case is OLX blocking your home IP for a while.
 
 ## How it decides
 

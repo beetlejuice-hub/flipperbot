@@ -77,9 +77,10 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
 
     # --- too cheap to be real ---------------------------------------------------
     if ident.brand and ident.brand.fake_floor_ron and price < ident.brand.fake_floor_ron:
-        if "broken" in f or "lot" in f:
-            # A dead vintage Omega for 1500 lei is plausible. Worth Claude's eyes.
-            return Verdict("good", f"{ident.brand.name}, broken/lot, very cheap: real or fake? check photos")
+        why = {"broken", "lot", "vintage", "pocket"} & f
+        if why and ident.brand_in_title:
+            # A dead vintage Omega or a 1900s Omega pocket watch for 800 lei is plausible. Worth Claude's eyes.
+            return Verdict("good", f"{ident.brand.name}, {'/'.join(sorted(why))}, very cheap: real or fake? check photos")
         return Verdict("suspect", f"{ident.brand.name} at {price} lei: likely fake")
 
     # --- lots ---------------------------------------------------------------------
@@ -113,6 +114,11 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
             v.tier = "good"
         elif discount >= s.mid_discount and profit > 0:
             v.tier = "mid"
+        if "|" not in what and v.tier in ("good", "real_good"):
+            # Priced against every listing of the brand: a ladies' quartz Citizen vs all Citizens.
+            # Too rough to alert on; a second look is enough.
+            v.tier = "mid"
+            v.reason += " (brand-level price only, model unknown)"
         return v
 
     # --- no price history yet -------------------------------------------------------

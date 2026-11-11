@@ -1,7 +1,7 @@
 """OLX parsing and one full poll, offline.
 
-The offers below are hand-written in the shape of OLX's /api/v1/offers/
-response. Replace them with a real saved response (samples/olx-*.json) once
+The offers below are hand-written in the shape of OLX's listing data
+(the GraphQL gateway and /api/v1/offers/ return the same fields). Replace them with a real saved response (samples/olx-*.json) once
 one has been captured from a home connection: see samples/README.md.
 """
 
@@ -14,7 +14,7 @@ from flipperbot.db import DB
 from flipperbot.sources import olx
 
 
-def offer(id, title, price, currency="RON", desc="", cat=1234, prev=None):
+def offer(id, title, price, currency="RON", desc="", cat=1677, prev=None):
     return {
         "id": id,
         "url": f"https://www.olx.ro/d/oferta/x-ID{id}.html",
@@ -57,10 +57,9 @@ def test_eur_converted_and_buy_ads_dropped():
     assert olx.parse_offer(o) is None
 
 
-def test_search_url():
-    u = olx.search_url("lot ceasuri", max_price=5000)
-    assert u.startswith("https://www.olx.ro/api/v1/offers/?")
-    assert "query=lot+ceasuri" in u and "sort_by=created_at%3Adesc" in u
+def test_search_params():
+    p = {x["key"]: x["value"] for x in olx.search_params("lot ceasuri", max_price=5000)}
+    assert p == {"offset": "0", "limit": "40", "query": "lot ceasuri", "sort_by": "created_at:desc", "filter_float_price:to": "5000"}
 
 
 def test_poll_end_to_end(capsys):
@@ -105,3 +104,15 @@ def test_real_sample_if_present():
         data = json.loads(path.read_text())
         parsed = [olx.parse_offer(o) for o in data.get("data", [])]
         assert parsed and all(p is None or p.title for p in parsed), path
+
+
+def test_dashboard_and_wall_clocks_are_not_watches():
+    def L(title, cat):
+        return olx.parse_offer(offer(1, title, 500, cat=cat))
+    cats = bot.WATCH_CATEGORIES
+    assert not bot.is_watch(L("Ceas bord Audi A6 C7 2016", 3561), cats)
+    assert not bot.is_watch(L("Ceas vechi cu pendul de perete", 235), cats)
+    assert not bot.is_watch(L("Apple watch SE 2", 1943), cats)
+    assert bot.is_watch(L("Tissot T-Race Chronograph", 460), cats)
+    assert not bot.is_watch(L("Set lampi numar LED Astra G, Omega A/B Vectra B", 999), cats)
+    assert bot.is_watch(L("Ceas elegant Atlantic", 1677), cats)

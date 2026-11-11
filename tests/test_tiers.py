@@ -58,3 +58,28 @@ def test_no_history_yet():
     assert verdict("Ceas Seiko quartz", 600).tier == "bad"
     assert verdict("Ceas vechi automatic", 150).tier == "mid"
     assert verdict("Ceas barbatesc elegant", 150).tier == "bad"
+
+
+def test_cheap_vintage_luxury_gets_a_look_not_suspect():
+    assert verdict("Omega ceas buzunar an aprox 1900 cadran alb", 777).tier == "good"
+    assert verdict("Ceas Omega automatic seatmaster calendar urgent", 800).tier == "suspect"
+
+
+def test_brand_only_price_never_alerts():
+    comps = [1150] * 6
+    v = verdict("Ceas Citizen Calendar Quartz Dama", 120, comps=comps)
+    assert v.tier == "mid" and "brand-level" in v.reason
+
+
+def test_parts_named_in_plural():
+    assert verdict("Capacitori ceas Seiko", 75).tier == "bad"
+    assert verdict("Cadrane ceas Poljot 17 rubine", 50).tier == "bad"
+
+
+def test_luxury_named_only_in_description_stays_suspect():
+    v = verdict("Ceas Barbatesc De Firma Lux Elegant 2026", 239, desc="model Rolex, colectie noua")
+    assert v.tier == "suspect"
+
+
+def test_lot_needs_the_title_to_say_so():
+    assert "lot" not in verdict("Ceas Stowa placat", 290, desc="Mai am 2 buc: Seiko, Citizen, Poljot, Zenith").reason

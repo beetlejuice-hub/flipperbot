@@ -32,11 +32,25 @@ only shows asking prices. So:
 | josh-56/facebook-marketplace-scraper | **Fake**: invented class names, and the files start with a stray `thon` so they can't even run. | Don't use. |
 | danyk20/facebook-marketplace-scraper | **The real one.** Headless Chromium (Playwright), stays logged in through a saved browser profile, reads Facebook's own JSON while scrolling, well tested, maintained. On PyPI. | Use it for Facebook. |
 
-Instead of parsing OLX's HTML, flipperbot reads `https://www.olx.ro/api/v1/offers/`, the JSON
-API the OLX site itself uses: exact price and currency, "price dropped from", all photos, seller,
-delivery. No markup to break.
+More repos found (November 2026):
 
-## Done (phase 1, not yet run against live OLX)
+| repo | what it is | verdict |
+|---|---|---|
+| zandaulion/olx-deal-finder | Real, active OLX.ro deal finder (phones). Reads `/api/v1/offers/` and gets past OLX's 403 by imitating Chrome's network fingerprint (curl_cffi). | Its scoring idea (under Q1, ≥20% under median, a price floor) matches ours. We don't imitate a browser: see below. |
+| FlorinPopaCodes/aeron-miller-index | Daily OLX.ro price tracker, runs on GitHub's servers through OLX's GraphQL gateway with a plain client. | **Adopted the gateway.** |
+| Westeru/Romania-OLX-scraper | HTML + Gemini, Windows scripts. | Nothing new. |
+| Giglium/vinted_scraper | Maintained Vinted package. | For Vinted, later. |
+| passivebot/facebook-marketplace-scraper | Popular (400★) but last updated 2024. | danyk20 is better. |
+| Chrono24 scrapers | All 2022–24, Chrono24 is behind Cloudflare now. | Not useful. |
+
+**How flipperbot reads OLX:** `https://www.olx.ro/apigateway/graphql`, the GraphQL gateway the OLX
+website itself uses, with a plain request. It returns the same fields as the REST API: exact price
+(already in lei), "price dropped from", all photos, seller, delivery, OLX's own brand field. Checked
+live: it answers normally even from a cloud server, while `/api/v1/offers/` answers 403.
+Watch categories: 1677 = men's, 1676 = women's; each poll reads the newest of both plus a few
+random searches.
+
+## Done (phase 1, tested against live OLX on 2026-11-11)
 
 - `sources/olx.py`: OLX API search + parsing.
 - `identify.py`, `watchdb.py`: brand (~100 brands in 6 segments), reference numbers, model families,
@@ -44,13 +58,16 @@ delivery. No markup to break.
 - `tiers.py`: the tiers above.
 - `db.py`: SQLite, price history, price book.
 - `notify.py`: Telegram. `ai.py`: Claude check. `bot.py`, `cli.py`: polling loop and commands.
-- Tests on Romanian-style titles and hand-written OLX responses (46 passing).
+- Tests on Romanian titles and OLX-shaped responses (55 passing).
+- Live sample (~650 real listings) checked by hand; fixed what it showed: dashboard and wall clocks,
+  "AP x Swatch", "superclone", parts sold alone, swap-brand lists in titles ("sch. Seiko citizen…"),
+  brand-only prices (now never above mid), cheap vintage/pocket luxury (now a Claude check, not "fake").
+- Known rough edge: model families are broad (Seamaster = 90s quartz Polaris and modern 300M alike),
+  so a family price can be far off. Claude's check catches it; references fix it as data grows.
 
 ## Next
 
-1. **Run on the Mac** (`poll`, then `backfill`): check the real API matches the parser. Save a real
-   response into `samples/` (see samples/README.md) so the tests use it. Tune brand list, keywords,
-   thresholds from what real listings look like.
+1. **Run on the Mac** (`poll`, `backfill`, then `run`) and tune from a week of real alerts.
 2. **Facebook Marketplace** with danyk20's scraper, on a **second** Facebook account, every 30–60 min.
    Needs: a Romania entry in its `COUNTRY_ANCHORS` (it ships Switzerland only), and its browser is
    hard-coded to `de-CH`, so login button texts need Romanian/English.

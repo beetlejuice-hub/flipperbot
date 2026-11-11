@@ -1,15 +1,18 @@
-"""OLX.ro through the JSON API its own web pages use (/api/v1/offers/).
+"""OLX.ro through the GraphQL gateway its own web pages use
+(https://www.olx.ro/apigateway/graphql, query `clientCompatibleListings`).
 
 Why not parse the HTML like the two OLX repos you linked? Both read the page
 markup: kjanus03 by `data-cy="l-card"` and heading tags (it's built for
 olx.pl), mirelconstantin by generated CSS class names like `css-qfzx1y` that
-change whenever OLX rebuilds its site. The JSON API gives the same listings
-with structured fields (exact price and currency, "price dropped from", the
-full photo list, location, seller, OLX delivery) and no markup to break.
+change whenever OLX rebuilds its site. The gateway returns the same listings
+as structured data (exact price and currency, "price dropped from", every
+photo, seller, OLX delivery, and OLX's own "brand" field), no markup to break.
 
-Run from home, slowly: OLX refuses requests from cloud servers (we got 403
-from one), and a home connection polling every few minutes looks like what
-it is, one person browsing.
+Why not the REST endpoint /api/v1/offers/ that most OLX tools use? OLX now
+answers plain scripts there with 403 (checked from a server; another OLX.ro
+project notes the same). The gateway answers a plain request normally, and a
+daily OLX price tracker on GitHub (FlorinPopaCodes/aeron-miller-index) has
+used it from GitHub's servers for months.
 """
 
 from __future__ import annotations
@@ -18,40 +21,71 @@ import html
 import json
 import re
 import urllib.error
-import urllib.parse
 import urllib.request
 from typing import Any, Iterator
 
 from ..models import Listing
 
-API = "https://www.olx.ro/api/v1/offers/"
+GATEWAY = "https://www.olx.ro/apigateway/graphql"
 PAGE_SIZE = 40  # OLX caps a page at 50
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+
+# Field names are the same as the REST API's, which is why parse_offer() reads both.
+QUERY = """
+query ListingSearchQuery($searchParameters: [SearchParameter!]) {
+  clientCompatibleListings(searchParameters: $searchParameters) {
+    __typename
+    ... on ListingSuccess {
+      data {
+        id url title description created_time last_refresh_time offer_type business status
+        category { id type }
+        user { id name }
+        photos { link }
+        delivery { rock { active } }
+        params { key name value { __typename
+          ... on PriceParam { value currency negotiable previous_value label }
+          ... on GenericParam { key label } } }
+        location { city { name } region { name } }
+      }
+      metadata { total_elements }
+      links { next { href } }
+    }
+    ... on ListingError { error { code detail } }
+  }
+}
+"""
 
 
 class Blocked(RuntimeError):
     """OLX said no (403/429). Back off for a while instead of retrying."""
 
 
-def _get(url: str, timeout: float = 25) -> dict[str, Any]:
+class OlxError(RuntimeError):
+    """OLX answered, but with an error instead of listings."""
+
+
+def _post(params: list[dict[str, str]], timeout: float = 25) -> dict[str, Any]:
+    body = json.dumps({"query": QUERY, "variables": {"searchParameters": params}}).encode()
     req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "application/json",
-            "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
-        },
+        GATEWAY,
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "flipperbot/0.1"},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code in (403, 429):
-            raise Blocked(f"OLX answered {e.code} for {url}") from e
+            raise Blocked(f"OLX answered {e.code}") from e
         raise
+    if data.get("errors"):
+        raise OlxError(str(data["errors"])[:500])
+    result = (data.get("data") or {}).get("clientCompatibleListings") or {}
+    if result.get("__typename") == "ListingError":
+        raise OlxError(str(result.get("error")))
+    return result
 
 
-def search_url(
+def search_params(
     query: str | None = None,
     *,
     category_id: str | None = None,
@@ -59,17 +93,17 @@ def search_url(
     limit: int = PAGE_SIZE,
     max_price: int | None = None,
     newest_first: bool = True,
-) -> str:
-    params: dict[str, Any] = {"offset": offset, "limit": limit}
+) -> list[dict[str, str]]:
+    p = {"offset": offset, "limit": limit}
     if query:
-        params["query"] = query
+        p["query"] = query
     if category_id:
-        params["category_id"] = category_id
+        p["category_id"] = category_id
     if newest_first:
-        params["sort_by"] = "created_at:desc"
+        p["sort_by"] = "created_at:desc"
     if max_price:
-        params["filter_float_price:to"] = max_price
-    return API + "?" + urllib.parse.urlencode(params)
+        p["filter_float_price:to"] = max_price
+    return [{"key": k, "value": str(v)} for k, v in p.items()]
 
 
 def search(
@@ -79,11 +113,11 @@ def search(
     pages: int = 1,
     max_price: int | None = None,
     eur_to_ron: float = 5.0,
-    fetch=_get,
+    fetch=_post,
 ) -> Iterator[Listing]:
     """Newest listings for a search, page by page. `fetch` is swappable for tests."""
     for page in range(pages):
-        data = fetch(search_url(query, category_id=category_id, offset=page * PAGE_SIZE, max_price=max_price))
+        data = fetch(search_params(query, category_id=category_id, offset=page * PAGE_SIZE, max_price=max_price))
         offers = data.get("data") or []
         for offer in offers:
             listing = parse_offer(offer, eur_to_ron=eur_to_ron)

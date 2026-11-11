@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> None:
             bot.learn_categories(db, listings)
             bot.process(db, listings, s, alert=False)
             bot.time.sleep(bot.random.uniform(*s.pause_between_requests_s))
-        print(f"watch categories learned: {bot.watch_categories(db)}")
+        print(f"\"ceas\" listings by OLX category: {db.kv_get('olx_ceas_categories', {})}")
         _rescore(db, s)
 
     elif args.cmd == "rescore":
@@ -119,8 +119,14 @@ def main(argv: list[str] | None = None) -> None:
 
 def _rescore(db: DB, s: config.Settings) -> None:
     before: dict[str, int] = {}
+    cats = bot.watch_categories(db)
     for r in db.all():
-        bot.evaluate(db, bot.row_to_listing(r), s)
+        l = bot.row_to_listing(r)
+        if bot.is_watch(l, cats):
+            bot.evaluate(db, l, s)
+        else:
+            db.conn.execute("UPDATE listings SET tier='bad', reason='not a watch' WHERE key=?", (l.key,))
+    db.conn.commit()
     for r in db.conn.execute("SELECT tier, COUNT(*) n FROM listings GROUP BY tier"):
         before[r["tier"]] = r["n"]
     print("tiers now:", dict(sorted(before.items(), key=lambda kv: -TIER_RANK.get(kv[0] or "bad", 0))))

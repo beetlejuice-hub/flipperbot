@@ -65,9 +65,14 @@ random searches.
 - Known rough edge: model families are broad (Seamaster = 90s quartz Polaris and modern 300M alike),
   so a family price can be far off. Claude's check catches it; references fix it as data grows.
 
+- Install: `install.sh` (one pasted command) → `flipperbot setup` (guided Telegram) → background
+  launchd agent (`flipperbot start/stop/log`). Ships a starter price book (`flipperbot/seed/`), built
+  here from a full backfill, without descriptions or seller data.
+
 ## Next
 
-1. **Run on the Mac** (`poll`, `backfill`, then `run`) and tune from a week of real alerts.
+1. **Arnold runs the installer on the Mac**; tune from a week of real alerts. Refresh the starter
+   price book now and then (`backfill` + `export-seed`).
 2. **Facebook Marketplace** with danyk20's scraper, on a **second** Facebook account, every 30–60 min.
    Needs: a Romania entry in its `COUNTRY_ANCHORS` (it ships Switzerland only), and its browser is
    hard-coded to `de-CH`, so login button texts need Romanian/English.

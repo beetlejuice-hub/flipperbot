@@ -62,7 +62,7 @@ def row_to_listing(r: Any) -> Listing:
     return Listing(
         source=r["source"], source_id=r["source_id"], url=r["url"], title=r["title"],
         description=r["description"] or "", price_ron=r["price_ron"], negotiable=bool(r["negotiable"]),
-        params=json.loads(r["params"] or "{}"),
+        params=json.loads(r["params"] or "{}"), seller_id=r["seller_id"] or "",
         city=r["city"] or "", photos=json.loads(r["photos"] or "[]"), category_id=r["category_id"] or "",
     )
 
@@ -73,6 +73,16 @@ def evaluate(db: DB, l: Listing, s: Settings) -> Any:
     ident = identify(l.title, f"{l.description} {brand_field}")
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key) if ident.model_key else []
     verdict = judge(l, ident, comps, s)
+    if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and l.seller_id:
+        # One seller with a row of luxury watches all far under market: a replica dealer.
+        n = db.conn.execute(
+            """SELECT COUNT(*) FROM listings WHERE seller_id=? AND key!=? AND segment IN ('luxury','swiss')
+               AND (tier IN ('good','real_good','suspect') OR reason LIKE '%likely fake%')""",
+            (l.seller_id, l.key),
+        ).fetchone()[0]
+        if n >= 2:
+            verdict.tier = "suspect"
+            verdict.reason = f"seller has {n + 1} cheap luxury listings: likely replicas · " + verdict.reason
     db.set_verdict(l.key, ident, verdict)
     return db.get(l.key)
 

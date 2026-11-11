@@ -103,7 +103,7 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
         repair = repair_cost(ident, s)
         profit = resale - price - repair
         discount = 1 - price / market
-        what = (ident.model_key or "?").replace("|", " ")
+        what = " ".join(dict.fromkeys((ident.model_key or "?").replace("|", " ").split()))  # "seiko seiko 5" -> "seiko 5"
         detail = f"{what}: {price} lei vs market ~{market} ({len(comps)} listings), {round(discount * 100)}% under"
         if repair:
             detail += f", repair ~{repair}"
@@ -114,6 +114,11 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
             v.tier = "good"
         elif discount >= s.mid_discount and profit > 0:
             v.tier = "mid"
+        if v.tier in ("good", "real_good") and not ident.brand_in_title:
+            v.tier = "mid"
+            v.reason += " (brand only named in the description)"
+        if v.tier in ("good", "real_good") and seg in ("luxury", "swiss") and discount >= 0.5:
+            v.reason += " · this cheap for the brand: make sure it's real"
         if "|" not in (ident.model_key or ""):
             # Priced against every listing of the brand: a ladies' quartz Citizen vs all Citizens.
             # Too rough to alert on; a second look is enough.

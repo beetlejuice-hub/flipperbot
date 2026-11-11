@@ -127,7 +127,7 @@ PART_START = [
     "curea", "bratara", "cutie", "geam", "coroana", "mecanism", "cadran", "baterie", "baterii",
     "suport", "husa", "folie", "incarcator", "cablu", "cutii", "zale", "catarama",
     "capac", "capace", "capacitori", "cadrane", "mecanisme", "coroane", "geamuri", "ace", "curele",
-    "bratari", "piese", "sticla", "sticle", "rotor", "ax", "arc", "set", "kit", "scule", "unelte",
+    "bratari", "accesorii", "accesoriu", "piese", "sticla", "sticle", "rotor", "ax", "arc", "set", "kit", "scule", "unelte",
 ]
 BOX_PAPERS = ["full set", "fullset", "cutie si acte", "cutie si certificat", "cu acte", "certificat de garantie", "box and papers", "card garantie"]
 GOLD = re.compile(r"(?<![a-z0-9])(aur|gold)(?![a-z0-9])[^.]{0,20}(14k|18k|14 k|18 k|585|750|masiv)|(14k|18k|585|750)[^.]{0,15}(aur|gold)")

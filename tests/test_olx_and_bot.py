@@ -116,3 +116,19 @@ def test_dashboard_and_wall_clocks_are_not_watches():
     assert bot.is_watch(L("Tissot T-Race Chronograph", 460), cats)
     assert not bot.is_watch(L("Set lampi numar LED Astra G, Omega A/B Vectra B", 999), cats)
     assert bot.is_watch(L("Ceas elegant Atlantic", 1677), cats)
+
+
+def test_replica_dealer_pattern():
+    s = Settings()
+    db = DB(":memory:")
+    market = [olx.parse_offer(offer(100 + i, "TAG Heuer Carrera Calibre 5", p)) for i, p in enumerate([11000, 12000, 11500, 12500, 11800])]
+    for l in market:
+        l.seller_id = f"honest{l.source_id}"
+    bot.process(db, market, s, alert=False)
+    dealer = [olx.parse_offer(offer(300 + i, f"TAG Heuer Carrera Calibre 5 v{i}", 3050)) for i in range(3)]
+    for l in dealer:
+        l.seller_id = "dealer"
+    bot.process(db, dealer, s, alert=False)
+    assert db.get("olx:300")["tier"] == "real_good"  # one cheap one: could be a real deal
+    assert db.get("olx:302")["tier"] == "suspect"  # the third from the same seller: a pattern
+    assert "replicas" in db.get("olx:302")["reason"]

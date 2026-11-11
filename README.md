@@ -46,7 +46,7 @@ uv run flipperbot backfill
 - Make the settings file and open it:
 
   ```bash
-  mkdir -p ~/.flipperbot && cp config.example.toml ~/.flipperbot/config.toml && open -e ~/.flipperbot/config.toml
+  mkdir -p ~/.flipperbot && cp flipperbot/config.example.toml ~/.flipperbot/config.toml && open -e ~/.flipperbot/config.toml
   ```
 
 - Paste the token between the quotes after `telegram_token =`, save (⌘S), close.

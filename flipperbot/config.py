@@ -79,6 +79,19 @@ class Settings:
         return HOME / "photos"
 
 
+def set_value(key: str, value: str, path: Path | None = None) -> None:
+    """Write `key = "value"` into the config file, replacing the line if it's there."""
+    import re
+
+    path = path or HOME / "config.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = path.read_text() if path.exists() else (Path(__file__).parent / "config.example.toml").read_text()
+    line = f'{key} = "{value}"'
+    pattern = re.compile(rf"^{re.escape(key)}\s*=.*$", re.M)
+    text = pattern.sub(lambda m: line, text, count=1) if pattern.search(text) else text.rstrip() + "\n" + line + "\n"
+    path.write_text(text)
+
+
 def load(path: Path | None = None) -> Settings:
     path = path or HOME / "config.toml"
     s = Settings()

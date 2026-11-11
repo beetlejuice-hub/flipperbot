@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import html
 import json
+import random
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Iterator
@@ -113,10 +115,13 @@ def search(
     pages: int = 1,
     max_price: int | None = None,
     eur_to_ron: float = 5.0,
+    pause: tuple[float, float] = (3.0, 8.0),
     fetch=_post,
 ) -> Iterator[Listing]:
-    """Newest listings for a search, page by page. `fetch` is swappable for tests."""
+    """Newest listings for a search, page by page, pausing between pages. `fetch` is swappable for tests."""
     for page in range(pages):
+        if page:
+            time.sleep(random.uniform(*pause))
         data = fetch(search_params(query, category_id=category_id, offset=page * PAGE_SIZE, max_price=max_price))
         offers = data.get("data") or []
         for offer in offers:

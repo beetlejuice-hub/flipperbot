@@ -109,7 +109,7 @@ def fetch_all(searches: list[tuple[str | None, str | None]], s: Settings, pages:
     for i, (query, cat) in enumerate(searches):
         if i:
             time.sleep(random.uniform(*s.pause_between_requests_s))
-        got = list(olx.search(query, category_id=cat, pages=pages, eur_to_ron=s.eur_to_ron))
+        got = list(olx.search(query, category_id=cat, pages=pages, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s))
         log(f"  olx {'category ' + cat if cat else repr(query)}: {len(got)}")
         out.extend(got)
     return out

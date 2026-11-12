@@ -45,9 +45,12 @@ def test_old_listings_without_a_score_get_one_when_the_bot_starts():
 
 def test_claude_scores():
     assert claude_score({"authenticity": "likely_fake", "verdict": "buy", "confidence": 90}) == (0, "Claude: likely fake")
-    assert claude_score({"verdict": "buy", "confidence": 80, "authenticity": "likely_genuine"})[0] == 10
-    assert claude_score({"verdict": "negotiate", "confidence": 60})[0] == 8
-    assert claude_score({"verdict": "buy", "confidence": 90, "authenticity": "unsure"})[0] == 7
+    priced = {"resale_ron_low": 900, "resale_ron_high": 1100}
+    assert claude_score({"verdict": "buy", "confidence": 80, "authenticity": "likely_genuine", **priced}, 500)[0] == 10
+    assert claude_score({"verdict": "negotiate", "confidence": 60, **priced}, 500)[0] == 8
+    assert claude_score({"verdict": "buy", "confidence": 90, "authenticity": "unsure", **priced}, 500)[0] == 7
+    # no price estimate from Claude: can't be a top deal
+    assert claude_score({"verdict": "buy", "confidence": 90}, 500)[0] == 6
     assert claude_score({"verdict": "skip"})[0] == 2
     assert claude_score({"error": "x"}) is None
 
@@ -69,8 +72,18 @@ def test_claudes_own_numbers_hold_the_score_down():
     good = {**lot, "repair_cost_ron": 0}
     assert claude_score(good, 180)[0] == 8 and bot.confirmed(good, Settings(), "japan", 180)[0]
     # the quick read alone never shows 8+: it only sends the listing to the full check
-    q = quick_score({"score": 8, "fake_risk": "low", "note": "71% underpriced"})
+    q = quick_score({"score": 8, "fake_risk": "low", "note": "71% underpriced", "value_low": 600, "value_high": 800}, 350)
     assert q[0] == 7 and "waiting for Claude" in q[1]
+    # ...and its own estimate holds it down too: no estimate, a loss, or a thin profit
+    assert quick_score({"score": 8, "fake_risk": "low"}, 350)[0] == 4
+    assert quick_score({"score": 8, "fake_risk": "low", "value_low": 300}, 350)[0] == 2
+    assert quick_score({"score": 8, "fake_risk": "low", "value_low": 420}, 350)[0] == 5
+
+
+def test_no_price_estimate_means_no_good_deal():
+    # good tier but no estimate (e.g. a collector reference with no price history): at most 4
+    assert rule_score("good", ["collectible"], "seiko 6139: collectors pay for these", None, None, 1)[0] == 4
+    assert rule_score("good", [], "x", 300, None, 1)[0] == 7
 
 
 def setup(s):
@@ -128,3 +141,27 @@ def test_quick_step_respects_its_daily_cap(monkeypatch):
     monkeypatch.setattr(quick.ai, "available", lambda s_: True)
     monkeypatch.setattr(quick.subprocess, "run", lambda *a, **k: pytest.fail("called Claude past the cap"))
     assert quick.run(db, s, log=lambda m: None) == 0
+
+
+def test_a_listing_without_an_estimate_is_never_good():
+    s = Settings()
+    db = DB(":memory:")
+    bot.process(db, [olx.parse_offer(offer(300, "Ceas Seiko 6139 cronograf vintage", 600))], s, alert=False)
+    r = db.get("olx:300")
+    assert r["est_value_ron"] is None
+    assert r["tier"] == "mid" and r["reason"].startswith("no price estimate yet")
+    assert r["score"] <= 4
+
+
+def test_sort_by_estimated_profit_uses_the_estimate_the_card_shows():
+    from flipperbot import web
+
+    s = Settings()
+    db = setup(s)  # SKX007s: 420 and 650 lei against ~1000
+    db.conn.execute("UPDATE listings SET hidden=0")
+    keys = [r["key"] for r in web.query(db, "new", sort="profit")]
+    assert keys.index("olx:200") < keys.index("olx:150")  # 420 lei leaves more than 650
+    # Claude says the 650 one sells for 2000: now it leads
+    db.set_ai("olx:150", {"verdict": "buy", "confidence": 80, "resale_ron_low": 2000, "resale_ron_high": 2200})
+    assert web.query(db, "new", sort="profit")[0]["key"] == "olx:150"
+    assert web.query(db, "new", sort="profit_pct")[0]["key"] == "olx:150"

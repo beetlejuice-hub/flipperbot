@@ -123,6 +123,11 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         verdict.reason = f"listed {age} days ago: a real deal wouldn't last that long · " + verdict.reason
     elif age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good"):
         verdict.reason = f"old listing ({age} days), but the price was just cut · " + verdict.reason
+    if verdict.tier in ("good", "real_good") and not verdict.est_value_ron:
+        # No price to compare with: nobody can call it a good deal yet. A "maybe" for the quick AI read
+        # (which estimates a price) or for you, not a good one.
+        verdict.tier = "mid"
+        verdict.reason = "no price estimate yet · " + verdict.reason
     db.set_verdict(l.key, ident, verdict)
     from .scoring import rule_score
 
@@ -275,6 +280,7 @@ def pending_alerts(db: DB, s: Settings) -> list[Any]:
     or, with the quick step off, real good deals. Fresh, not yet checked or decided."""
     rank = "CASE {c} WHEN 'real_good' THEN 4 WHEN 'good' THEN 3 WHEN 'mid' THEN 2 WHEN 'suspect' THEN 1 WHEN 'bad' THEN 0 ELSE -1 END"
     which = ("json_extract(quick, '$.score') >= 8 AND COALESCE(json_extract(quick, '$.fake_risk'), '') != 'high'"
+             f" AND COALESCE(json_extract(quick, '$.value_low'), 0) - price_ron >= {int(s.good_profit_ron)}"
              if s.ai_quick else f"tier IN ({','.join(repr(t) for t in s.alert_tiers)})")
     q = f"""SELECT * FROM listings WHERE ({which}) AND ai IS NULL
             AND {rank.format(c='tier')} >= {rank.format(c='notified_tier')}

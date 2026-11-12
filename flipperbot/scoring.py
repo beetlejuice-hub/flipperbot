@@ -17,7 +17,7 @@ RULE_MAX = 7  # free rules alone never go above 7: an 8+ needs an AI to agree
 
 # Bump when the rules that judge or score a listing change: the bot then re-judges every stored listing
 # once at start, so an update never leaves old listings with stale or missing scores.
-RULES_VERSION = 3
+RULES_VERSION = 4
 
 # Reasons a listing is not worth anyone's time, from the tier's own reason text.
 _DEAD = ("someone buying", "repair shop", "replica", "over budget", "fashion brand", "part/accessory", "locked to",
@@ -55,6 +55,10 @@ def rule_score(tier: str | None, flags: list[str] | set[str], reason: str | None
     if tier == "mid" and f & {"lot", "collectible", "naive"}:
         base += 1
         why.append("lot/collector/seller doesn't know")
+    if profit is None:
+        # No price estimate: it can be worth a look, never a top score. The quick AI read (4+) estimates one.
+        base = min(base, 4)
+        why.append("no price estimate yet")
     return max(1, min(RULE_MAX, base)), ", ".join(why)
 
 
@@ -89,7 +93,9 @@ def claude_score(result: dict[str, Any] | None, price: int | None = None, good_p
     if result.get("authenticity") == "unsure":
         score = min(score, 7)
     profit = claude_profit(result, price)
-    if profit is not None and profit <= 0:
+    if not result.get("resale_ron_low") and not result.get("resale_ron_high"):
+        score, why = min(score, 6), f"{why}, but no price estimate"
+    elif profit is not None and profit <= 0:
         score, why = min(score, 2), f"{why}, but its own numbers lose money ({profit} lei)"
     elif profit is not None and profit < good_profit:
         score, why = min(score, 6), f"{why}, but only ~{profit} lei profit"
@@ -99,13 +105,21 @@ def claude_score(result: dict[str, Any] | None, price: int | None = None, good_p
 QUICK_MAX = 7  # the quick read can send a listing to the full check, but only the full check gives an 8+
 
 
-def quick_score(quick: dict[str, Any] | None) -> tuple[int, str] | None:
+def quick_score(quick: dict[str, Any] | None, price: int | None = None, good_profit: int = 150) -> tuple[int, str] | None:
+    """The quick read's score, held down by its own price estimate like the full check's."""
     if not quick or not isinstance(quick.get("score"), (int, float)):
         return None
     s = max(0, min(10, int(quick["score"])))
+    note = str(quick.get("note") or "")[:80]
     if quick.get("fake_risk") == "high":
         s = min(s, 2)
-    note = str(quick.get("note") or "")[:80]
+    low = quick.get("value_low") if isinstance(quick.get("value_low"), (int, float)) else None
+    if not low:
+        return min(s, 4), "quick AI (no price estimate): " + note
+    if price is not None and low - price <= 0:
+        return min(s, 2), f"quick AI: sells for ~{int(low)}, not under {price}: " + note
+    if price is not None and low - price < good_profit:
+        return min(s, 5), f"quick AI: only ~{int(low - price)} lei profit: " + note
     if s > QUICK_MAX:
         return QUICK_MAX, f"quick AI says {s}/10, waiting for Claude's full check: {note}"
     return s, "quick AI: " + note
@@ -124,7 +138,7 @@ def final_score(row: Any, good_profit: int = 150) -> tuple[int, str]:
         quick = json.loads(row["quick"]) if row["quick"] else None
     except (TypeError, ValueError, IndexError, KeyError):
         quick = None
-    got = quick_score(quick)
+    got = quick_score(quick, row["price_ron"], good_profit)
     if got:
         return got
     return row["rule_score"] if row["rule_score"] is not None else 1, row["rule_why"] or ""

@@ -87,6 +87,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "photo": _small_photo(photos[0]) if photos else None, "photos": len(photos),
         "first_seen": r["first_seen"], "last_seen": r["last_seen"], "ai_at": r["ai_at"],
         "ebay": json.loads(r["ebay"]) if r["ebay"] else None,
+        "quick": json.loads(r["quick"]) if r["quick"] else None,
         "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
         "listed_at": r["created_at"] or None, "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
@@ -118,7 +119,17 @@ VIEWS = {
     "suspect": ("tier = 'suspect' AND hidden=0", "new"),
     "new": ("COALESCE(score, 0) > 0 AND hidden=0", "new"),
 }
+# The estimated profit the card shows: Claude's range once it checked, else the bot's from similar listings,
+# else the quick AI read's guess. Listings with no estimate sort last.
+_CLAUDE_LOW = ("CASE WHEN json_extract(ai, '$.resale_ron_high') IS NOT NULL AND json_extract(ai, '$.error') IS NULL "
+               "THEN COALESCE(json_extract(ai, '$.resale_ron_low'), json_extract(ai, '$.resale_ron_high')) END")
+PROFIT_SQL = f"""(CASE WHEN {_CLAUDE_LOW} IS NOT NULL
+                       THEN {_CLAUDE_LOW} - price_ron - COALESCE(json_extract(ai, '$.repair_cost_ron'), 0)
+                       WHEN est_value_ron IS NOT NULL THEN profit_ron
+                       WHEN json_extract(quick, '$.value_low') IS NOT NULL THEN json_extract(quick, '$.value_low') - price_ron END)"""
 ORDER = {
+    "profit": f"{PROFIT_SQL} IS NULL, {PROFIT_SQL} DESC",
+    "profit_pct": f"{PROFIT_SQL} IS NULL, {PROFIT_SQL} * 1.0 / MAX(price_ron, 1) DESC",
     "rank": "COALESCE(score, 0) DESC, COALESCE(NULLIF(created_at, ''), first_seen) DESC, COALESCE(profit_ron,0) DESC",
     "new": "first_seen DESC",
     "posted": "COALESCE(NULLIF(created_at, ''), first_seen) DESC",
@@ -424,7 +435,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
     <select id="niche" aria-label="What"><option value="">All</option><option value="watches">⌚ Watches</option><option value="cameras">📷 Cameras</option></select>
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
-      <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option>
+      <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option><option value="profit">Biggest profit (lei)</option><option value="profit_pct">Biggest profit (%)</option>
     </select>
   </div>
 </div></header>
@@ -507,9 +518,13 @@ function priceBox(l) {
   const a = l.ai && !l.ai.error && l.ai.resale_ron_high ? l.ai : null;
   let lo = l.value, hi = l.value_high || l.value, profit = l.profit;
   let src = (l.reason || "").startsWith("eBay:") ? `realistic, from ${l.ebay ? l.ebay.n + " " : ""}eBay listings` : "realistic, from similar listings";
+  const q = !a && !lo && l.quick && l.quick.value_low ? l.quick : null;
   if (a) {
     hi = a.resale_ron_high; lo = a.resale_ron_low || hi; src = "Claude's estimate";
     profit = Math.round(lo - l.price - (a.repair_cost_ron || 0));
+  } else if (q) {  // no similar listings to go by: the quick AI read's guess, until Claude checks
+    lo = q.value_low; hi = q.value_high || lo; src = "quick AI's guess";
+    profit = Math.round(lo - l.price);
   }
   const worth = !lo ? null : hi && hi !== lo ? `${lo.toLocaleString("ro-RO")}–${lei(hi)}` : "~" + lei(lo);
   return h("div", { class: "prices" },
@@ -519,7 +534,8 @@ function priceBox(l) {
       worth ? h("div", { class: "n" + (worth.includes("–") ? " range" : "") }, worth) : h("div", { class: "n na" }, "not enough data yet"),
       worth ? h("div", { class: "src" }, src) : null),
     profit != null && worth ? h("div", { class: "profit" }, "profit ",
-      h("b", { class: profit < 0 ? "neg" : "" }, (profit < 0 ? "−" : "~") + lei(Math.abs(profit))),
+      h("b", { class: profit < 0 ? "neg" : "" }, (profit < 0 ? "−" : "~") + lei(Math.abs(profit))
+        + (l.price ? ` (${profit < 0 ? "−" : "+"}${Math.round(Math.abs(profit) * 100 / l.price)}%)` : "")),
       a && l.value ? h("span", { class: "reason" }, ` · bot's guess was ${l.value_high && l.value_high !== l.value ? `${l.value.toLocaleString("ro-RO")}–${lei(l.value_high)}` : lei(l.value)}`) : "") : null);
 }
 
@@ -548,7 +564,7 @@ document.addEventListener("keydown", e => {
 function card(l) {
   const el = h("article", { class: "card" });
   const draw = () => {
-    const img = l.photo ? h("img", { src: l.photo, alt: "", loading: "lazy", referrerpolicy: "no-referrer", onerror: e => e.target.replaceWith("⌚") }) : "⌚";
+    const img = l.photo ? h("img", { src: l.photo, alt: "", loading: "lazy", referrerpolicy: "no-referrer", onerror: e => e.target.replaceWith(l.icon || "⌚") }) : (l.icon || "⌚");
     const waiting = l.ai_running || l.ai_queued != null;
     const aiLabel = l.ai_running && stats && stats.ai_paused_until ? `Waiting for Claude (limit resets ~${stats.ai_paused_until})`
       : l.ai_running ? "Claude is looking…" : l.ai_queued != null ? `In Claude's queue (${l.ai_queued} ahead)`

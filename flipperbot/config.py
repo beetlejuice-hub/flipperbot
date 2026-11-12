@@ -117,6 +117,12 @@ class Settings:
     ai_timeout_s: int = 420
     # Sonnet is far lighter on a Claude plan's usage limit than Opus and plenty for this.
     ai_model: str = "sonnet"
+    # Trend radar (radar.py): watchlist searches on OLX, Google Trends Romania, Wikipedia attention, and a
+    # weekly Claude look at what's rising (one call a week on your plan; 0 turns that off).
+    radar: bool = True
+    radar_every_min: int = 60
+    radar_per_poll: int = 3
+    radar_ai_refresh_days: int = 7
     ai_max_photos: int = 5  # per single watch; lots get 8 plus zoomed quarters of the first 3
     claude_bin: str = "claude"
 

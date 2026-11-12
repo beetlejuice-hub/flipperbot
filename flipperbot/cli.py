@@ -13,6 +13,8 @@
   ai <url|key>     run the Claude check on one stored listing now
   telegram-setup   find your Telegram chat id after you've messaged your bot
   stats            what's in the database
+  radar            the trend radar now: hot items cheap on OLX, the watchlist, what's rising (also on the dashboard)
+  radar-refresh    ask Claude now what's rising in value (it also does this by itself once a week)
   ebay-setup       add your free eBay developer keys, so estimates also use eBay listings
   claude-test      check that the bot can use Claude on this Mac (one tiny call, the way checks run)
   facebook-login   set up Facebook Marketplace: log in once with your SECOND account
@@ -50,6 +52,8 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("target")
     sub.add_parser("telegram-setup")
     sub.add_parser("stats")
+    sub.add_parser("radar")
+    sub.add_parser("radar-refresh")
     sub.add_parser("app")
     sub.add_parser("make-app")
     sub.add_parser("open")
@@ -275,6 +279,33 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit("No messages yet. Send your bot any message on Telegram, then run this again.")
         for cid, name in chats.items():
             print(f"chat id {cid} ({name}): put  telegram_chat_id = \"{cid}\"  in config.toml")
+
+    elif args.cmd in ("radar", "radar-refresh"):
+        from . import radar
+
+        if args.cmd == "radar-refresh":
+            if not ai.available(s):
+                sys.exit("Claude Code isn't set up on this computer (`claude` not found).")
+            print("Asking Claude what's rising in value (a few minutes)...")
+            radar.refresh_with_claude(db, s)
+        else:
+            radar.poll(db, s)
+            radar.outside_signals(db, radar.watchlist(db))
+        r = radar.report(db)
+        print("\nCheap right now:" if r["cheap"] else "\nNothing well under the usual price right now.")
+        for c in r["cheap"]:
+            print(f"  -{c['under_pct']}%  {c['price']} lei (usually {c['ref']})  {c['entry']}: {c['title'][:60]}\n        {c['url']}")
+        print("\nWatchlist:")
+        for e in r["watchlist"]:
+            olx_now = f"{e['n']} on OLX, median {e['median']} lei" if e["n"] else "not searched yet"
+            wiki = f", interest {e['wiki']['ratio']}x usual" if e["wiki"] and e["wiki"].get("ratio") else ""
+            print(f"  {e['name']}: {olx_now}{wiki}{' (added by Claude)' if e['by'] == 'Claude' else ''}")
+        if r["movers"]["rising"]:
+            print("\nRising in your OLX data:")
+            for m in r["movers"]["rising"]:
+                print(f"  {m['model']}: {m['before']} -> {m['now']} lei (+{m['change_pct']}%)")
+        if r["google_trends"]:
+            print("\nGoogle Trends Romania today:", ", ".join(t["title"] for t in r["google_trends"]))
 
     elif args.cmd == "stats":
         c = db.conn

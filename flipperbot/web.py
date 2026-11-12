@@ -278,6 +278,10 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                 self._json(listing_json(row, db) if row else {"error": "unknown listing"}, 200 if row else 404)
             elif u.path == "/api/stats":
                 self._json(stats(db, s, qs.get("niche", "")))
+            elif u.path == "/api/radar":
+                from . import radar
+
+                self._json(radar.report(db))
             else:
                 self._send(404, b"not found", "text/plain")
 
@@ -424,6 +428,14 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .card.leaving { opacity: 0; transform: scale(.97); transition: opacity .18s, transform .18s; }
 .hint { color: var(--muted); font-size: 12px; margin: -6px 0 12px; }
 .empty { color: var(--muted); text-align: center; padding: 60px 20px; }
+.section { grid-column: 1 / -1; margin-top: 8px; }
+.section h2 { font-size: 17px; margin: 6px 0 2px; } .section p { margin: 2px 0 6px; }
+.rows { display: grid; gap: 8px; }
+.rowx { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.rowx b { font-weight: 700; } .rowx .why { margin-top: 3px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; background: var(--card); }
+.chip.hit { border-color: var(--accent); font-weight: 700; }
 .err { color: var(--sus); font-size: 13px; }
 </style>
 </head>
@@ -450,6 +462,7 @@ const TABS = [
   ["starred", "Starred", s => s.starred],
   ["checked", "Claude checked", null],
   ["hidden", "Hidden", null],
+  ["radar", "📈 Trends", null],
 ];
 const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "likely fake", bad: "bad" };
 const EMPTY = {
@@ -654,8 +667,50 @@ async function refreshStats() {
 }
 
 let loading = 0;
+// The trend radar: hot items cheap on OLX, the watchlist, what's rising in our own data, Google Trends.
+function radarView(r) {
+  const sec = (title, sub, ...kids) => h("div", { class: "section" }, h("h2", {}, title), sub ? h("p", { class: "reason" }, sub) : null, ...kids);
+  const cheap = r.cheap.length ? r.cheap.map(c => h("article", { class: "card" },
+      c.photo ? h("a", { class: "ph", href: c.url, target: "_blank", rel: "noopener noreferrer" },
+        h("img", { src: c.photo, alt: "", loading: "lazy", referrerpolicy: "no-referrer" })) : null,
+      h("div", { class: "body" },
+        h("div", { class: "row" }, h("span", { class: "score shi" }, `−${c.under_pct}%`), h("span", { class: "pill t-good" }, c.entry)),
+        h("div", { class: "prices" },
+          h("div", {}, h("div", { class: "k" }, "Price"), h("div", { class: "n" }, lei(c.price))),
+          h("div", {}, h("div", { class: "k" }, "Usually"), h("div", { class: "n" }, lei(c.ref)), h("div", { class: "src" }, c.ref_from))),
+        h("a", { class: "title", href: c.url, target: "_blank", rel: "noopener noreferrer" }, c.title),
+        h("div", { class: "reason" }, c.city || ""),
+        h("div", { class: "actions" }, h("a", { class: "primary", href: c.url, target: "_blank", rel: "noopener noreferrer" }, "Open on OLX ↗")))))
+    : [h("div", { class: "rowx reason" }, "Nothing well under the usual price in the last 3 days. The bot searches 3 watchlist items an hour.")];
+  const watch = r.watchlist.map(e => h("div", { class: "rowx" },
+    h("b", {}, e.name), e.by === "Claude" ? h("span", { class: "reason" }, " · added by Claude") : null,
+    h("div", {}, e.n ? `OLX now: ${e.n} listings, median ${lei(e.median)}` : "OLX: not searched yet",
+      e.value_low ? ` · Claude: sells for ${lei(e.value_low)}–${lei(e.value_high)}` : "",
+      e.wiki && e.wiki.ratio ? ` · interest ${e.wiki.ratio}× usual (${e.wiki.article.replaceAll("_", " ")} on Wikipedia)` : ""),
+    h("div", { class: "why" }, e.why)));
+  const rising = r.movers.rising.length ? r.movers.rising.map(m => h("div", { class: "rowx" },
+      h("b", {}, m.model), ` asks +${m.change_pct}%: ${lei(m.before)} → ${lei(m.now)} (${m.listings} new listings in 2 weeks)`))
+    : [h("div", { class: "rowx reason" }, "No model's asking price rose 15%+ in the last 2 weeks (needs 4+ listings in each period).")];
+  const wanted = r.movers.wanted.map(m => h("span", { class: "chip" }, `${m.model}: ${m.wanted_ads} want to buy`));
+  const gt = r.google_trends.map(t => h("span", { class: "chip" + (t.watchlist ? " hit" : "") }, t.title + (t.traffic ? ` (${t.traffic})` : "")));
+  return [
+    sec("Hot items cheap on OLX right now", "Watchlist items listed in the last 3 days at least 20% under what the others ask (or under Claude's estimate). Check condition before buying.", ...cheap),
+    sec("Watchlist", "Things whose value just jumped, and why." + (r.claude_refreshed_at ? ` Claude last looked for new trends ${ago(new Date(r.claude_refreshed_at * 1000).toISOString())}.` : " Claude looks for new trends once a week."), h("div", { class: "rows" }, ...watch)),
+    sec("Rising in your OLX data", "Models whose asking price went up: last 2 weeks vs the 4 months before.", h("div", { class: "rows" }, ...rising)),
+    wanted.length ? sec("Most wanted", "Models people posted \"cumpăr\" ads for in the last 2 weeks: buyers waiting.", h("div", { class: "chips" }, ...wanted)) : null,
+    sec("Google Trends Romania today", r.google_trends_at ? "Highlighted: matches the watchlist." : "Not fetched yet (once a day).", h("div", { class: "chips" }, ...gt)),
+  ].filter(Boolean);
+}
+
 async function load() {
   const mine = ++loading;
+  if (view === "radar") {
+    const r = await api("/api/radar");
+    if (mine !== loading) return;
+    document.getElementById("grid").replaceChildren(...radarView(r));
+    document.getElementById("hint").hidden = true; document.getElementById("empty").hidden = true;
+    return;
+  }
   const q = document.getElementById("q").value.trim(), sort = document.getElementById("sort").value;
   const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}&niche=${nicheSel.value}`);
   if (mine !== loading) return;

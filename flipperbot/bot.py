@@ -505,6 +505,14 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
             if facebook_due(db, s):
                 poll_facebook(db, s)
             deliver(db, s)
+            try:
+                from . import radar
+
+                radar.tick(db, s)
+            except olx.Blocked:
+                raise
+            except Exception as e:  # the radar never stops the main bot
+                print(f"  radar error: {e!r}")
             today = datetime.now().date().isoformat()
             if s.digest_telegram and datetime.now().hour >= digest_hour and db.kv_get("last_digest") != today:
                 n = digest(db, s)

@@ -119,3 +119,39 @@ def test_send_to_claude_queues_and_runs_one_at_a_time(server, monkeypatch):
     assert card["ai"]["verdict"] == "buy" and not card["ai_running"]
     # olx:200 is a real good deal Claude confirmed: its verdict also went to Telegram, once
     assert len(sent) == 1 and "SKX007" in sent[0]
+
+
+def test_interesting_triage(server, monkeypatch):
+    keys = lambda view: [d["key"] for d in get(server + f"/api/listings?view={view}")]
+    assert keys("interesting") == ["olx:200"] and get(server + "/api/stats")["interesting"] == 1
+
+    # Skip: out of Interesting, still a deal
+    post(server + "/api/skip/olx:200", {"X-Flipperbot": "1"})
+    assert keys("interesting") == [] and keys("deals") == ["olx:200"]
+
+    # Unhide/reset brings it back; Fake: out of Interesting and out of sight
+    post(server + "/api/unhide/olx:200", {"X-Flipperbot": "1"})
+    assert keys("interesting") == ["olx:200"]
+    post(server + "/api/fake/olx:200", {"X-Flipperbot": "1"})
+    assert keys("interesting") == [] and keys("deals") == [] and keys("hidden") == ["olx:200"]
+
+    # Let Claude check: out of Interesting, into Claude's queue
+    post(server + "/api/unhide/olx:200", {"X-Flipperbot": "1"})
+    queued = []
+    monkeypatch.setattr(web.ai, "available", lambda s: True)
+    monkeypatch.setattr(web, "send_to_claude", lambda s, key: queued.append(key))
+    card = post(server + "/api/ai/olx:200", {"X-Flipperbot": "1"})
+    assert card["triage"] == "claude" and queued == ["olx:200"] and keys("interesting") == []
+
+
+def test_interesting_has_the_buttons_and_keys():
+    for text in ("Let Claude check", "Fake / not interested", '"skip"', "c: \"ai\", s: \"skip\", f: \"fake\""):
+        assert text in web.PAGE
+
+
+def test_buttons_work_with_browser_encoded_keys(server):
+    # encodeURIComponent("olx:200") == "olx%3A200": what every dashboard button actually sends
+    card = post(server + "/api/star/olx%3A200", {"X-Flipperbot": "1"})
+    assert card["starred"] is True
+    post(server + "/api/skip/olx%3A200", {"X-Flipperbot": "1"})
+    assert get(server + "/api/listing?key=olx%3A200")["triage"] == "skip"

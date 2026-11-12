@@ -44,6 +44,12 @@ why the bot rated it, and Claude's verdict. Tabs for Deals, Maybe, Likely fake, 
 checked; buttons to star, hide, or *Ask Claude* about any listing. It's served by the bot itself,
 so it's there whenever the bot runs. `flipperbot open` opens it.
 
+**Interesting: your to-do list.** The dashboard opens on *Interesting*: what the bot finds worth a look
+and you haven't decided on yet (good and real good deals, lots, old watches whose model isn't clear,
+sellers who don't know what they have; seen in the last 3 days). Each card has three buttons, or keys for
+the top card: **🤖 Let Claude check** (C), **Skip** (S: not worth a check; it stays in Deals/Maybe), and
+**Fake / not interested** (F: out of sight, in Hidden). The card leaves the list either way.
+
 **Claude only checks what you send it.** Every card on the dashboard has a **Send to Claude** button.
 Claude works through what you sent one at a time (the card shows its place in the queue), reads the
 description and photos (lots: zoomed in, item by item), checks for fakes, and finds what it really

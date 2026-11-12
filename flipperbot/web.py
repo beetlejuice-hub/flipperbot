@@ -21,7 +21,7 @@ from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from . import ai, niches, notify
 from .config import Settings
@@ -73,13 +73,20 @@ def listing_json(r: Any) -> dict[str, Any]:
         "flags": json.loads(r["flags"] or "[]"), "delivery": bool(r["delivery"]),
         "photo": _small_photo(photos[0]) if photos else None, "photos": len(photos),
         "first_seen": r["first_seen"], "last_seen": r["last_seen"],
-        "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a,
+        "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
         "ai_running": bool(_queue) and _queue[0] == r["key"],
         "ai_queued": _queue.index(r["key"]) if r["key"] in _queue[1:] else None,  # how many ahead
     }
 
 
+# What the bot finds interesting and you haven't decided on yet: deals, lots, old watches whose model
+# isn't clear, sellers who don't know what they have. Only recently seen ones (still for sale).
+INTERESTING = """triage IS NULL AND hidden = 0 AND last_seen >= datetime('now', '-3 days') AND (
+    tier IN ('real_good', 'good')
+    OR (tier = 'mid' AND (flags LIKE '%"lot"%' OR flags LIKE '%"naive"%' OR reason LIKE '%Claude will look%')))"""
+
 VIEWS = {
+    "interesting": (INTERESTING, "rank"),
     "deals": ("tier IN ('real_good','good') AND hidden=0", "rank"),
     "maybe": ("tier = 'mid' AND hidden=0", "rank"),
     "suspect": ("tier = 'suspect' AND hidden=0", "new"),
@@ -118,6 +125,7 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "total": c.execute(f"SELECT COUNT(*) FROM listings WHERE 1=1 {nf}", na).fetchone()[0],
         "counts": {t: counts.get(t, 0) for t in TIER_RANK},
         "starred": c.execute(f"SELECT COUNT(*) FROM listings WHERE starred=1 {nf}", na).fetchone()[0],
+        "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
         "priced_models": c.execute(
             "SELECT COUNT(*) FROM (SELECT model_key FROM listings WHERE model_key LIKE '%|%' GROUP BY model_key HAVING COUNT(*) >= ?)",
@@ -223,7 +231,8 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:
             if not self._host_ok() or self.headers.get("X-Flipperbot") != "1":
                 return self._send(403, b"forbidden", "text/plain")
-            m = re.fullmatch(r"/api/(star|unstar|hide|unhide|ai)/([\w:.-]+)", urlparse(self.path).path)
+            # Browsers send the listing key URL-encoded ("olx%3A123"): decode before matching.
+            m = re.fullmatch(r"/api/(star|unstar|hide|unhide|ai|skip|fake)/([\w:.-]+)", unquote(urlparse(self.path).path))
             if not m:
                 return self._send(404, b"not found", "text/plain")
             action, key = m.groups()
@@ -234,9 +243,17 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                 db.set_flag(key, "starred", action == "star")
             elif action in ("hide", "unhide"):
                 db.set_flag(key, "hidden", action == "hide")
+                if action == "unhide":
+                    db.set_triage(key, None)  # back in Interesting if it still is
+            elif action == "skip":  # not worth a Claude check: out of Interesting, still in Deals/Maybe
+                db.set_triage(key, "skip")
+            elif action == "fake":  # fake or not interested: out of sight (the Hidden tab has it)
+                db.set_triage(key, "fake")
+                db.set_flag(key, "hidden", True)
             else:
                 if not ai.available(s):
                     return self._json({"error": "Claude Code isn't installed on this Mac (see README)."}, 400)
+                db.set_triage(key, "claude")
                 send_to_claude(s, key)
             self._json(listing_json(db.get(key)))
 
@@ -338,6 +355,13 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .actions a.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .actions button:disabled { opacity: .5; cursor: default; }
 .actions button.claude { border-color: var(--g); color: var(--g); font-weight: 600; }
+.triage { display: grid; grid-template-columns: auto 1fr; gap: 6px; }
+.triage button, .triage a { font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: none; color: var(--ink); cursor: pointer; text-decoration: none; text-align: center; white-space: nowrap; }
+.triage .t-claude { grid-column: 1 / -1; background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+.triage .t-fake { color: var(--sus); border-color: var(--sus-bg); }
+.card.leaving { opacity: 0; transform: scale(.97); transition: opacity .18s, transform .18s; }
+.hint { color: var(--muted); font-size: 12px; margin: -6px 0 12px; }
 .empty { color: var(--muted); text-align: center; padding: 60px 20px; }
 .err { color: var(--sus); font-size: 13px; }
 </style>
@@ -353,9 +377,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
     </select>
   </div>
 </div></header>
-<main><div class="grid" id="grid"></div><div class="empty" id="empty" hidden></div></main>
+<main><div class="hint" id="hint" hidden>Keys: <b>C</b> let Claude check · <b>S</b> skip · <b>F</b> fake / not interested (top card)</div><div class="grid" id="grid"></div><div class="empty" id="empty" hidden></div></main>
 <script>
 const TABS = [
+  ["interesting", "Interesting", s => s.interesting],
   ["deals", "Deals", s => s.counts.real_good + s.counts.good],
   ["maybe", "Maybe", s => s.counts.mid],
   ["suspect", "Likely fake", s => s.counts.suspect],
@@ -366,11 +391,12 @@ const TABS = [
 ];
 const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "likely fake", bad: "bad" };
 const EMPTY = {
+  interesting: "Nothing new to look at. The bot checks OLX every 5–10 minutes; interesting finds land here.",
   deals: "No deals yet. The bot checks OLX every 5–10 minutes; good finds land here and on Telegram.",
   maybe: "Nothing to look at twice yet.", suspect: "No likely fakes.", starred: "Star a listing to keep it here.",
   checked: "Nothing checked by Claude yet. Press “Send to Claude” on any listing.", new: "Nothing yet.", hidden: "Nothing hidden.",
 };
-let view = location.hash.slice(1) || "deals", stats = null;
+let view = location.hash.slice(1) || "interesting", stats = null;
 
 
 function h(tag, attrs = {}, ...kids) {
@@ -442,6 +468,28 @@ function priceBox(l) {
       l.value && a && a.resale_ron_high ? ` · Claude says ${lei(a.resale_ron_low)}–${lei(a.resale_ron_high)}` : "") : null);
 }
 
+// The Interesting tab: decide, and the card leaves the list. Keys C / S / F act on the top card.
+async function decide(l, el, action) {
+  el.classList.add("leaving");
+  try { await act(action, l.key); } catch (err) { el.classList.remove("leaving"); alert(err.message); return; }
+  setTimeout(() => { el.remove(); if (!document.querySelector("#grid article")) load(); }, 180);
+  refreshStats();
+}
+
+function triageActions(l, el) {
+  return h("div", { class: "triage" },
+    h("button", { class: "t-claude", title: "C", onclick: () => decide(l, el, "ai") }, "🤖 Let Claude check"),
+    h("button", { class: "t-skip", title: "S", onclick: () => decide(l, el, "skip") }, "Skip"),
+    h("button", { class: "t-fake", title: "F", onclick: () => decide(l, el, "fake") }, "Fake / not interested"));
+}
+
+document.addEventListener("keydown", e => {
+  if (view !== "interesting" || e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey) return;
+  const action = { c: "ai", s: "skip", f: "fake" }[e.key.toLowerCase()];
+  const first = document.querySelector("#grid article:not(.leaving)");
+  if (action && first && first.listing) decide(first.listing, first, action);
+});
+
 function card(l) {
   const el = h("article", { class: "card" });
   const draw = () => {
@@ -463,13 +511,13 @@ function card(l) {
         h("div", { class: "reason" }, l.reason || ""),
         l.ai ? aiBox(l.ai, l) : null,
         h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
-        h("div", { class: "actions" },
+        view === "interesting" ? triageActions(l, el) : h("div", { class: "actions" },
           h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.source === "facebook" ? "Open on Facebook ↗" : "Open on OLX ↗"),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),
           h("button", { onclick: async () => { await act(l.hidden ? "unhide" : "hide", l.key); el.remove(); refreshStats(); } }, l.hidden ? "Unhide" : "Hide"),
           aiBtn)));
   };
-  draw(); el.redraw = draw;
+  draw(); el.redraw = draw; el.listing = l;
   return el;
 }
 
@@ -512,6 +560,7 @@ async function load() {
   const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}`);
   if (mine !== loading) return;
   document.getElementById("grid").replaceChildren(...rows.map(card));
+  document.getElementById("hint").hidden = view !== "interesting" || !rows.length;
   const empty = document.getElementById("empty");
   empty.hidden = rows.length > 0; empty.textContent = q ? "Nothing matches." : EMPTY[view];
 }
@@ -519,7 +568,7 @@ async function load() {
 let t;
 document.getElementById("q").addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 250); });
 document.getElementById("sort").addEventListener("change", load);
-window.addEventListener("hashchange", () => { view = location.hash.slice(1) || "deals"; drawTabs(); load(); });
+window.addEventListener("hashchange", () => { view = location.hash.slice(1) || "interesting"; drawTabs(); load(); });
 drawTabs(); refreshStats(); load();
 setInterval(refreshStats, 60000);
 setInterval(() => { if (!document.hidden && !document.getElementById("q").value) load(); }, 120000);

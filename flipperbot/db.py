@@ -48,7 +48,8 @@ class DB:
         self.conn.executescript(SCHEMA)
         # Columns added after the first release: add them to older databases.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
-        for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0", "niche TEXT DEFAULT 'watches'"):
+        for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0", "niche TEXT DEFAULT 'watches'",
+                    "triage TEXT"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -96,6 +97,10 @@ class DB:
                 verdict.tier, verdict.est_value_ron, verdict.profit_ron, verdict.reason, key,
             ),
         )
+        self.conn.commit()
+
+    def set_triage(self, key: str, triage: str | None) -> None:
+        self.conn.execute("UPDATE listings SET triage=? WHERE key=?", (triage, key))
         self.conn.commit()
 
     def set_flag(self, key: str, flag: str, value: bool) -> None:

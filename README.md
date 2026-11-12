@@ -1,6 +1,6 @@
 # flipperbot
 
-Watches OLX.ro for underpriced watches (single ones, lots, broken ones),
+Watches OLX.ro (and Facebook) for underpriced watches, smartwatches, cameras and lenses (single ones, lots, broken ones),
 sorts every listing into **bad / suspect / mid / good / real good**, and shows them
 on a dashboard. Claude (on your Claude subscription) reads the real good ones'
 descriptions and photos and checks what the model really sells for; only the deals
@@ -43,6 +43,21 @@ by itself whenever you log in, so mostly you only click it to look at deals. (No
 why the bot rated it, and Claude's verdict. Tabs for Deals, Maybe, Likely fake, Starred, Claude
 checked; buttons to star, hide, or *Ask Claude* about any listing. It's served by the bot itself,
 so it's there whenever the bot runs. `flipperbot open` opens it.
+
+**The 0-10 score.** Every listing gets one number:
+- **0** = gone from view: likely fake, replica, locked, overpriced, old, parts, "cumpar" ads (the *Removed (0)*
+  tab says why);
+- **1-7** from free rules: how far under market, profit, how fast that model sells, freshly posted, lots /
+  collector references / sellers who don't know what they have;
+- fresh listings at **4-7** get a cheap AI read: 20 at a time, text only, the smallest model (about $0.004 of plan
+  usage per batch, `quick_daily_calls` a day), which scores them 0-10;
+- **8+** get the full Claude check (photos, fakes, sold prices) by themselves; its verdict is the final score, and
+  confirmed 8+ go to Telegram.
+Tabs: Interesting (5+, undecided, fresh) · 8-10 · 5-7 · 1-4 · Removed (0).
+
+**What the bot knows.** `flipperbot/knowledge/watches.md` (detailed) and `cameras.md`: what moves prices,
+sleeper brands and references, fake tells, reselling costs and where to sell. Claude's checks read them; the free
+rules (brand lists, collector references) follow them.
 
 **Interesting: your to-do list.** The dashboard opens on *Interesting*: what the bot finds worth a look
 and you haven't decided on yet (good and real good deals, lots, old watches whose model isn't clear,

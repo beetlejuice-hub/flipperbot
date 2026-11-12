@@ -38,7 +38,7 @@ def learn_categories(db: DB, listings: list[Listing]) -> None:
 
 def is_relevant(l: Listing, niche: str | None = None) -> bool:
     """Is this listing really one of the niche's things? Not a car-dashboard 'ceas', not a
-    phone 'camera'. In the niche's OLX categories everything counts; elsewhere the title needs a
+    wall clock. In the niche's OLX categories everything counts; elsewhere the title needs a
     niche word (Facebook) or a brand plus a niche word."""
     n = niches.get(niche or l.niche)
     t = normalize(l.title)

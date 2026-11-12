@@ -26,7 +26,7 @@ import json
 import sys
 import threading
 
-from . import ai, autostart, bot, config, notify, seed, web
+from . import ai, autostart, bot, config, niches, notify, seed, web
 from .db import DB, TIER_RANK
 from .sources import olx
 
@@ -322,13 +322,12 @@ def _setup(s: config.Settings) -> None:
 
 def _rescore(db: DB, s: config.Settings) -> None:
     before: dict[str, int] = {}
-    cats = bot.watch_categories(db)
     for r in db.all():
         l = bot.row_to_listing(r)
-        if bot.is_watch(l, cats):
+        if bot.is_relevant(l):
             bot.evaluate(db, l, s)
         else:
-            db.conn.execute("UPDATE listings SET tier='bad', reason='not a watch' WHERE key=?", (l.key,))
+            db.conn.execute("UPDATE listings SET tier='bad', reason=? WHERE key=?", (f"not a {niches.get(l.niche).noun}", l.key))
     db.conn.commit()
     for r in db.conn.execute("SELECT tier, COUNT(*) n FROM listings GROUP BY tier"):
         before[r["tier"]] = r["n"]

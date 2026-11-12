@@ -51,8 +51,8 @@ class Settings:
     searches_per_poll: int = 3  # random terms from the pool, plus the watch category feeds
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
-    niches: list[str] = field(default_factory=lambda: ["watches", "cameras"])  # what to hunt (see niches.py)
-    search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))  # watches; cameras' are in niches.py
+    niches: list[str] = field(default_factory=lambda: ["watches"])  # what to hunt (see niches.py)
+    search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))
     focus_pool: list[str] = field(default_factory=lambda: list(FOCUS_POOL))
     focus_share: float = 0.67  # of each poll's searches, how many come from focus_pool
     eur_to_ron: float = 5.0

@@ -344,10 +344,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 </head>
 <body>
 <header><div class="bar">
-  <div class="top"><h1>flipperbot</h1><span class="status" id="status">loading…</span></div>
+  <div class="top"><h1>⌚ flipperbot</h1><span class="status" id="status">loading…</span></div>
   <nav id="tabs"></nav>
   <div class="tools">
-    <select id="niche" aria-label="What"><option value="">All</option><option value="watches">⌚ Watches</option><option value="cameras">📷 Cameras</option></select>
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
       <option value="">Best first</option><option value="new">Newest</option><option value="cheap">Cheapest</option>
@@ -372,9 +371,7 @@ const EMPTY = {
   checked: "Nothing checked by Claude yet. Press “Send to Claude” on any listing.", new: "Nothing yet.", hidden: "Nothing hidden.",
 };
 let view = location.hash.slice(1) || "deals", stats = null;
-const nicheSel = document.getElementById("niche");
-nicheSel.value = localStorage.getItem("flipperbot-niche") || "";
-nicheSel.addEventListener("change", () => { localStorage.setItem("flipperbot-niche", nicheSel.value); refreshStats(); load(); });
+
 
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
@@ -465,7 +462,7 @@ function card(l) {
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
         l.ai ? aiBox(l.ai, l) : null,
-        h("div", { class: "meta" }, [l.icon + " " + (l.source === "facebook" ? "Facebook" : "OLX"), l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
+        h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         h("div", { class: "actions" },
           h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.source === "facebook" ? "Open on Facebook ↗" : "Open on OLX ↗"),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),
@@ -493,7 +490,7 @@ function drawTabs() {
 }
 
 async function refreshStats() {
-  try { stats = await api(`/api/stats?niche=${nicheSel.value}`); } catch { return; }
+  try { stats = await api("/api/stats"); } catch { return; }
   const p = stats.last_poll, fresh = p && (Date.now() - new Date(p.at)) < 20 * 60000;
   document.getElementById("status").replaceChildren(
     h("span", { class: "dot" + (fresh ? " on" : "") }),
@@ -512,7 +509,7 @@ let loading = 0;
 async function load() {
   const mine = ++loading;
   const q = document.getElementById("q").value.trim(), sort = document.getElementById("sort").value;
-  const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}&niche=${nicheSel.value}`);
+  const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}`);
   if (mine !== loading) return;
   document.getElementById("grid").replaceChildren(...rows.map(card));
   const empty = document.getElementById("empty");

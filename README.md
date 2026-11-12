@@ -1,7 +1,5 @@
 # flipperbot
 
-Hunts **watches** ⌚ and **cameras & lenses** 📷 (more can be added in `flipperbot/niches.py`).
-
 Watches OLX.ro for underpriced watches (single ones, lots, broken ones),
 sorts every listing into **bad / suspect / mid / good / real good**, and shows them
 on a dashboard. Claude (on your Claude subscription) reads the real good ones'

@@ -38,14 +38,11 @@ def test_seller_who_doesnt_know():
 def test_most_searches_go_to_lots_and_old_watches():
     s = Settings()
     db = DB(":memory:")
-    from flipperbot import niches
-
     runs = [bot.pick_searches(db, s) for _ in range(50)]
-    watch_focus = sum(1 for r in runs for q, c, n in r if n == "watches" and q in s.focus_pool)
-    cam_focus = sum(1 for r in runs for q, c, n in r if n == "cameras" and q in niches.CAMERAS.focus_pool)
-    assert watch_focus >= 50 * 2 and cam_focus >= 50 * 2  # 2 of the 3 random searches, per niche
+    watch_focus = sum(1 for r in runs for q, c, n in r if q in s.focus_pool)
+    assert watch_focus >= 50 * 2  # 2 of the 3 random searches each time
     feeds = {(c, n) for r in runs for q, c, n in r if c}
-    assert feeds == {("1677", "watches"), ("1676", "watches"), ("2344", "cameras"), ("1935", "cameras")}
+    assert feeds == {("1677", "watches"), ("1676", "watches")}
 
 
 def test_luxury_needs_a_surer_claude():

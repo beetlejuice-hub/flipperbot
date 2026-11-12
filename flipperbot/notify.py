@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from . import net, niches
+from . import net
 from .config import Settings
 
 EMOJI = {"real_good": "🔥🔥", "good": "🔥", "mid": "🤔", "suspect": "⚠️", "bad": "·"}
@@ -75,7 +75,7 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
         return html.escape(x, quote=False)
 
     lines = [
-        f"{niches.get(row['niche'] if 'niche' in row.keys() else None).icon} {EMOJI.get(row['tier'], '')} <b>{LABEL.get(row['tier'], row['tier'])}</b>{' · LOT' if 'lot' in (row['flags'] or '') else ''} · {row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''}",
+        f"{EMOJI.get(row['tier'], '')} <b>{LABEL.get(row['tier'], row['tier'])}</b>{' · LOT' if 'lot' in (row['flags'] or '') else ''} · {row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''}",
         f"<b>{e(row['title'])}</b>",
         e(row["city"] or ""),
         e(row["reason"] or ""),

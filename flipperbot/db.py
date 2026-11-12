@@ -49,7 +49,7 @@ class DB:
         # Columns added after the first release: add them to older databases.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
         for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0", "niche TEXT DEFAULT 'watches'",
-                    "triage TEXT"):  # your call on an Interesting listing: claude / skip / fake
+                    "triage TEXT", "est_high_ron INTEGER"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -90,11 +90,12 @@ class DB:
     def set_verdict(self, key: str, ident: Any, verdict: Any) -> None:
         self.conn.execute(
             """UPDATE listings SET brand=?, segment=?, model_key=?, refs=?, flags=?, lot_count=?,
-               tier=?, est_value_ron=?, profit_ron=?, reason=? WHERE key=?""",
+               tier=?, est_value_ron=?, profit_ron=?, reason=?, est_high_ron=? WHERE key=?""",
             (
                 ident.brand.name if ident.brand else None, ident.segment, ident.model_key,
                 json.dumps(ident.refs), json.dumps(sorted(ident.flags)), ident.lot_count,
-                verdict.tier, verdict.est_value_ron, verdict.profit_ron, verdict.reason, key,
+                verdict.tier, verdict.est_value_ron, verdict.profit_ron, verdict.reason,
+                getattr(verdict, "est_high_ron", None), key,
             ),
         )
         self.conn.commit()

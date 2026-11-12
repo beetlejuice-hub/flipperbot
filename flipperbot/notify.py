@@ -66,52 +66,55 @@ def send(s: Settings, text: str, photo: str | None = None) -> None:
         print(f"telegram failed: {e}\n{text}")
 
 
-AUTH = {"likely_genuine": "✅ looks genuine", "unsure": "❓ can't tell if it's genuine", "likely_fake": "⚠️ LIKELY FAKE"}
+
+
+def estimate(row: Any, ai: dict[str, Any] | None) -> tuple[int | None, int | None, int | None, str]:
+    """The one realistic estimate shown everywhere: (low, high, profit, source). Claude's range when it
+    has checked (it looked at this exact watch and sold prices), else the bot's realistic range from
+    similar listings. Profit counts from the low end, minus repair."""
+    if ai and "error" not in ai and ai.get("resale_ron_high"):
+        hi = int(ai["resale_ron_high"])
+        lo = int(ai.get("resale_ron_low") or hi)
+        return lo, hi, lo - (row["price_ron"] or 0) - int(ai.get("repair_cost_ron") or 0), "Claude"
+    lo = row["est_value_ron"]
+    hi = row["est_high_ron"] if "est_high_ron" in row.keys() else None
+    return lo, hi or lo, row["profit_ron"], "similar listings"
+
+
+def money(lo: int | None, hi: int | None) -> str:
+    if not lo:
+        return "?"
+    return f"{lo:,}–{hi:,} lei".replace(",", ".") if hi and hi != lo else f"~{lo:,} lei".replace(",", ".")
 
 
 def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> str:
-    """The one Telegram message for a real good deal: the deal, then Claude's notes."""
+    """The Telegram message for a confirmed deal, short: price → realistic value, Claude's call, one line, link."""
     def e(x: str) -> str:  # Telegram's HTML only needs <, > and & escaped
         return html.escape(x, quote=False)
 
-    lines = [
-        f"{EMOJI.get(row['tier'], '')} <b>{LABEL.get(row['tier'], row['tier'])}</b>{' · LOT' if 'lot' in (row['flags'] or '') else ''} · {row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''}",
-        f"<b>{e(row['title'])}</b>",
-        e(row["city"] or ""),
-        e(row["reason"] or ""),
-    ]
-    if row["profit_ron"]:
-        lines.append(f"est. resale ~{row['est_value_ron']} lei · profit ~{row['profit_ron']} lei")
-    lines.append("")
-    is_lot = "lot" in (row["flags"] or "")
+    lo, hi, profit, src = estimate(row, ai)
+    lot = " · LOT" if "lot" in (row["flags"] or "") else ""
+    head = f"{EMOJI.get(row['tier'], '')} <b>{row['price_ron']:,} lei</b>".replace(",", ".")
+    if lo:
+        head += f" → sells for {money(lo, hi)}"
+    if profit and profit > 0:
+        head += f" (+{profit:,})".replace(",", ".")
+    lines = [head + lot, f"<b>{e(row['title'][:80])}</b>"]
     if ai and "error" not in ai:
-        ws = (ai.get("items") or ai.get("watches")) or []
-        if is_lot:  # the notable ones, with Claude's value for each
-            ws = sorted(ws, key=lambda w: (not w.get("notable"), -(w.get("value_ron") or 0)))[:6]
-        watches = ("\n" if is_lot else "; ").join(
-            ("• " if is_lot else "") + (" ".join(x for x in (w.get("brand"), w.get("model"), w.get("reference")) if x) or "unidentified")
-            + (f" ~{w['value_ron']} lei" if is_lot and w.get("value_ron") else "")
-            + (" ⭐" if is_lot and w.get("notable") else "")
-            for w in ws
-        )
+        verdict = (ai.get("verdict") or "?").upper()
         sure = f" · {ai['confidence']}% sure" if isinstance(ai.get("confidence"), (int, float)) else ""
-        lines.append(f"🤖 <b>Claude: {e((ai.get('verdict') or '?').upper())}</b>{sure}" + (f" · offer {ai['offer_ron']} lei" if ai.get("offer_ron") else ""))
-        if watches:
-            lines.append(e(watches))
-        lines.append(AUTH.get(ai.get("authenticity"), f"authenticity: {e(str(ai.get('authenticity', '?')))}")
-                     + (f": {e(str(ai.get('authenticity_notes'))[:200])}" if ai.get("authenticity_notes") else ""))
-        if ai.get("condition"):
-            lines.append(f"condition: {e(str(ai['condition'])[:150])}")
-        lines.append(f"resale {ai.get('resale_ron_low', '?')}–{ai.get('resale_ron_high', '?')} lei" + (f" · repair ~{ai['repair_cost_ron']} lei" if ai.get("repair_cost_ron") else ""))
+        offer = f" · offer {ai['offer_ron']:,}".replace(",", ".") if ai.get("offer_ron") else ""
+        auth = {"likely_genuine": "", "unsure": " · ❓ authenticity unsure", "likely_fake": " · ⚠️ LIKELY FAKE"}.get(ai.get("authenticity"), "")
+        lines.append(f"🤖 {verdict}{sure}{offer}{auth}")
+        if "lot" in (row["flags"] or ""):
+            best = sorted((w for w in (ai.get("items") or ai.get("watches") or []) if w.get("notable")),
+                          key=lambda w: -(w.get("value_ron") or 0))[:3]
+            if best:
+                lines.append("⭐ " + e(", ".join(" ".join(x for x in (w.get("brand"), w.get("model")) if x) for w in best)))
         if ai.get("summary"):
-            lines.append(e(str(ai["summary"])[:400]))
-        qs = [q for q in ai.get("questions_for_seller") or [] if isinstance(q, str)][:3]
-        if qs:
-            lines.append("Ask the seller: " + e(" · ".join(qs))[:300])
-    elif ai:
-        lines.append(f"🤖 Claude couldn't check it: {e(str(ai['error'])[:200])}")
-    else:
-        lines.append(f"🤖 Not checked by Claude: {e(note or 'unknown reason')}")
+            lines.append(e(str(ai["summary"])[:160]))
+    elif note:
+        lines.append(f"🤖 not checked: {e(note)}")
     lines.append(row["url"])
     return "\n".join(lines)
 

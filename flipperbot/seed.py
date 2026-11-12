@@ -18,7 +18,7 @@ SEED = Path(__file__).parent / "seed" / "listings.json.gz"
 FIELDS = [
     "key", "source", "source_id", "url", "title", "price_ron", "category_id", "brand", "segment",
     "model_key", "refs", "flags", "lot_count", "tier", "est_value_ron", "profit_ron", "reason",
-    "first_seen", "last_seen", "photos", "niche",
+    "first_seen", "last_seen", "photos", "niche", "est_high_ron",
 ]
 
 

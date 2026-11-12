@@ -233,8 +233,9 @@ def claude_value(db: DB, row: Any, result: dict[str, Any], s: Settings) -> str |
     notable = [w for w in (result.get("items") or result.get("watches")) or [] if w.get("notable")]
     what = f"{len(notable)} notable watches inside" if "lot" in (row["flags"] or "") and notable else "Claude's valuation"
     db.conn.execute(
-        "UPDATE listings SET tier=?, est_value_ron=?, profit_ron=?, reason=? WHERE key=?",
-        (tier, round(worth), profit, f"Claude: worth ~{round(worth)} lei ({what}) · was: {row['reason']}", row["key"]),
+        "UPDATE listings SET tier=?, est_value_ron=?, est_high_ron=?, profit_ron=?, reason=? WHERE key=?",
+        (tier, round(low), result["resale_ron_high"], profit,
+         f"Claude: sells for ~{round(low)}–{result['resale_ron_high']} lei ({what}) · was: {row['reason']}", row["key"]),
     )
     db.conn.commit()
     return tier

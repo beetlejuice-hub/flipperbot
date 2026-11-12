@@ -27,8 +27,9 @@ from .niches import get as niche_of
 class Verdict:
     tier: str
     reason: str
-    est_value_ron: int | None = None  # what it would sell for, working
+    est_value_ron: int | None = None  # realistic sale price, low end (what profit is counted from)
     profit_ron: int | None = None
+    est_high_ron: int | None = None  # realistic sale price, high end
     comps: int = 0
 
 
@@ -42,6 +43,35 @@ def market_price(prices: list[int]) -> int | None:
         iqr = q3 - q1
         p = [x for x in p if q1 - 1.5 * iqr <= x <= q3 + 1.5 * iqr] or p
     return round(statistics.median(p))
+
+
+def _clean(prices: list[int]) -> list[int]:
+    p = sorted(prices)
+    if len(p) >= 5:
+        q1, _, q3 = statistics.quantiles(p, n=4)
+        iqr = q3 - q1
+        p = [x for x in p if q1 - 1.5 * iqr <= x <= q3 + 1.5 * iqr] or p
+    return p
+
+
+def percentile(sorted_prices: list[int], q: float) -> float:
+    if len(sorted_prices) == 1:
+        return sorted_prices[0]
+    pos = q * (len(sorted_prices) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_prices) - 1)
+    return sorted_prices[lo] + (sorted_prices[hi] - sorted_prices[lo]) * (pos - lo)
+
+
+def realistic_range(prices: list[int], exact: bool, sell_cost: float = 0.05) -> tuple[int, int]:
+    """What it would realistically sell for, low to high. Listings are asking prices and the ones that
+    sell are the cheaper ones, so: from the lower part of the asking prices (35th percentile; 20th when
+    only the model family is known, since a family mixes cheap and dear variants) up to the median,
+    minus selling costs (fees, shipping)."""
+    p = _clean(prices)
+    low = percentile(p, 0.35 if exact else 0.20)
+    high = percentile(p, 0.50)
+    return round(low * (1 - sell_cost)), round(high * (1 - sell_cost))
 
 
 def repair_cost(ident: Identity, s: Settings) -> int:
@@ -125,15 +155,17 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
     # --- priced against the market -------------------------------------------------
     market = market_price(comps) if len(comps) >= s.min_comps else None
     if market:
-        resale = round(market * s.resale_haircut)
+        exact = bool(ident.refs)  # a reference number ("SKX007") vs only a family ("seamaster")
+        low, high = realistic_range(comps, exact)
         repair = repair_cost(ident, s)
-        profit = resale - price - repair
+        profit = low - price - repair  # counted from the cautious end
         discount = 1 - price / market
         what = " ".join(dict.fromkeys((ident.model_key or "?").replace("|", " ").split()))  # "seiko seiko 5" -> "seiko 5"
-        detail = f"{what}: {price} lei vs market ~{market} ({len(comps)} listings), {round(discount * 100)}% under"
+        detail = (f"{what}: {price} lei, {round(discount * 100)}% under what similar ones ask (~{market}, "
+                  f"{len(comps)} listings); realistic sale ~{low}–{high}")
         if repair:
             detail += f", repair ~{repair}"
-        v = Verdict("bad", detail, resale, profit, len(comps))
+        v = Verdict("bad", detail, est_value_ron=low, profit_ron=profit, est_high_ron=high, comps=len(comps))
         if discount >= s.real_good_discount and profit >= s.real_good_profit_ron:
             v.tier = "real_good"
         elif discount >= s.good_discount and profit >= s.good_profit_ron:
@@ -145,13 +177,22 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
             v.reason += " (brand only named in the description)"
         if v.tier in ("good", "real_good") and seg in ("luxury", "swiss") and discount >= 0.5:
             v.reason += " · this cheap for the brand: make sure it's real"
+        if high > 2.5 * max(low, 1):
+            # Similar listings range from cheap to dear ("Seamaster": a 90s quartz Polaris and a modern 300M):
+            # no honest single price. No number, no alert: Claude or the price-check links say what it's worth.
+            if v.tier in ("good", "real_good"):
+                v.tier = "mid"
+            v.reason = (f"{what}: {price} lei; similar listings range {low}–{high}: models vary too much to price. "
+                        "Check prices / let Claude look")
+            v.est_value_ron = v.profit_ron = v.est_high_ron = None
+            return v
         if "|" not in (ident.model_key or ""):
             # Priced against every listing of the brand: a ladies' quartz Citizen vs all Citizens.
             # Too rough to alert on; a second look is enough.
             if v.tier in ("good", "real_good"):
                 v.tier = "mid"
             v.reason += " (brand-level price only, model unknown)"
-            v.est_value_ron = v.profit_ron = None  # too rough to show as a number
+            v.est_value_ron = v.profit_ron = v.est_high_ron = None  # too rough to show as a number
         return v
 
     # --- no price history yet -------------------------------------------------------

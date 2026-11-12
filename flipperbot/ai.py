@@ -78,12 +78,13 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "repair_cost_ron": 0,
   "resale_ron_low": 0,
   "resale_ron_high": 0,
+  "_note": "resale_ron_low/high = what it would REALISTICALLY sell for within a few weeks, as is (sold prices, not asking prices). The summary must use these same numbers.",
   "price_sources": ["url or short description"],
   "verdict": "buy|negotiate|skip",
   "offer_ron": 0,
   "confidence": 0,
   "questions_for_seller": ["what to ask the seller to prove it's genuine / works, short, in Romanian"],
-  "summary": "two sentences, in Romanian-English mix is fine, for a phone notification"
+  "summary": "ONE short sentence (max ~20 words) for a phone notification, Romanian-English mix is fine"
 }}"""
 
 

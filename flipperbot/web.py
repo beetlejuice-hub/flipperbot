@@ -110,7 +110,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "key": r["key"], "source": r["source"], "niche": r["niche"] or "watches",
         "icon": niches.get(r["niche"]).icon, "url": r["url"], "title": r["title"], "price": r["price_ron"],
         "negotiable": bool(r["negotiable"]), "city": r["city"], "tier": r["tier"], "reason": r["reason"],
-        "value": r["est_value_ron"], "profit": r["profit_ron"], "model": r["model_key"],
+        "value": r["est_value_ron"], "value_high": r["est_high_ron"], "profit": r["profit_ron"], "model": r["model_key"],
         "flags": json.loads(r["flags"] or "[]"), "delivery": bool(r["delivery"]),
         "photo": _small_photo(photos[0]) if photos else None, "photos": len(photos),
         "first_seen": r["first_seen"], "last_seen": r["last_seen"], "ai_at": r["ai_at"],
@@ -505,27 +505,25 @@ function aiBox(a, l) {
 }
 
 // Asking price next to what it's worth: the bot's market estimate, else Claude's resale range.
+// Asking price next to ONE realistic estimate: Claude's range once it has checked (it looked at this exact
+// watch and at sold prices), else the bot's realistic range from similar listings. Profit from the low end.
 function priceBox(l) {
-  const a = l.ai && !l.ai.error ? l.ai : null;
-  let worth, src, profit = l.profit;
-  if (l.value) {
-    worth = "~" + lei(l.value); src = "from similar listings";
-  } else if (a && a.resale_ron_high) {
-    worth = a.resale_ron_low && a.resale_ron_low !== a.resale_ron_high
-      ? `${a.resale_ron_low.toLocaleString("ro-RO")}–${lei(a.resale_ron_high)}` : "~" + lei(a.resale_ron_high);
-    src = "Claude's estimate";
-    const mid = ((a.resale_ron_low || a.resale_ron_high) + a.resale_ron_high) / 2;
-    profit = Math.round(mid - l.price - (a.repair_cost_ron || 0));
+  const a = l.ai && !l.ai.error && l.ai.resale_ron_high ? l.ai : null;
+  let lo = l.value, hi = l.value_high || l.value, profit = l.profit, src = "realistic, from similar listings";
+  if (a) {
+    hi = a.resale_ron_high; lo = a.resale_ron_low || hi; src = "Claude's estimate";
+    profit = Math.round(lo - l.price - (a.repair_cost_ron || 0));
   }
+  const worth = !lo ? null : hi && hi !== lo ? `${lo.toLocaleString("ro-RO")}–${lei(hi)}` : "~" + lei(lo);
   return h("div", { class: "prices" },
     h("div", {}, h("div", { class: "k" }, "Price"), h("div", { class: "n" }, lei(l.price)),
       h("div", { class: "src" }, l.negotiable ? "negotiable" : "asking")),
-    h("div", {}, h("div", { class: "k" }, "Est. value"),
+    h("div", {}, h("div", { class: "k" }, "Sells for"),
       worth ? h("div", { class: "n" + (worth.includes("–") ? " range" : "") }, worth) : h("div", { class: "n na" }, "not enough data yet"),
       worth ? h("div", { class: "src" }, src) : null),
     profit != null && worth ? h("div", { class: "profit" }, "profit ",
       h("b", { class: profit < 0 ? "neg" : "" }, (profit < 0 ? "−" : "~") + lei(Math.abs(profit))),
-      l.value && a && a.resale_ron_high ? ` · Claude says ${lei(a.resale_ron_low)}–${lei(a.resale_ron_high)}` : "") : null);
+      a && l.value ? h("span", { class: "reason" }, ` · bot's guess was ${l.value_high && l.value_high !== l.value ? `${l.value.toLocaleString("ro-RO")}–${lei(l.value_high)}` : lei(l.value)}`) : "") : null);
 }
 
 // The Interesting tab: decide, and the card leaves the list. Keys C / S / F act on the top card.

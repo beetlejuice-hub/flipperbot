@@ -62,7 +62,9 @@ def test_lots_go_first_and_claude_values_them_into_a_sent_deal(monkeypatch):
     assert row["tier"] == "real_good"  # worth ~2900, 600 asked, profit 2600-600-300 = 1700
     assert row["profit_ron"] == 1700 and "1 notable watches inside" in row["reason"]
     assert len(sent) == 1
-    assert "LOT" in sent[0] and "Omega Seamaster 2846 ~2500 lei ⭐" in sent[0] and "65% sure" in sent[0]
+    assert "LOT" in sent[0] and "⭐ Omega Seamaster" in sent[0] and "65% sure" in sent[0]
+    assert "600 lei</b> → sells for 2.600–3.200 lei (+1.700)" in sent[0]  # Claude's range, profit from its low end
+    assert len(sent[0].splitlines()) <= 6  # short
 
 
 def test_claude_value_never_downgrades_or_sends_unconfirmed(monkeypatch):

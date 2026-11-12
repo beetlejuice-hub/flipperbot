@@ -25,8 +25,19 @@ def test_real_good_needs_discount_and_profit():
 
 def test_repair_cost_eats_profit():
     comps = [1000] * 6
-    # 400 lei is 60% under, but a broken Seiko costs ~250 to fix: 850-400-250=200 profit -> good, not real_good
-    assert verdict("Seiko SKX007 defect", 400, comps=comps).tier == "good"
+    v = verdict("Seiko SKX007 defect", 400, comps=comps)
+    # realistic sale 1000 - 5% selling costs = 950; minus the price and ~250 to fix a broken Seiko
+    assert (v.est_value_ron, v.est_high_ron, v.profit_ron) == (950, 950, 300)
+
+
+def test_realistic_range_is_below_what_listings_ask():
+    from flipperbot.tiers import realistic_range
+
+    asks = [700, 800, 900, 1000, 1100, 1200, 1300, 1400]
+    low, high = realistic_range(asks, exact=True)
+    assert low < high < 1050  # median ask is 1050: realistic sale sits under it
+    family_low, _ = realistic_range(asks, exact=False)
+    assert family_low < low  # only the family known (mixes variants): more cautious
 
 
 def test_too_few_comps_means_no_market():
@@ -83,3 +94,9 @@ def test_luxury_named_only_in_description_stays_suspect():
 
 def test_lot_needs_the_title_to_say_so():
     assert "lot" not in verdict("Ceas Stowa placat", 290, desc="Mai am 2 buc: Seiko, Citizen, Poljot, Zenith").reason
+
+
+def test_too_spread_to_price_shows_no_number():
+    comps = [1500, 1800, 2500, 4000, 6000, 9000, 11000, 12000, 15000]  # a family of very different models
+    v = verdict("Ceas Omega Seamaster Polaris", 3000, comps=comps)
+    assert v.est_value_ron is None and v.tier in ("mid", "bad") and "vary too much" in v.reason

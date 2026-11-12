@@ -119,7 +119,8 @@ def test_confirmed_deal_is_sent_once_with_claudes_notes(monkeypatch):
     db, order = deliver_with(monkeypatch, {"verdict": "buy", "authenticity": "likely_genuine", "confidence": 70})
     assert order[0] == ("claude", "olx:200")  # Claude first
     kind, text = order[1]
-    assert kind == "telegram" and "Claude: BUY" in text and "70% sure" in text and "looks genuine" in text
+    assert kind == "telegram" and "🤖 BUY · 70% sure" in text and "sells for 800–1.000 lei (+380)" in text
+    assert "FAKE" not in text and len(text.splitlines()) <= 5
     assert order[2] == ("claude", "olx:150")  # then a good one, for the dashboard only
     assert len([o for o in order if o[0] == "telegram"]) == 1
     assert db.get("olx:200")["notified_tier"] == "real_good"

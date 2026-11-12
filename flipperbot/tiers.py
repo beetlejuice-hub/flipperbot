@@ -116,7 +116,11 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
         return Verdict("suspect", f"{ident.brand.name} sold the way replicas are ({why})")
 
     # --- too cheap to be real ---------------------------------------------------
-    if ident.brand and ident.brand.fake_floor_ron and price < ident.brand.fake_floor_ron:
+    # A luxury name only in the description ("I also have a Rolex", "like an Omega"): no accusation, a look.
+    if ident.brand and not ident.brand_in_title and ident.brand.fake_floor_ron and price < ident.brand.fake_floor_ron:
+        return Verdict("mid", f"the description mentions {ident.brand.name}, the title doesn't; at {price} lei "
+                              "probably a lookalike or another watch. Check the photos")
+    if ident.brand and ident.brand_in_title and ident.brand.fake_floor_ron and price < ident.brand.fake_floor_ron:
         why = {"broken", "lot", "vintage", "pocket"} & f
         if why and ident.brand_in_title:
             # A dead vintage Omega or a 1900s Omega pocket watch for 800 lei is plausible. Worth Claude's eyes.

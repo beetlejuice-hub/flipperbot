@@ -93,3 +93,15 @@ def test_collectible_not_from_keyword_stuffing_or_mods():
     assert "collectible" not in identify("Ceas Seiko automatic modificat in stil Pilot", "cadran tropical").flags
     assert "collectible" in identify("Ceas Seiko automatic", "calibru 6139, cronograf").flags  # its own brand
     assert "collectible" in identify("Ceas vechi cronograf", "mecanism Valjoux 7733").flags  # a movement, unbranded
+
+
+def test_trade_talk_in_description_isnt_the_watch():
+    title = "Luminox Adventurer Atacama 1760 H3 Tritiu"
+    desc = "Ceas in stare foarte buna, functioneaza perfect. Accept schimb cu Omega sau Rolex plus diferenta."
+    i = identify(title, desc)
+    assert i.brand.name == "Luminox"
+    v = verdict(title, 600, desc)
+    assert v.tier != "suspect" and "Omega" not in v.reason
+    # unknown brand in the title, a luxury name only in the description: never "likely fake"
+    v = verdict("Ceas barbatesc Atlantic", 600, "Mai am un Rolex de vanzare")
+    assert v.tier != "suspect"

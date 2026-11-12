@@ -216,6 +216,17 @@ class Identity:
 _SWAP = re.compile(r"(?<![a-z])(?:sch|schb|schimb|schimbat|schimbare|accept schimb|sau schimb)(?![a-z]).*$")
 
 
+_TRADE = re.compile(r"(?<![a-z])(sch|schimb|schimburi|schimbat|accept variante|variante|trade|exchange|swap|"
+                    r"tausch|la schimb|plus diferenta|cu diferenta)(?![a-z])")
+
+
+def _without_trade_talk(description: str) -> str:
+    """Drop sentences about swapping ("accept schimb cu Omega sau Rolex"): those brands are what the
+    seller wants, not what's for sale."""
+    parts = re.split(r"(?<=[.!?\n])|\s[-–]\s", description or "")
+    return " ".join(p for p in parts if not _TRADE.search(normalize(p)))
+
+
 def identify(title: str, description: str = "", niche: str = "watches") -> Identity:
     title = _SWAP.sub("", normalize(title)).strip() or title
     title_n = normalize(title)
@@ -226,7 +237,7 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
     from .niches import get
 
     title_brands = find_brands(title, niche)
-    brands = title_brands or find_brands(description, niche)
+    brands = title_brands or find_brands(_without_trade_talk(description), niche)
     # "Audemars Piguet x Swatch Royal Pop", "Omega x Swatch MoonSwatch": it's a Swatch.
     if niche == "watches" and (any(b.name == "Swatch" for b in brands) or "moonswatch" in title_n):
         brands = [b for b in BRANDS if b.name == "Swatch"] + [b for b in brands if b.name != "Swatch"]

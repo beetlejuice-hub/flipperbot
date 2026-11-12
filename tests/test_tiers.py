@@ -87,9 +87,9 @@ def test_parts_named_in_plural():
     assert verdict("Cadrane ceas Poljot 17 rubine", 50).tier == "bad"
 
 
-def test_luxury_named_only_in_description_stays_suspect():
+def test_luxury_named_only_in_description_is_a_look_not_an_accusation():
     v = verdict("Ceas Barbatesc De Firma Lux Elegant 2026", 239, desc="model Rolex, colectie noua")
-    assert v.tier == "suspect"
+    assert v.tier == "mid" and "the title doesn't" in v.reason
 
 
 def test_lot_needs_the_title_to_say_so():

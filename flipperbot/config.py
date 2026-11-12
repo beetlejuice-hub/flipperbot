@@ -94,6 +94,10 @@ class Settings:
     # old watches to Claude by itself, and message Telegram when Claude confirms one.
     ai_enabled: bool = True
     ai_auto: bool = False
+    # Real good deals only: the bot has Claude check them by itself (fake or not, realistic price), in the
+    # background on your subscription, no Claude window needed; confirmed ones go to Telegram. Counts
+    # toward ai_daily_limit. Everything else waits for "Send to Claude".
+    ai_auto_real_good: bool = True
     ai_daily_limit: int = 15  # a $20 plan runs out fast; raise it if you never hit limits
     # Claude looks at every real_good before it's sent to Telegram, then at good ones with what's left
     # of the day's budget (those only show on the dashboard).

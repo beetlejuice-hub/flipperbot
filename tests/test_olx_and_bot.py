@@ -188,14 +188,34 @@ def test_replica_dealer_pattern():
     assert "replicas" in db.get("olx:302")["reason"]
 
 
-def test_by_default_claude_never_runs_by_itself(monkeypatch):
+def test_by_default_only_real_good_deals_are_checked_by_themselves(monkeypatch):
     s = Settings()
-    assert s.ai_auto is False
+    assert s.ai_auto is False and s.ai_auto_real_good is True
+    db, _, _ = setup_deal(s)
+    checked, sent = [], []
+
+    def fake_check(db_, row, s_):
+        checked.append(row["key"])
+        result = {"verdict": "buy", "authenticity": "likely_genuine", "confidence": 75,
+                  "resale_ron_low": 850, "resale_ron_high": 1000}
+        db_.set_ai(row["key"], result)
+        return result
+
+    monkeypatch.setattr(bot.ai, "available", lambda s_: True)
+    monkeypatch.setattr(bot.ai, "check", fake_check)
+    monkeypatch.setattr(bot.notify, "send", lambda s_, text, photo=None: sent.append(text))
+    bot.deliver(db, s)
+    assert checked == ["olx:200"]  # the real good deal; the good one (olx:150) waits for you
+    assert len(sent) == 1
+
+
+def test_all_automatic_claude_can_be_off(monkeypatch):
+    s = Settings()
+    s.ai_auto_real_good = False
     db, _, _ = setup_deal(s)
     called = []
     monkeypatch.setattr(bot.ai, "available", lambda s_: True)
     monkeypatch.setattr(bot.ai, "check", lambda *a: called.append(a))
     monkeypatch.setattr(bot.notify, "send", lambda *a, **k: called.append(a))
     bot.deliver(db, s)
-    assert called == []  # no Claude, no Telegram: the deals wait on the dashboard
-    assert db.get("olx:200")["tier"] == "real_good"
+    assert called == []

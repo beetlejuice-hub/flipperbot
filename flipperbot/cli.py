@@ -13,6 +13,7 @@
   ai <url|key>     run the Claude check on one stored listing now
   telegram-setup   find your Telegram chat id after you've messaged your bot
   stats            what's in the database
+  claude-test      check that the bot can use Claude on this Mac (one tiny call, the way checks run)
   facebook-login   set up Facebook Marketplace: log in once with your SECOND account
   facebook-poll    one Facebook search run now (to test it), then exit
   start / stop     (Mac) run in the background from login on / stop that
@@ -52,6 +53,7 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("make-app")
     sub.add_parser("open")
     sub.add_parser("dashboard")  # serve the dashboard only, without polling
+    sub.add_parser("claude-test")
     sub.add_parser("facebook-login")
     sub.add_parser("facebook-poll")
     sub.add_parser("start")
@@ -101,6 +103,34 @@ def main(argv: list[str] | None = None) -> None:
                 threading.Event().wait()
             except KeyboardInterrupt:
                 pass
+
+    elif args.cmd == "claude-test":
+        import subprocess
+        import tempfile
+
+        if not ai.available(s):
+            sys.exit("Claude Code isn't installed (or `claude` isn't on PATH). Install it: curl -fsSL https://claude.ai/install.sh | bash")
+        with tempfile.TemporaryDirectory() as d:
+            proc = subprocess.run(ai.CLAUDE_ARGS(s.claude_bin, s.ai_model), input='Reply with exactly: {"ok": true}',
+                                  cwd=d, capture_output=True, text=True, timeout=180)
+        try:
+            w = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            w = {}
+        said = str(w.get("result") or proc.stderr or proc.stdout or "no output").strip()[:400]
+        if proc.returncode == 0 and not w.get("is_error") and '"ok"' in said:
+            print(f"✓ Claude works for the bot (model: {', '.join(w.get('modelUsage') or {}) or s.ai_model}).")
+            print("Real good deals will be checked by themselves, and 'Send to Claude' works.")
+        else:
+            until = ai.limit_reset(said)
+            print("✗ Claude didn't work for the bot. It said:\n  " + said)
+            if until:
+                import time
+
+                print(f"That's your plan's usage limit; it resets around {time.strftime('%H:%M', time.localtime(until))}.")
+            elif "login" in said.lower() or "auth" in said.lower() or "api key" in said.lower():
+                print("Log in once: type  claude  in Terminal, log in, then /exit. Then run this again.")
+            sys.exit(1)
 
     elif args.cmd == "facebook-login":
         from .sources import facebook
@@ -292,6 +322,7 @@ def _setup(s: config.Settings) -> None:
     print("== Claude: checks photos and real prices of the good finds ==")
     if shutil.which(s.claude_bin):
         print("Claude Code is installed. If you've never logged in, type  claude  once, log in, then /exit.")
+        print("Then  flipperbot claude-test  checks the bot can use it.")
     else:
         print("Claude Code isn't installed (optional). To add it, paste this, then type  claude  and log in:")
         print("  curl -fsSL https://claude.ai/install.sh | bash")

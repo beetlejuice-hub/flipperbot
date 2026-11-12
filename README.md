@@ -50,13 +50,14 @@ sellers who don't know what they have; seen in the last 3 days). Each card has t
 the top card: **🤖 Let Claude check** (C), **Skip** (S: not worth a check; it stays in Deals/Maybe), and
 **Fake / not interested** (F: out of sight, in Hidden). The card leaves the list either way.
 
-**Claude only checks what you send it.** Every card on the dashboard has a **Send to Claude** button.
-Claude works through what you sent one at a time (the card shows its place in the queue), reads the
-description and photos (lots: zoomed in, item by item), checks for fakes, and finds what it really
-sells for. Its notes land on the card. If it confirms one as a real good deal (not fake, buy/negotiate,
-at least 50% sure; 60% for luxury/Swiss), the verdict also goes to your phone on Telegram. Nothing else is
-sent to Telegram. Scraping and judging run by themselves all the time. (`ai_auto = true` in the settings
-file lets the bot send deals to Claude by itself instead.)
+**Claude.** Real good deals are checked by Claude by themselves, in the background on your Claude
+subscription: no Claude window or session needed, just Claude Code installed and logged in once on the
+Mac (`flipperbot claude-test` checks). It looks at the photos and description: fake or not, and what it
+realistically sells for. If it's confident (not fake, buy/negotiate, at least 50% sure; 60% for
+luxury/Swiss), you get a short Telegram message. Everything else waits for you: **Send to Claude** on any
+card (or *Let Claude check* in Interesting). Checks run on Sonnet, lean, and pause by themselves if your
+plan's limit is hit. Max 15 automatic checks a day (`ai_daily_limit`); `ai_auto_real_good = false` turns
+the automatic ones off, `ai_auto = true` also sends lots and old watches by themselves.
 
 From Terminal:
 

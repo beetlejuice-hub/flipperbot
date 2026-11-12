@@ -281,8 +281,9 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
     notes there. A deal Claude can't check yet (daily limit) waits for the next chance.
     Then, with budget left, Claude looks at a good one for the dashboard.
 
-    Off unless `ai_auto` is on: by default Claude only checks what you send it from the dashboard."""
-    if not s.ai_auto:
+    By default (`ai_auto_real_good`) only real good deals are checked by themselves; with `ai_auto`
+    the bot also sends lots, old watches and good deals to Claude."""
+    if not (s.ai_auto or s.ai_auto_real_good):
         return
     for r in pending_alerts(db, s):
         if r["ai"]:
@@ -308,6 +309,8 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
         else:
             log(f"  not sent ({why}): {row['title']}")
         db.mark_notified(row["key"], row["tier"])  # decided either way; it's on the dashboard
+    if not s.ai_auto:
+        return  # the rest waits for "Send to Claude"
     for r in pending_ai(db, s)[:extra_ai]:
         if ai_skip_reason(db, s):
             return

@@ -180,3 +180,18 @@ def test_queue_waits_out_the_usage_limit(server, monkeypatch):
             break
         _t.sleep(0.1)
     assert calls == ["olx:101", "olx:101"]  # tried again after the reset, not dropped
+
+
+def test_latest_checked_first(server, tmp_path):
+    from flipperbot.db import DB as _DB
+
+    db = _DB(tmp_path / "f.db")
+    db.set_ai("olx:100", {"verdict": "skip"})
+    db.conn.execute("UPDATE listings SET ai_at='2026-11-12T08:00:00+00:00' WHERE key='olx:100'")
+    db.set_ai("olx:101", {"verdict": "buy"})
+    db.conn.execute("UPDATE listings SET ai_at='2026-11-12T09:00:00+00:00' WHERE key='olx:101'")
+    db.conn.commit()
+    rows = get(server + "/api/listings?view=checked&sort=ai")
+    assert [r["key"] for r in rows] == ["olx:101", "olx:100"] and rows[0]["ai_at"].startswith("2026-11-12T09")
+    assert [r["key"] for r in get(server + "/api/listings?view=deals&sort=ai")][0] == "olx:200"  # works on any tab
+    assert 'value="ai">Latest checked by Claude' in web.PAGE

@@ -75,7 +75,7 @@ def listing_json(r: Any) -> dict[str, Any]:
         "value": r["est_value_ron"], "profit": r["profit_ron"], "model": r["model_key"],
         "flags": json.loads(r["flags"] or "[]"), "delivery": bool(r["delivery"]),
         "photo": _small_photo(photos[0]) if photos else None, "photos": len(photos),
-        "first_seen": r["first_seen"], "last_seen": r["last_seen"],
+        "first_seen": r["first_seen"], "last_seen": r["last_seen"], "ai_at": r["ai_at"],
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
         "ai_running": bool(_queue) and _queue[0] == r["key"],
         "ai_queued": _queue.index(r["key"]) if r["key"] in _queue[1:] else None,  # how many ahead
@@ -101,7 +101,7 @@ VIEWS = {
 ORDER = {
     "rank": "CASE tier WHEN 'real_good' THEN 4 WHEN 'good' THEN 3 WHEN 'mid' THEN 2 WHEN 'suspect' THEN 1 ELSE 0 END DESC, COALESCE(profit_ron,0) DESC, last_seen DESC",
     "new": "first_seen DESC",
-    "ai": "ai_at DESC",
+    "ai": "ai_at IS NULL, ai_at DESC",
     "cheap": "price_ron ASC",
 }
 
@@ -392,7 +392,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
   <div class="tools">
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
-      <option value="">Best first</option><option value="new">Newest</option><option value="cheap">Cheapest</option>
+      <option value="">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option>
     </select>
   </div>
 </div></header>
@@ -455,7 +455,7 @@ function aiBox(a, l) {
     : ws.map(label).join("; ");
   const v = (a.verdict || "?").toLowerCase();
   return h("div", { class: "ai" },
-    h("div", {}, "🤖 ", h("span", { class: "v v-" + v }, v.toUpperCase()),
+    h("div", {}, "🤖 ", h("span", { class: "v v-" + v }, v.toUpperCase()), l.ai_at ? h("span", { class: "reason" }, ` · checked ${ago(l.ai_at)}`) : null,
       typeof a.confidence === "number" ? ` · ${a.confidence}% sure` : "", a.offer_ron ? ` · offer ${lei(a.offer_ron)}` : ""),
     names && h("div", {}, names),
     h("div", {}, `authenticity: ${a.authenticity || "?"} · resale ${lei(a.resale_ron_low)}–${lei(a.resale_ron_high)}` + (a.repair_cost_ron ? ` · repair ~${lei(a.repair_cost_ron)}` : "")),
@@ -551,9 +551,13 @@ function poll(l, el) {
   }, 6000);
 }
 
+function sortFor(v) {  // the Claude checked tab opens on the latest checks
+  document.getElementById("sort").value = v === "checked" ? "ai" : "";
+}
+
 function drawTabs() {
   document.getElementById("tabs").replaceChildren(...TABS.map(([id, name, count]) =>
-    h("button", { class: id === view ? "on" : "", onclick: () => { view = id; location.hash = id; drawTabs(); load(); } },
+    h("button", { class: id === view ? "on" : "", onclick: () => { view = id; location.hash = id; sortFor(view); drawTabs(); load(); } },
       name, stats && count ? h("span", { class: "n" }, count(stats)) : null)));
 }
 
@@ -591,7 +595,7 @@ let t;
 document.getElementById("q").addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 250); });
 document.getElementById("sort").addEventListener("change", load);
 window.addEventListener("hashchange", () => { view = location.hash.slice(1) || "interesting"; drawTabs(); load(); });
-drawTabs(); refreshStats(); load();
+sortFor(view); drawTabs(); refreshStats(); load();
 setInterval(refreshStats, 60000);
 setInterval(() => { if (!document.hidden && !document.getElementById("q").value) load(); }, 120000);
 </script>

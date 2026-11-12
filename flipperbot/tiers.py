@@ -90,7 +90,10 @@ def repair_cost(ident: Identity, s: Settings) -> int:
     return 0
 
 
-def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict:
+def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
+          checked: tuple[int, int] | None = None) -> Verdict:
+    """checked: what Claude found an ordinary one of this exact model sells for (sold prices), if it has
+    checked one; it beats the estimate from asking prices."""
     price = l.price_ron
     f = ident.flags
     seg = ident.segment
@@ -172,6 +175,26 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
         return Verdict("good" if seg in VALUABLE_SEGMENTS else "mid", f"{who}: {why}: Claude will look at the photos")
 
     # --- priced against the market -------------------------------------------------
+    if checked and model_known:
+        low, high = checked
+        repair = repair_cost(ident, s)
+        profit = low - price - repair
+        discount = 1 - price / max(1, round((low + high) / 2))
+        what = " ".join(dict.fromkeys((ident.model_key or "?").replace("|", " ").split()))
+        detail = (f"{what}: {price} lei, {round(discount * 100)}% under the sold price Claude checked for this model; "
+                  f"realistic sale ~{low}–{high}" + (f", repair ~{repair}" if repair else ""))
+        v = Verdict("bad", detail, est_value_ron=low, profit_ron=profit, est_high_ron=high, comps=len(comps))
+        # Sold prices, not asks: a smaller discount already means a real deal.
+        if discount >= s.good_discount and profit >= s.real_good_profit_ron:
+            v.tier = "real_good"
+        elif discount >= s.mid_discount and profit >= s.good_profit_ron:
+            v.tier = "good"
+        elif profit > 0:
+            v.tier = "mid"
+        if v.tier in ("good", "real_good") and not ident.brand_in_title:
+            v.tier = "mid"
+            v.reason += " (brand only named in the description)"
+        return v
     market = market_price(comps) if len(comps) >= s.min_comps else None
     if market:
         exact = bool(ident.refs)  # a reference number ("SKX007") vs only a family ("seamaster")

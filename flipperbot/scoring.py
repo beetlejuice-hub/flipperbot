@@ -17,7 +17,7 @@ RULE_MAX = 7  # free rules alone never go above 7: an 8+ needs an AI to agree
 
 # Bump when the rules that judge or score a listing change: the bot then re-judges every stored listing
 # once at start, so an update never leaves old listings with stale or missing scores.
-RULES_VERSION = 4
+RULES_VERSION = 5
 
 # Reasons a listing is not worth anyone's time, from the tier's own reason text.
 _DEAD = ("someone buying", "repair shop", "replica", "over budget", "fashion brand", "part/accessory", "locked to",
@@ -83,10 +83,11 @@ def claude_score(result: dict[str, Any] | None, price: int | None = None, good_p
     conf = result.get("confidence") if isinstance(result.get("confidence"), (int, float)) else 50
     if verdict == "skip":
         return 2, "Claude: skip"
+    # Half sure isn't sure: 8+ needs Claude at least 60% sure (or a confident "buy").
     if verdict == "buy":
-        score = 10 if conf >= 75 else 9 if conf >= 50 else 7
+        score = 10 if conf >= 75 else 9 if conf >= 60 else 7 if conf >= 50 else 6
     elif verdict == "negotiate":
-        score = 9 if conf >= 75 else 8 if conf >= 50 else 6
+        score = 9 if conf >= 75 else 8 if conf >= 60 else 6
     else:
         score = 5
     why = f"Claude: {verdict}, {int(conf)}% sure"

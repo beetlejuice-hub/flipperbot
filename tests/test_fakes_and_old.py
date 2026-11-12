@@ -52,10 +52,11 @@ def test_search_mix_old_modern_general():
 
 
 def test_luxury_needs_a_surer_claude():
-    r = {"verdict": "buy", "authenticity": "likely_genuine", "confidence": 55}
+    r = {"verdict": "buy", "authenticity": "likely_genuine", "confidence": 65}
     assert bot.confirmed(r, S, "japan")[0]
     ok, why = bot.confirmed(r, S, "luxury")
-    assert not ok and "needs 60" in why
+    assert not ok and "needs 70" in why
+    assert not bot.confirmed({**r, "confidence": 55}, S, "japan")[0]  # half sure isn't sure
 
 
 def test_claude_sees_the_sellers_other_listings():

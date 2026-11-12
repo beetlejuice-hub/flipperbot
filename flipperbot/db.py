@@ -30,6 +30,10 @@ CREATE INDEX IF NOT EXISTS listings_model ON listings(model_key);
 CREATE INDEX IF NOT EXISTS listings_tier ON listings(tier);
 CREATE TABLE IF NOT EXISTS prices (key TEXT, price_ron INTEGER, seen_at TEXT);
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
+-- What Claude found an ordinary used, working one of a model sells for (sold prices): it overrides the
+-- estimate from asking prices for every listing of that model.
+CREATE TABLE IF NOT EXISTS model_prices (model_key TEXT PRIMARY KEY, low INTEGER, high INTEGER, at TEXT,
+                                         from_key TEXT, note TEXT);
 """
 
 TIER_RANK = {"bad": 0, "suspect": 1, "mid": 2, "good": 3, "real_good": 4}
@@ -129,7 +133,31 @@ class DB:
     def set_ai(self, key: str, result: dict[str, Any]) -> None:
         self.conn.execute("UPDATE listings SET ai=?, ai_at=? WHERE key=?", (json.dumps(result, ensure_ascii=False), now(), key))
         self.conn.commit()
+        self.learn_model_price(key, result)
         self.update_score(key)
+
+    def learn_model_price(self, key: str, result: dict[str, Any]) -> bool:
+        """Claude priced an ordinary one of this exact model: remember it for the model's other listings."""
+        row = self.get(key)
+        try:
+            lo, hi = int(result.get("model_value_ron_low") or 0), int(result.get("model_value_ron_high") or 0)
+        except (TypeError, ValueError):
+            return False
+        if (row is None or "|" not in (row["model_key"] or "") or lo <= 0 or hi < lo or "error" in result
+                or result.get("authenticity") == "likely_fake" or "lot" in (row["flags"] or "")):
+            return False
+        self.conn.execute("INSERT OR REPLACE INTO model_prices VALUES (?, ?, ?, ?, ?, ?)",
+                          (row["model_key"], lo, hi, now(), key, str(result.get("price_note") or "")[:200]))
+        self.conn.commit()
+        return True
+
+    def model_price(self, model_key: str | None, days: int = 120) -> tuple[int, int] | None:
+        """Claude's checked price for this model, if recent."""
+        if not model_key:
+            return None
+        r = self.conn.execute("SELECT low, high FROM model_prices WHERE model_key=? AND at >= datetime('now', ?)",
+                              (model_key, f"-{days} days")).fetchone()
+        return (r["low"], r["high"]) if r else None
 
     def set_quick(self, key: str, quick: dict[str, Any]) -> None:
         self.conn.execute("UPDATE listings SET quick=?, quick_at=? WHERE key=?", (json.dumps(quick, ensure_ascii=False), now(), key))

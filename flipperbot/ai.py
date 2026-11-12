@@ -64,6 +64,18 @@ Then:
    price), locked to an account (iCloud activation lock, Google), battery health, exact model, size, GPS vs cellular.
 3. Condition: what's visibly wrong, and what a repair would need and roughly cost in Romania.
 4. Value: use web search (at most 4 searches: be targeted; one of them eBay SOLD listings for this exact model) to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
+   PRICE CAREFULLY, AS IS. Overpricing costs the reseller money; underpricing only costs a deal:
+   - Price THIS item in the condition the photos and text show, not a clean, boxed, working one. Visible wear
+     (scratches, worn bracelet or bezel, dents, dirty glass), no box/papers, or no proof it works: price lower.
+   - "Needs a battery / stopped / nu merge / netestat": you can't know it works. Price it as possibly broken: a new
+     battery often doesn't revive it (quartz chronograph modules, corroded contacts, dead circuits). The low end
+     is what it sells for if it doesn't work, or after a basic fix minus that fix.
+   - Used quartz from mid brands (Certina, Tissot, Seiko/Citizen quartz, Festina, Swatch...) sells for a fraction
+     of new, often 25-40% of retail. Fashion and electronics lose value fast too.
+   - OLX asking prices run 20-40% above what things sell for, and the bot's own estimate comes from asking prices:
+     trust SOLD prices; when sources disagree, lean on the lower ones.
+   - resale_ron_low = a price you'd bet on getting within about 4 weeks; resale_ron_high = a good outcome.
+   - Keep confidence under 60 unless you found at least 2 comparable SOLD prices and the photos show the condition.
 5. Decide: buy, negotiate (and to what price), or skip.
 6. confidence: 0-100, how sure you are that this is a genuine watch AND a profitable flip at the asking or
    offer price. Be honest: with blurry photos, no caseback/movement photos or a vague description, stay low.
@@ -82,6 +94,10 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "resale_ron_low": 0,
   "resale_ron_high": 0,
   "_note": "resale_ron_low/high = what it would REALISTICALLY sell for within a few weeks, as is (sold prices, not asking prices). The summary must use these same numbers.",
+  "model_value_ron_low": 0,
+  "model_value_ron_high": 0,
+  "price_note": "",
+  "_note2": "model_value = what an ORDINARY used, working one of this exact model sells for (sold prices), for the bot's price book; 0 if it's a lot or you can't name the exact model. price_note: if the bot's estimate (above) is off, say in a few words which way and why, else empty.",
   "price_sources": ["url or short description"],
   "verdict": "buy|negotiate|skip",
   "offer_ron": 0,
@@ -276,6 +292,17 @@ Then:
    dents, missing caps. "Tested with film" and "all speeds OK" matter. Repair/cleaning cost in Romania.
 4. Value: use web search (at most 4 searches: be targeted; one of them eBay SOLD listings for this exact item) for what it actually sells for: eBay sold listings, Kamerastore, KEH, Catawiki, and OLX/
    Okazii in Romania. Prefer sold prices. Body and lenses separately, then together. Give lei (1 EUR = {eur} lei).
+   PRICE CAREFULLY, AS IS. Overpricing costs the reseller money; underpricing only costs a deal:
+   - Price THIS item in the condition the photos and text show, not a clean, boxed, working one. Visible wear
+     (scratches, dents, worn grips, marks on the glass), no box/papers, or no proof it works: price lower.
+   - "Untested / nu stiu daca merge / needs a battery": you can't know it works. Price it as possibly broken:
+     shutters stick, electronics die, fungus spreads. The low end
+     is what it sells for if it doesn't work, or after a basic fix minus that fix.
+   - Digital point-and-shoots, kit zooms and entry DSLRs lose value fast; only some models are in demand.
+   - OLX asking prices run 20-40% above what things sell for, and the bot's own estimate comes from asking prices:
+     trust SOLD prices; when sources disagree, lean on the lower ones.
+   - resale_ron_low = a price you'd bet on getting within about 4 weeks; resale_ron_high = a good outcome.
+   - Keep confidence under 60 unless you found at least 2 comparable SOLD prices and the photos show the condition.
 5. Decide: buy, negotiate (and to what price), or skip.
 6. confidence: 0-100, how sure you are that it's what it seems AND a profitable flip at the asking or offer price.
    Be honest: no photos through the lens, no word on the shutter, or a vague description: stay low.
@@ -294,6 +321,10 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "resale_ron_low": 0,
   "resale_ron_high": 0,
   "_note": "resale_ron_low/high = what it would REALISTICALLY sell for within a few weeks, as is (sold prices, not asking prices). The summary must use these same numbers.",
+  "model_value_ron_low": 0,
+  "model_value_ron_high": 0,
+  "price_note": "",
+  "_note2": "model_value = what an ORDINARY used, working one of this exact model sells for (sold prices), for the bot's price book; 0 if it's a lot or you can't name the exact model. price_note: if the bot's estimate (above) is off, say in a few words which way and why, else empty.",
   "price_sources": ["url or short description"],
   "verdict": "buy|negotiate|skip",
   "offer_ron": 0,
@@ -438,4 +469,8 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
     if result is None:
         result = {"error": (proc.stderr or text or "no output")[-500:]}
     db.set_ai(row["key"], result)
+    if db.model_price(row["model_key"]) and result.get("model_value_ron_low"):
+        from . import bot  # Claude priced this model: the model's other listings get the corrected price
+
+        bot.reprice_model(db, s, row["model_key"], skip=row["key"])
     return result

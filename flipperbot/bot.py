@@ -92,7 +92,7 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     brand_field = l.params.get("brand") if isinstance(l.params.get("brand"), str) else ""
     ident = identify(l.title, f"{l.description} {brand_field}", l.niche)
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key) if ident.model_key else []
-    verdict = judge(l, ident, comps, s)
+    verdict = judge(l, ident, comps, s, db.model_price(ident.model_key))
     if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and "vintage" not in ident.flags and l.seller_id:
         # One seller with a row of modern luxury/Swiss watches all far under market: a replica dealer.
         # (Not vintage: a vintage shop selling several old Swiss watches is normal.)
@@ -440,6 +440,17 @@ def digest(db: DB, s: Settings) -> int:
     if rows:
         notify.send(s, notify.digest_text(rows))
         db.mark_digested([r["key"] for r in rows])
+    return len(rows)
+
+
+def reprice_model(db: DB, s: Settings, model_key: str | None, skip: str | None = None) -> int:
+    """Judge this model's recent listings again, after Claude found what it really sells for."""
+    if not model_key:
+        return 0
+    rows = db.conn.execute("SELECT * FROM listings WHERE model_key=? AND key IS NOT ? AND last_seen >= datetime('now', '-30 days')",
+                           (model_key, skip)).fetchall()
+    for r in rows:
+        evaluate(db, row_to_listing(r), s, ebay_cached_only=True)
     return len(rows)
 
 

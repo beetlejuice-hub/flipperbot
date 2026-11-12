@@ -536,7 +536,16 @@ function priceBox(l) {
     profit != null && worth ? h("div", { class: "profit" }, "profit ",
       h("b", { class: profit < 0 ? "neg" : "" }, (profit < 0 ? "−" : "~") + lei(Math.abs(profit))
         + (l.price ? ` (${profit < 0 ? "−" : "+"}${Math.round(Math.abs(profit) * 100 / l.price)}%)` : "")),
-      a && l.value ? h("span", { class: "reason" }, ` · bot's guess was ${l.value_high && l.value_high !== l.value ? `${l.value.toLocaleString("ro-RO")}–${lei(l.value_high)}` : lei(l.value)}`) : "") : null);
+      a && l.value ? h("span", { class: "reason" }, ` · ${botWas(l, lo)}`) : "") : null,
+    a && a.price_note ? h("div", { class: "profit reason" }, "Claude on the price: " + a.price_note) : null);
+}
+
+// When Claude's price differs from the bot's, say which way: the bot's number came from asking prices.
+function botWas(l, lo) {
+  const was = l.value_high && l.value_high !== l.value ? `${l.value.toLocaleString("ro-RO")}–${lei(l.value_high)}` : lei(l.value);
+  if (lo < l.value * 0.85) return `the bot's estimate was too high (${was}), Claude corrected it`;
+  if (lo > l.value * 1.15) return `the bot's estimate was too low (${was}), Claude corrected it`;
+  return `the bot's estimate (${was}) agreed`;
 }
 
 // The Interesting tab: decide, and the card leaves the list. Keys C / S / F act on the top card.

@@ -165,3 +165,25 @@ def test_sort_by_estimated_profit_uses_the_estimate_the_card_shows():
     db.set_ai("olx:150", {"verdict": "buy", "confidence": 80, "resale_ron_low": 2000, "resale_ron_high": 2200})
     assert web.query(db, "new", sort="profit")[0]["key"] == "olx:150"
     assert web.query(db, "new", sort="profit_pct")[0]["key"] == "olx:150"
+
+
+def test_claude_corrects_the_models_price_for_its_other_listings(monkeypatch, tmp_path):
+    from flipperbot import ai
+
+    s = Settings()
+    monkeypatch.setattr(Settings, "photos_dir", property(lambda self: tmp_path))
+    monkeypatch.setattr(ai, "log_call", lambda *a: None)
+    monkeypatch.setattr(ai, "available", lambda s_: True)
+    db = setup(s)  # SKX007s ask ~1000; one at 650 looks good against that
+    assert db.get("olx:150")["est_value_ron"] > 800
+    # Claude checks the 420 one: used ones really sell for 500-600, and says so
+    answer = {"verdict": "skip", "watches": [], "authenticity": "likely_genuine", "confidence": 70,
+              "resale_ron_low": 450, "resale_ron_high": 550, "model_value_ron_low": 500, "model_value_ron_high": 600,
+              "price_note": "the bot's estimate is from asking prices; used SKX007 sell for 500-600"}
+    monkeypatch.setattr(ai.subprocess, "run",
+                        lambda args, **kw: subprocess.CompletedProcess(args, 0, json.dumps({"result": json.dumps(answer)}), ""))
+    ai.check(db, db.get("olx:200"), s)
+    assert db.model_price("seiko|SKX007") == (500, 600)
+    other = db.get("olx:150")  # repriced from Claude's sold prices: 650 is now over what it sells for
+    assert (other["est_value_ron"], other["est_high_ron"]) == (500, 600)
+    assert "sold price Claude checked" in other["reason"] and other["score"] == 0

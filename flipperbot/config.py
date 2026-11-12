@@ -140,8 +140,8 @@ class Settings:
     # Good deals go fast. A listing up longer than this (OLX's own creation date, not its paid "refresh")
     # can't be a deal: it tops out at "maybe". Unless its price was cut in the last two weeks.
     max_listing_age_days: int = MAX_LISTING_AGE_DAYS
-    alert_min_confidence: int = 50
-    alert_min_confidence_luxury: int = 60  # luxury/Swiss: most cheap ones in Romania are replicas
+    alert_min_confidence: int = 60
+    alert_min_confidence_luxury: int = 70  # luxury/Swiss: most cheap ones in Romania are replicas
     digest_telegram: bool = False  # the 20:00 summary of mids on Telegram (they're on the dashboard anyway)
 
     @property

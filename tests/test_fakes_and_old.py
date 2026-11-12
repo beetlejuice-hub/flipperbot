@@ -35,12 +35,14 @@ def test_seller_who_doesnt_know():
     assert verdict("Ceas Longines vechi", 900, "mostenire, nu ma pricep").tier == "good"
 
 
-def test_most_searches_go_to_lots_and_old_watches():
+def test_search_mix_old_modern_general():
     s = Settings()
     db = DB(":memory:")
     runs = [bot.pick_searches(db, s) for _ in range(50)]
-    watch_focus = sum(1 for r in runs for q, c, n in r if q in s.focus_pool)
-    assert watch_focus >= 50 * 2  # 2 of the 3 random searches each time
+    terms = [q for r in runs for q, c, n in r if q]
+    assert sum(q in s.focus_pool for q in terms) >= 50  # one lots/old search each poll
+    assert sum(q in s.modern_pool for q in terms) >= 50  # one modern search each poll
+    assert len(terms) == 50 * 3
     feeds = {(c, n) for r in runs for q, c, n in r if c}
     assert feeds == {("1677", "watches"), ("1676", "watches")}
 
@@ -70,3 +72,24 @@ def test_old_broken_swiss_goes_to_claude_not_the_brand_average():
     # a known model is still priced normally
     l2 = Listing("olx", "2", "u", "Seiko SKX007 vechi", price_ron=400)
     assert judge(l2, identify(l2.title), [1000] * 6, S).est_value_ron
+
+
+def test_collectible_references():
+    v = verdict("Ceas Seiko automatic cronograf", 600, "cal. 6139, merge")
+    assert v.tier == "good" and "6139" in v.reason
+    assert "collectible" in identify("Ceas vechi cronograf Valjoux 7733").flags
+    assert verdict("Ceas Omega Flightmaster", 3500).tier == "good"
+
+
+def test_quartz_old_unclear_isnt_sent_to_claude():
+    assert "quartz" in identify("Ceas vechi quartz", "functioneaza cu baterie").flags
+    assert verdict("Ceas Longines vechi quartz", 900).tier != "good"
+    assert "mechanical" in identify("Ceas Doxa vechi", "mecanic, 17 rubine").flags
+
+
+def test_collectible_not_from_keyword_stuffing_or_mods():
+    assert "collectible" not in identify("Casio G Shock GA-100", "stil king seiko, rolex, omega").flags
+    assert "collectible" not in identify("Ceas Tutima Glashutte Sky", "Referinta: 6105-56").flags
+    assert "collectible" not in identify("Ceas Seiko automatic modificat in stil Pilot", "cadran tropical").flags
+    assert "collectible" in identify("Ceas Seiko automatic", "calibru 6139, cronograf").flags  # its own brand
+    assert "collectible" in identify("Ceas vechi cronograf", "mecanism Valjoux 7733").flags  # a movement, unbranded

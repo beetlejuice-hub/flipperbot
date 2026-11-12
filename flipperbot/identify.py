@@ -11,7 +11,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from .watchdb import BRANDS, Brand
+from .watchdb import BRANDS, COLLECTIBLE, Brand
 
 # --------------------------------------------------------------------------
 # Text
@@ -174,6 +174,13 @@ LOT = ["lot", "loturi", "colectie de ceasuri", "colectie ceasuri", "mai multe ce
 LOT_COUNT = re.compile(r"(?<![a-z0-9])(\d{1,3})\s*(?:buc|bucati|ceasuri|bc)(?![a-z])")
 
 
+MECHANICAL = ["mecanic", "mecanica", "intoarcere manuala", "remontare manuala", "intoarcere", "manual wind",
+              "rubine", "rubin", "jewels", "rubis", "hand wound", "handaufzug"]
+QUARTZ = ["quartz", "cuart", "cuartz", "baterie", "battery"]
+MODDED = ["modificat", "modificata", "mod", "seiko mod", "custom", "personalizat", "customizat", "franken"]
+NEW_BOXED = ["sigilat", "nepurtat", "nou cu eticheta", "cu eticheta", "nou in cutie", "brand new", "new with tags"]
+
+
 @dataclass
 class Identity:
     brand: Brand | None
@@ -184,6 +191,7 @@ class Identity:
     lot_count: int | None = None
     brand_in_title: bool = False  # False: only the description names it, a weaker signal
     niche: str = "watches"
+    collectible: list[str] = field(default_factory=list)  # which collector references matched
 
     @property
     def model_key(self) -> str | None:
@@ -262,6 +270,32 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
         flags.add("pocket")
     if "automatic" in full_n or "automat" in full_n:
         flags.add("automatic")
+    if flags & {"automatic"} or _any(full_n, MECHANICAL):
+        flags.add("mechanical")
+    elif _any(full_n, QUARTZ):
+        flags.add("quartz")  # resale drops a lot for quartz, even good brands
+    if _any(full_n, MODDED):
+        flags.add("modded")  # "Seiko mod", "modificat": parts swapped on purpose, not a collector piece
+    hits = []
+    for pat, label in COLLECTIBLE:
+        r = _family_re(pat)
+        if r.search(title_n):
+            hits.append(label)
+        elif r.search(full_n):
+            # In the description only: sellers paste famous names ("like a King Seiko"). Count it only if
+            # it's this watch's own brand, or a movement/dial word on an unbranded or non-fashion watch.
+            makers = find_brands(label)
+            if makers:
+                if brand and makers[0].name == brand.name:
+                    hits.append(label)
+            elif brand is None or brand.segment != "fashion":
+                hits.append(label)
+    if hits and "modded" not in flags:
+        flags.add("collectible")
+    else:
+        hits = []
+    if _any(full_n, NEW_BOXED):
+        flags.add("new")
 
     lot_count = None
     m = LOT_COUNT.search(title_n)  # descriptions count other things ("2 buc curele")
@@ -274,5 +308,5 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
 
     return Identity(
         brand=brand, brands=brands, refs=refs, family=family, flags=flags, lot_count=lot_count,
-        brand_in_title=bool(title_brands), niche=niche,
+        brand_in_title=bool(title_brands), niche=niche, collectible=hits,
     )

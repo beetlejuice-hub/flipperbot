@@ -84,6 +84,11 @@ BRANDS: list[Brand] = [
     Brand("Roamer", "vintage", (), 0, ()),
     Brand("Lip", "vintage", (), 0, ()),
     Brand("Wittnauer", "vintage", (), 0, ()),
+    Brand("Bulova", "vintage", (), 0, ("accutron", "precisionist", "lunar pilot")),
+    Brand("Glycine", "vintage", (), 0, ("airman", "combat")),
+    Brand("Hanhart", "vintage", (), 0, ()),
+    Brand("Tutima", "vintage", (), 0, ()),
+    Brand("Lemania", "vintage", (), 0, ()),
     Brand("Revue Thommen", "vintage", ("revue",), 0, ()),
     Brand("Glashütte", "vintage", ("glashutte", "gub"), 0, ("spezimatic",)),
     Brand("Ruhla", "vintage", (), 0, ()),
@@ -135,3 +140,37 @@ BRANDS: list[Brand] = [
 
 # Segments worth a human look even before we have price history.
 VALUABLE_SEGMENTS = {"luxury", "swiss", "vintage"}
+
+
+# References, movements and dials collectors pay for, which sellers often don't recognise.
+# A match (title or description) flags the listing "collectible": it goes to Interesting for a look.
+# No prices here on purpose: the price book, the price-check links or Claude say what it's worth.
+COLLECTIBLE: list[tuple[str, str]] = [
+    # Seiko / Citizen
+    ("6139", "Seiko 6139 chronograph"), ("6138", "Seiko 6138 chronograph"), ("6105", "Seiko 6105 diver"),
+    ("6309", "Seiko 6309 diver"), ("6306", "Seiko 6306 diver"), ("62mas", "Seiko 62MAS"), ("6217", "Seiko 62MAS 6217"),
+    ("king seiko", "King Seiko"), ("lord marvel", "Seiko Lord Marvel"), ("lord matic", "Seiko LordMatic"),
+    ("lordmatic", "Seiko LordMatic"), ("7a28", "Seiko 7A28 Giugiaro chronograph"), ("7a38", "Seiko 7A38 chronograph"),
+    ("bellmatic", "Seiko Bellmatic"), ("pogue", "Seiko Pogue"), ("bullhead", "Bullhead chronograph"),
+    ("challenge timer", "Citizen Challenge Timer"),
+    # Swiss
+    ("speedmaster", "Omega Speedmaster"), ("flightmaster", "Omega Flightmaster"), ("seamaster 300", "Omega Seamaster 300"),
+    ("ploprof", "Omega Ploprof"), ("pie pan", "pie-pan dial"), ("pie-pan", "pie-pan dial"), ("30ch", "Longines 30CH"),
+    ("13zn", "Longines 13ZN"), ("autavia", "Heuer Autavia"), ("heuer carrera", "Heuer Carrera"), ("heuer monaco", "Heuer Monaco"),
+    ("camaro", "Heuer Camaro"), ("polerouter", "Universal Polerouter"), ("tri-compax", "Universal Tri-Compax"),
+    ("compax", "Universal Compax"), ("el primero", "Zenith El Primero"), ("a386", "Zenith A386"), ("pr516", "Tissot PR516"),
+    ("sherpa", "Enicar Sherpa"), ("doxa sub", "Doxa Sub"), ("kontiki", "Eterna KonTiki"), ("kon-tiki", "Eterna KonTiki"),
+    ("navitimer", "Breitling Navitimer"), ("top time", "Breitling Top Time"), ("airman", "Glycine Airman"),
+    ("accutron", "Bulova Accutron (tuning fork)"), ("diapason", "tuning-fork movement"), ("tuning fork", "tuning-fork movement"),
+    ("hamilton electric", "Hamilton Electric"),
+    # chronograph movements: a vintage chronograph with one of these is worth a look
+    ("valjoux", "Valjoux chronograph movement"), ("lemania", "Lemania movement"), ("landeron", "Landeron chronograph"),
+    ("venus 175", "Venus 175 chronograph"), ("venus 188", "Venus 188 chronograph"),
+    # Soviet
+    ("3133", "Poljot 3133 chronograph"), ("3017", "Poljot 3017 chronograph"), ("strela", "Strela chronograph"),
+    ("okean", "Poljot Okean"), ("sturmanskie", "Sturmanskie"), ("radio room", "Vostok radio room"),
+    ("copernicus", "Raketa Copernicus"), ("big zero", "Raketa Big Zero"), ("raketa 24", "Raketa 24-hour"),
+    # military and dials
+    ("broad arrow", "military broad arrow"), ("bundeswehr", "Bundeswehr issue"), ("tropical", "tropical dial"),
+    ("gilt dial", "gilt dial"), ("cloisonne", "cloisonne dial"), ("chronometre", "chronometer"),
+]

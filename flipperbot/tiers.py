@@ -111,7 +111,10 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
     # A 1940s Doxa or an inherited watch isn't priced by the average of all Doxas. If only the brand
     # (or nothing) is known and it's old, inherited, a pocket watch, or old and broken, Claude looks.
     model_known = "|" in (ident.model_key or "")
-    old_unclear = not model_known and (
+    # A collector reference ("6139", "Flightmaster", "Valjoux") with no price history yet: worth a look.
+    if ident.collectible and not model_known and price <= 4000 and "quartz" not in f:
+        return Verdict("good", f"{ident.collectible[0]}: collectors pay for these. Check prices / let Claude look")
+    old_unclear = not model_known and "quartz" not in f and (
         "naive" in f or "pocket" in f or ("vintage" in f and ("broken" in f or seg in VALUABLE_SEGMENTS))
     )
     if old_unclear and (ident.brand is None or seg in VALUABLE_SEGMENTS | {"soviet", "japan"}) and price <= 2000:

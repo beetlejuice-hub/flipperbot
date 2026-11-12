@@ -111,6 +111,17 @@ broken watches ("ceasul bunicului", "mostenire", "din pod", "vechituri", pocket 
 where the model isn't clear, and sellers who write "nu stiu ce marca", "de la bunicul", "nu ma pricep", go
 to Claude (after lots), which identifies them from dial, case and movement and values them.
 
+**Checking prices without Claude.** Every card has *Check prices: eBay sold · Chrono24 · OLX · Okazii*,
+searching the model the bot identified: eBay's sold listings are real sale prices, the others what
+people ask. Cards also say how long a listing has been up and if its price was cut (room to negotiate).
+
+**What it hunts.** Each poll mixes searches: one for lots and old watches, one for modern models that
+resell easily (Seiko 5/Presage/Prospex, Orient, G-Shock, Citizen, Tissot PRX/Seastar, Hamilton Khaki,
+Longines HydroConquest...), one general. A list of ~60 collector references, chronograph movements and
+dials (Seiko 6139/6105/62MAS, King Seiko, Speedmaster, Flightmaster, Heuer Autavia, Valjoux/Lemania,
+Poljot 3133, Raketa Copernicus...) flags listings sellers may not recognise; mods are left out. Old
+quartz watches aren't sent for a closer look: quartz resale is poor.
+
 ## How it decides
 
 See `flipperbot/tiers.py`. In short: once 4+ listings of the same model are in the

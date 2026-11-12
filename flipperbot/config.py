@@ -39,6 +39,16 @@ FOCUS_POOL = [
     "ceas militar", "ceas elvetian vechi", "ceasuri de colectie", "colectie ceasuri vechi",
 ]
 
+# Modern watches that resell easily: clear model numbers, so the price book prices them well.
+MODERN_POOL = [
+    "seiko 5 sports", "seiko presage", "seiko prospex", "seiko srpd", "seiko turtle", "seiko samurai",
+    "orient bambino", "orient kamasu", "orient star", "casio g-shock", "g-shock ga-2100", "casio gw-m5610",
+    "casio oceanus", "casio edifice", "citizen promaster", "citizen tsuyosa", "citizen eco-drive",
+    "tissot prx", "tissot seastar", "tissot le locle", "hamilton khaki", "hamilton jazzmaster",
+    "longines hydroconquest", "longines conquest", "certina ds", "mido ocean star", "oris aquis",
+    "seiko automatic", "ceas automatic nou", "ceas sigilat",
+]
+
 # Repair cost to assume for a "broken" watch, by segment (lei). A dead battery
 # is its own, much cheaper case (`battery_fix_ron`).
 REPAIR_RON = {"japan": 250, "soviet": 200, "swiss": 600, "vintage": 500, "luxury": 1500}
@@ -54,7 +64,10 @@ class Settings:
     niches: list[str] = field(default_factory=lambda: ["watches"])  # what to hunt (see niches.py)
     search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))
     focus_pool: list[str] = field(default_factory=lambda: list(FOCUS_POOL))
-    focus_share: float = 0.67  # of each poll's searches, how many come from focus_pool
+    modern_pool: list[str] = field(default_factory=lambda: list(MODERN_POOL))
+    # Each poll's random searches: about a third lots/old (focus_pool), a third modern, the rest general.
+    focus_share: float = 0.34
+    modern_share: float = 0.33
     eur_to_ron: float = 5.0
 
     # Facebook Marketplace (needs `flipperbot facebook-login` once, with a second account)

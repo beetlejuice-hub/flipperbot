@@ -117,6 +117,9 @@ def pick_searches(db: DB, s: Settings) -> list[Search]:
         out += [(None, c, key) for c in n.feeds]
         n_focus = round(s.searches_per_poll * s.focus_share)
         terms = random.sample(focus_pool, min(n_focus, len(focus_pool)))
+        if key == "watches":
+            n_modern = round(s.searches_per_poll * s.modern_share)
+            terms += random.sample(s.modern_pool, min(n_modern, len(s.modern_pool)))
         rest = [t for t in search_pool if t not in terms]
         terms += random.sample(rest, min(s.searches_per_poll - len(terms), len(rest)))
         out += [(t, None, key) for t in terms]

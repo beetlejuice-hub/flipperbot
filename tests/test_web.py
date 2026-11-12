@@ -195,3 +195,19 @@ def test_latest_checked_first(server, tmp_path):
     assert [r["key"] for r in rows] == ["olx:101", "olx:100"] and rows[0]["ai_at"].startswith("2026-11-12T09")
     assert [r["key"] for r in get(server + "/api/listings?view=deals&sort=ai")][0] == "olx:200"  # works on any tab
     assert 'value="ai">Latest checked by Claude' in web.PAGE
+
+
+def test_price_check_links_and_negotiation_info(server, tmp_path):
+    from flipperbot.db import DB as _DB
+
+    card = get(server + "/api/listing?key=olx:200")
+    names = [n for n, _ in card["price_links"]]
+    assert names == ["eBay sold", "Chrono24", "OLX", "Okazii"]
+    ebay = card["price_links"][0][1]
+    assert "LH_Sold=1" in ebay and "seiko+SKX007" in ebay  # searched by the identified model
+    db = _DB(tmp_path / "f.db")
+    db.conn.execute("INSERT INTO prices VALUES ('olx:200', 600, '2026-11-01T10:00:00+00:00')")
+    db.conn.execute("UPDATE prices SET seen_at='2026-11-02T10:00:00+00:00' WHERE key='olx:200' AND price_ron=400")
+    db.conn.commit()
+    card = get(server + "/api/listing?key=olx:200")
+    assert card["first_price"] == 600 and card["listed_at"].startswith("2026-11-11")

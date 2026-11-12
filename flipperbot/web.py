@@ -63,7 +63,45 @@ def _small_photo(u: str) -> str:
     return re.sub(r";s=\d+x\d+", ";s=400x400", u)
 
 
-def listing_json(r: Any) -> dict[str, Any]:
+_FILLER = {"ceas", "ceasuri", "barbatesc", "barbati", "dama", "de", "mana", "vand", "vând", "vînd", "original", "nou",
+           "stare", "foarte", "buna", "impecabil", "impecabila", "superb", "rar", "pentru", "si", "cu", "la", "in", "-", "–"}
+
+
+def _first_price(r: Any, db: DB | None) -> int | None:
+    """The price it was first seen at, if it has dropped since: room to negotiate."""
+    if db is None:
+        return None
+    row = db.conn.execute(
+        "SELECT price_ron FROM prices WHERE key=? AND price_ron IS NOT NULL ORDER BY seen_at LIMIT 1", (r["key"],)).fetchone()
+    return row[0] if row and r["price_ron"] and row[0] > r["price_ron"] else None
+
+
+def price_query(r: Any) -> str:
+    """What to search to price this watch: the model the bot identified, else the title's key words."""
+    mk = r["model_key"] or ""
+    if "|" in mk:
+        return " ".join(dict.fromkeys(mk.replace("|", " ").split()))
+    words = [w for w in re.split(r"[\s,/!.()]+", (r["title"] or "").lower()) if w and w not in _FILLER]
+    return " ".join(words[:6])
+
+
+def price_links(r: Any) -> list[list[str]]:
+    """Free one-click price checks, no Claude: eBay sold listings (real sale prices), Chrono24 asking
+    prices, OLX and Okazii in Romania."""
+    from urllib.parse import quote_plus
+
+    q = price_query(r)
+    if not q:
+        return []
+    return [
+        ["eBay sold", f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(q)}&LH_Sold=1&LH_Complete=1"],
+        ["Chrono24", f"https://www.chrono24.com/search/index.htm?query={quote_plus(q)}"],
+        ["OLX", f"https://www.olx.ro/oferte/q-{quote_plus(q.replace(' ', '-'))}/"],
+        ["Okazii", f"https://www.google.com/search?q={quote_plus('site:okazii.ro ' + q)}"],
+    ]
+
+
+def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
     photos = json.loads(r["photos"] or "[]")
     a = json.loads(r["ai"]) if r["ai"] else None
     if ai.is_limit_error(a):  # an older check that only hit the usage limit: not really checked
@@ -76,6 +114,7 @@ def listing_json(r: Any) -> dict[str, Any]:
         "flags": json.loads(r["flags"] or "[]"), "delivery": bool(r["delivery"]),
         "photo": _small_photo(photos[0]) if photos else None, "photos": len(photos),
         "first_seen": r["first_seen"], "last_seen": r["last_seen"], "ai_at": r["ai_at"],
+        "listed_at": r["created_at"] or None, "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
         "ai_running": bool(_queue) and _queue[0] == r["key"],
         "ai_queued": _queue.index(r["key"]) if r["key"] in _queue[1:] else None,  # how many ahead
@@ -117,7 +156,7 @@ def query(db: DB, view: str, q: str = "", sort: str = "", limit: int = 120, nich
         args += [f"%{q}%"] * 3
     order = ORDER.get(sort or default_sort, ORDER["rank"])
     rows = db.conn.execute(f"SELECT * FROM listings WHERE {where} ORDER BY {order} LIMIT ?", [*args, limit]).fetchall()
-    return [listing_json(r) for r in rows]
+    return [listing_json(r, db) for r in rows]
 
 
 def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
@@ -241,7 +280,7 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                 self._json(query(db, qs.get("view", "deals"), qs.get("q", ""), qs.get("sort", ""), niche=qs.get("niche", "")))
             elif u.path == "/api/listing":
                 row = db.get(qs.get("key", ""))
-                self._json(listing_json(row) if row else {"error": "unknown listing"}, 200 if row else 404)
+                self._json(listing_json(row, db) if row else {"error": "unknown listing"}, 200 if row else 404)
             elif u.path == "/api/stats":
                 self._json(stats(db, s, qs.get("niche", "")))
             else:
@@ -274,7 +313,7 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                     return self._json({"error": "Claude Code isn't installed on this Mac (see README)."}, 400)
                 db.set_triage(key, "claude")
                 send_to_claude(s, key)
-            self._json(listing_json(db.get(key)))
+            self._json(listing_json(db.get(key), db))
 
     return Handler
 
@@ -368,6 +407,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .ai .v { font-weight: 700; }
 .ai .lot { display: flex; flex-direction: column; gap: 2px; }
 .v-buy { color: var(--rg); } .v-negotiate { color: var(--mid); } .v-skip { color: var(--sus); }
+.checks { font-size: 12.5px; color: var(--muted); }
+.checks a { color: var(--ink); }
 .meta { color: var(--muted); font-size: 12px; margin-top: auto; padding-top: 4px; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .actions a, .actions button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--ink); cursor: pointer; text-decoration: none; }
@@ -530,7 +571,11 @@ function card(l) {
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
         l.ai ? aiBox(l.ai, l) : null,
-        h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
+        l.price_links && l.price_links.length ? h("div", { class: "checks" }, "Check prices: ",
+          l.price_links.flatMap(([name, href], i) => [i ? " · " : "", h("a", { href, target: "_blank", rel: "noopener noreferrer" }, name)])) : null,
+        h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX",
+          l.first_price ? `price cut from ${lei(l.first_price)}` : "",
+          l.listed_at ? `listed ${ago(l.listed_at)}` : "", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         view === "interesting" ? triageActions(l, el) : h("div", { class: "actions" },
           h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.source === "facebook" ? "Open on Facebook ↗" : "Open on OLX ↗"),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),

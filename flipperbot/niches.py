@@ -1,4 +1,4 @@
-"""The kinds of things flipperbot hunts: watches, for now. Everything that would differ for another
+"""The kinds of things flipperbot hunts: watches and cameras. Everything that would differ for another
 kind (sneakers, old games...) lives here: brands, OLX categories, searches, what makes a listing
 relevant, repair costs, what Claude is told to look for. The rest of the bot (tiers, lots, Claude,
 dashboard, Telegram, Facebook) is shared, so a new kind is a new block here plus its brand list.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import watchdb
+from . import camdb, watchdb
 from .watchdb import Brand
 
 
@@ -28,6 +28,7 @@ class Niche:
     focus_pool: tuple[str, ...]  # lots, old, inherited: where sellers don't know what they have
     facebook_queries: tuple[str, ...]
     strong_words: tuple[str, ...] = ()  # where there are no categories (Facebook), the title needs one
+    lens_families: frozenset[str] = frozenset()
     repair_ron: dict[str, int] = field(default_factory=dict)
     claude_checks: str = ""  # authenticity, condition, where prices are
     claude_old: str = ""
@@ -61,7 +62,53 @@ Longines, Zenith, Tissot, Doxa, Cyma, Eterna, Universal...), early Seiko/Citizen
 gold cases are what make these worth it.""",
 )
 
-ALL: dict[str, Niche] = {n.key: n for n in (WATCHES,)}
+CAMERAS = Niche(
+    key="cameras", label="Cameras", icon="📷", noun="camera or lens",
+    brands=camdb.BRANDS,
+    valuable_segments=frozenset({"luxury", "swiss", "vintage"}),
+    # 2344 lenses, 1935 compact/film/instant, 1938 DSLR, 1940 mirrorless (checked November 2026).
+    categories=("2344", "1935", "1938", "1940"),
+    feeds=("2344", "1935"),
+    words=("aparat foto", "aparat", "camera foto", "obiectiv", "obiective", "lentila", "film", "analogic", "slr",
+           "rangefinder", "telemetru", "m42", "camera", "foto"),
+    not_words=("disto", "laser", "insta360", "camera actiune", "camera de actiune", "action cam", "dashcam", "dji",
+               "bord", "supraveghere", "masina", "telefon", "iphone", "samsung galaxy", "video in nasture",
+               "copiat", "gps", "drona", "webcam", "binoclu", "telescop", "microscop", "lupa", "ochelari"),
+    search_pool=(
+        "aparat foto", "aparat foto film", "aparat foto analogic", "aparat foto vechi", "obiectiv foto", "obiectiv",
+        "obiectiv m42", "obiectiv manual", "aparat foto de colectie", "aparat foto sovietic", "aparat foto rusesc",
+        "zenit", "praktica", "helios", "jupiter 9", "carl zeiss jena", "pancolar", "flektogon", "meyer optik",
+        "trioplan", "pentacon", "takumar", "canon ae-1", "canon fd", "nikon fm", "nikon f3", "olympus om",
+        "olympus mju", "pentax k1000", "pentax spotmatic", "minolta", "yashica", "rolleiflex", "leica", "hasselblad",
+        "contax", "mamiya", "zeiss ikon", "voigtlander", "kiev 88", "zorki", "fed", "lubitel", "smena", "polaroid",
+        "exakta",
+    ),
+    focus_pool=(
+        "lot aparate foto", "aparate foto vechi", "aparat foto vechi", "lot obiective", "obiective vechi",
+        "colectie aparate foto", "aparat foto bunic", "aparate foto de colectie", "aparat foto defect",
+        "aparate foto pentru piese", "vechituri aparat foto", "aparat foto pe film", "aparat foto mecanic",
+        "obiectiv vechi", "aparat foto burduf", "aparat foto cu burduf", "aparat foto ddr", "aparat foto germania",
+    ),
+    facebook_queries=("aparat foto", "aparat foto vechi", "aparat foto film", "obiectiv foto", "lot aparate foto",
+                      "zenit", "helios 44", "carl zeiss jena", "leica", "canon ae-1", "praktica", "rolleiflex"),
+    strong_words=("aparat foto", "aparate foto", "aparat de fotografiat", "obiectiv", "obiective", "camera foto", "pe film"),
+    repair_ron={"japan": 250, "soviet": 150, "swiss": 500, "vintage": 300, "luxury": 1200},
+    lens_families=frozenset(camdb.LENS_FAMILIES),
+    claude_checks="""- Cameras/lenses: fungus, haze, balsam separation and scratches on lens glass (look through the
+     glass in the photos), oily or stuck aperture blades, shutter firing (does the seller say all speeds work?),
+     light seals, meter working, dents. Film cameras sell on "tested with film" / "all speeds OK".
+   - Fakes: Soviet FED/Zorki bodies engraved "Leica"/"Leitz" with Nazi-era markings are the classic fake Leica;
+     real Leica screw-mount serials and engraving fonts can be checked. Rebadged Zenits sold as something else.
+   - Prices: eBay sold listings, Kamerastore, KEH, Catawiki for camera/lens prices; OLX Romania for local.""",
+    claude_old="""Identify it from the names engraved on the lens barrel and front ring (maker, name, focal length,
+aperture, serial), the camera's top plate and front, lens mount (M42, Exakta, Leica M39/M, Pentacon Six...),
+and any "Made in GDR/USSR/Germany" markings. Zeiss Jena (Biotar, Flektogon, Pancolar), Meyer-Optik (Trioplan,
+Primoplan), Helios 40, Jupiter 3/9, Leica/Leitz, Rolleiflex, Zeiss Ikon and medium-format gear make these worth
+it; Zenit E bodies and Helios 44-2 are common.""",
+)
+
+
+ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS)}
 
 
 def get(key: str | None) -> Niche:

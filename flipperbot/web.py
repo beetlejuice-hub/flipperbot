@@ -407,9 +407,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 </head>
 <body>
 <header><div class="bar">
-  <div class="top"><h1>⌚ flipperbot</h1><span class="status" id="status">loading…</span></div>
+  <div class="top"><h1>flipperbot</h1><span class="status" id="status">loading…</span></div>
   <nav id="tabs"></nav>
   <div class="tools">
+    <select id="niche" aria-label="What"><option value="">All</option><option value="watches">⌚ Watches</option><option value="cameras">📷 Cameras</option></select>
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
       <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option>
@@ -436,6 +437,9 @@ const EMPTY = {
   checked: "Nothing checked by Claude yet. Press “Send to Claude” on any listing.", new: "Nothing yet.", hidden: "Nothing hidden.",
 };
 let view = location.hash.slice(1) || "interesting", stats = null;
+const nicheSel = document.getElementById("niche");
+nicheSel.value = localStorage.getItem("flipperbot-niche") || "";
+nicheSel.addEventListener("change", () => { localStorage.setItem("flipperbot-niche", nicheSel.value); refreshStats(); load(); });
 
 
 function h(tag, attrs = {}, ...kids) {
@@ -555,7 +559,7 @@ function card(l) {
           `⏱ sells ${l.liquidity.label}`, h("span", {}, ` · similar ones up ~${l.liquidity.median_days} days, ${l.liquidity.for_sale} for sale`)) : null,
         l.ebay && !(l.reason || "").startsWith("eBay:") ? h("div", { class: "checks" },
           `eBay (${l.ebay.n} listed, used): realistic ~${l.ebay.low.toLocaleString("ro-RO")}–${lei(l.ebay.high)}`) : null,
-        h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX",
+        h("div", { class: "meta" }, [l.icon + " " + (l.source === "facebook" ? "Facebook" : "OLX"),
           l.first_price ? `price cut from ${lei(l.first_price)}` : "",
           l.listed_at ? `listed ${ago(l.listed_at)}` : "", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         view === "interesting" ? triageActions(l, el) : h("div", { class: "actions" },
@@ -589,7 +593,7 @@ function drawTabs() {
 }
 
 async function refreshStats() {
-  try { stats = await api("/api/stats"); } catch { return; }
+  try { stats = await api(`/api/stats?niche=${nicheSel.value}`); } catch { return; }
   const p = stats.last_poll, fresh = p && (Date.now() - new Date(p.at)) < 20 * 60000;
   document.getElementById("status").replaceChildren(
     h("span", { class: "dot" + (fresh ? " on" : "") }),
@@ -610,7 +614,7 @@ let loading = 0;
 async function load() {
   const mine = ++loading;
   const q = document.getElementById("q").value.trim(), sort = document.getElementById("sort").value;
-  const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}`);
+  const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}&niche=${nicheSel.value}`);
   if (mine !== loading) return;
   document.getElementById("grid").replaceChildren(...rows.map(card));
   document.getElementById("hint").hidden = view !== "interesting" || !rows.length;

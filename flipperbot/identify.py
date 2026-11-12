@@ -176,8 +176,24 @@ PLATED = ["placat", "placata", "aurit", "aurita", "gold plated", "gold filled", 
 VINTAGE = ["vintage", "vechi", "veche", "de colectie", "colectie", "antic", "antica", "retro", "sovietic", "rusesc", "urss", "cccp"]
 VINTAGE_YEAR = re.compile(r"(?<![0-9])(?:an(?:ul|ii)?\s*)?(?:18[5-9]\d|19[0-8]\d|anii\s*[2-8]0)(?![0-9])")
 POCKET = ["buzunar", "pocket watch", "ceas de buzunar"]
+# Cameras and lenses: faults, lots, parts, film-era words.
+CAMERA_BROKEN = ["ciuperca", "ciuperci", "fungus", "ceata", "lentila zgariata", "nu declanseaza", "obturator blocat",
+                 "obturatorul nu", "nu armeaza", "diafragma blocata", "separare", "nu functioneaza blitul"]
+CAMERA_LOT = ["lot aparate", "lot obiective", "aparate foto vechi", "obiective vechi", "colectie aparate"]
+CAMERA_PART_START = ["parasolar", "filtru", "filtre", "adaptor", "inel", "inele", "geanta", "trepied", "blit", "acumulator",
+                     "acumulatori", "telecomanda", "grip", "capac", "teleconvertor", "monitor", "stabilizator", "gimbal"]
+CAMERA_PARTS = ["adaptor", "speed booster", "metabones", "viltrox", "inel adaptor", "adapter"]
+CAMERA_VINTAGE = ["pe film", "analogic", "35mm film", "film 35mm", "burduf", "ddr", "gdr"]
+FOCAL = re.compile(r"(?<![0-9.,])(\d{1,3}(?:\s?-\s?\d{2,3})?)\s?mm(?![a-z])")
+APERTURE = re.compile(r"(?<![a-z0-9])(?:f|1:)\s?/?\s?(\d(?:[.,]\d{1,2})?)(?![0-9])")
+# Camera bodies and compacts go by short model numbers: G10, S70, A75, D750, X-700...
+CAM_REF = re.compile(r"(?<![a-z0-9])([a-z]{1,3}-?\d{1,4}[a-z]{0,3})(?![a-z0-9])")
+# Not model numbers: apertures (f2, f1.8, f16, f22; but F65/F80/F100 are Nikon bodies), T-stops, units, mounts.
+_NOT_CAM_REF = re.compile(r"^f\d$|^f[12]\d$|^t\d|^\d|^(?:mm|cm|mp|iso|usb|hd|fps|gb|mb|px|is|stm|usm|vr|ii|iii|mk)\d*$|^m42$|^m39$")
+EOS = re.compile(r"(?<![a-z0-9])eos[\s-]?(\d{1,4}[a-z]{0,2}|ix[\s-]?\d{1,2}|[a-z]{1,2}\d{0,2})(?![a-z0-9])")
+LENS_WORDS = ["obiectiv", "obiective", "lentila", "lens", "zoom", "prime"]
 LOT = ["lot", "loturi", "colectie de ceasuri", "colectie ceasuri", "mai multe ceasuri", "set ceasuri", "set de ceasuri", "lot de ceasuri", "ceasuri vechi", "ceasuri de colectie"]
-LOT_COUNT = re.compile(r"(?<![a-z0-9])(\d{1,3})\s*(?:buc|bucati|ceasuri|bc)(?![a-z])")
+LOT_COUNT = re.compile(r"(?<![a-z0-9])(\d{1,3})\s*(?:buc|bucati|ceasuri|bc|aparate|obiective)(?![a-z])")
 
 
 # Accessories wherever the word sits in the title ("Huse antisoc ... pentru Apple Watch").
@@ -202,6 +218,8 @@ class Identity:
     brand_in_title: bool = False  # False: only the description names it, a weaker signal
     niche: str = "watches"
     collectible: list[str] = field(default_factory=list)  # which collector references matched
+    focal: str | None = None  # lenses: "58 f2", "18-200 f3.5"
+    lens: bool = False
 
     @property
     def model_key(self) -> str | None:
@@ -210,6 +228,12 @@ class Identity:
             return None
         b = self.brand.name.lower()
         fam = self.family.replace("-", " ") if self.family else None
+        if self.lens and fam:  # a lens name means little without its focal length
+            if fam == "lens":  # no lens name: only the focal length says which lens
+                return f"{b}|lens|{self.focal}" if self.focal else b
+            return f"{b}|{fam}|{self.focal}" if self.focal else f"{b}|{fam}"
+        if self.niche == "cameras" and fam:  # "ae 1 program" says more than the number "AE-1"
+            return f"{b}|{fam}"
         if self.refs:
             return f"{b}|{self.refs[0]}"
         if fam:
@@ -263,13 +287,39 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
     if brand:
         # Title first: descriptions mention other models ("also have a Seamaster").
         # Smartwatch descriptions name other models ("like a Fenix 8", "fits Ultra"): title only.
+        family_in_title = False
         for text in ((title_n,) if brand.segment == "smart" else (title_n, full_n)):
             family = next((fam for fam in brand.families if _family_re(fam).search(text)), None)
             if family:
+                family_in_title = text is title_n
                 break
+        if niche == "cameras" and family in get(niche).lens_families and not family_in_title:
+            family = None  # "Coolpix ... (also selling a Nikkor)": a lens named only in the description
+    lens = bool(family and family in get(niche).lens_families)
+    focal = None
+    if niche == "cameras":
+        m = FOCAL.search(title_n)
+        if not m and _any(title_n, LENS_WORDS):  # "Obiectiv Sony 28-70": a zoom range without "mm"
+            m = re.search(r"(?<![0-9.,])(\d{2,3}\s?-\s?\d{2,3})(?![0-9])", title_n)
+        if m:
+            focal = re.sub(r"\s", "", m.group(1))
+            a = APERTURE.search(title_n)
+            if a:
+                focal += f" f{a.group(1).replace(',', '.')}"
+        is_lens_listing = (bool(m) and (_any(title_n, LENS_WORDS) or lens or not family)) or (
+            _any(title_n, LENS_WORDS) and not family)
+        if is_lens_listing and not lens:
+            family, lens = "lens", True  # "Obiectiv Sony 28-70 pentru A7": a lens, whatever body it mentions
+        eos = EOS.search(title_n)
+        if eos and not is_lens_listing:  # "Canon EOS 100 montura EF": the body, not the mount
+            family, lens, refs = None, False, ["EOS " + re.sub(r"[\s-]", "", eos.group(1)).upper()]
+        elif not lens and brand:
+            cam_refs = [r.group(1) for r in CAM_REF.finditer(title_n) if not _NOT_CAM_REF.match(r.group(1))]
+            refs = [r.upper() for r in cam_refs[:1]] or refs
 
     flags: set[str] = set()
-    if _any(full_n, BROKEN):
+    cam = niche == "cameras"
+    if _any(full_n, BROKEN) or (cam and _any(full_n, CAMERA_BROKEN)):
         flags.add("broken")
     if _any(full_n, BATTERY):
         flags.add("battery")  # usually a 20-lei fix: the best kind of "broken"
@@ -288,26 +338,31 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
     if _any(title_n, SERVICE):
         flags.add("service")
     first = re.split(r"[^a-z0-9]+", title_n)[0] if title_n else ""  # "husa/carcasa ..." -> "husa"
-    if first in PART_START or _any(title_n, ACCESSORY_ANYWHERE):
+    if first in PART_START or _any(title_n, ACCESSORY_ANYWHERE) or (
+            cam and (first in CAMERA_PART_START or _any(title_n, CAMERA_PARTS))):
         flags.add("part")
+    if cam and brand and brand.name == "Leica" and re.search(r"(?<![a-z])(fed|zorki|zorkiy|kiev)(?![a-z])", title_n):
+        flags.add("fake_signs")  # a Soviet FED/Zorki engraved "Leica": the classic fake
     if _any(full_n, BOX_PAPERS):
         flags.add("box_papers")
     if GOLD.search(full_n) and not _any(full_n, PLATED):
         flags.add("solid_gold")
-    if _any(full_n, VINTAGE) or VINTAGE_YEAR.search(full_n):
+    if _any(full_n, VINTAGE) or VINTAGE_YEAR.search(full_n) or (cam and _any(full_n, CAMERA_VINTAGE)):
         flags.add("vintage")
     if _any(full_n, POCKET):
         flags.add("pocket")
     if "automatic" in full_n or "automat" in full_n:
         flags.add("automatic")
-    if flags & {"automatic"} or _any(full_n, MECHANICAL):
+    if cam:
+        pass  # mechanical/quartz and the collector list are about watches
+    elif flags & {"automatic"} or _any(full_n, MECHANICAL):
         flags.add("mechanical")
     elif _any(full_n, QUARTZ):
         flags.add("quartz")  # resale drops a lot for quartz, even good brands
     if _any(full_n, MODDED):
         flags.add("modded")  # "Seiko mod", "modificat": parts swapped on purpose, not a collector piece
     hits = []
-    for pat, label in COLLECTIBLE:
+    for pat, label in ([] if cam else COLLECTIBLE):
         r = _family_re(pat)
         if r.search(title_n):
             hits.append(label)
@@ -333,10 +388,10 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
         m = None  # "editie limitata 125 buc" is how many were made, not how many are for sale
     if m and int(m.group(1)) >= 2:
         lot_count = int(m.group(1))
-    if _any(title_n, LOT) or (lot_count and lot_count >= 2):
+    if _any(title_n, LOT) or (cam and _any(title_n, CAMERA_LOT)) or (lot_count and lot_count >= 2):
         flags.add("lot")
 
     return Identity(
         brand=brand, brands=brands, refs=refs, family=family, flags=flags, lot_count=lot_count,
-        brand_in_title=bool(title_brands), niche=niche, collectible=hits,
+        brand_in_title=bool(title_brands), niche=niche, collectible=hits, focal=focal, lens=lens,
     )

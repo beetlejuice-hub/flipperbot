@@ -94,7 +94,10 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
 
     lo, hi, profit, src = estimate(row, ai)
     lot = " · LOT" if "lot" in (row["flags"] or "") else ""
-    head = f"{EMOJI.get(row['tier'], '')} <b>{row['price_ron']:,} lei</b>".replace(",", ".")
+    from . import niches
+
+    icon = niches.get(row["niche"] if "niche" in row.keys() else None).icon
+    head = f"{icon} {EMOJI.get(row['tier'], '')} <b>{row['price_ron']:,} lei</b>".replace(",", ".")
     if lo:
         head += f" → sells for {money(lo, hi)}"
     if profit and profit > 0:

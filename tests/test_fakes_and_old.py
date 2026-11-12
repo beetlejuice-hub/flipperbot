@@ -36,15 +36,19 @@ def test_seller_who_doesnt_know():
 
 
 def test_search_mix_old_modern_general():
+    from flipperbot import niches
+
     s = Settings()
     db = DB(":memory:")
     runs = [bot.pick_searches(db, s) for _ in range(50)]
-    terms = [q for r in runs for q, c, n in r if q]
-    assert sum(q in s.focus_pool for q in terms) >= 50  # one lots/old search each poll
-    assert sum(q in s.modern_pool for q in terms) >= 50  # one modern search each poll
-    assert len(terms) == 50 * 3
+    watch_terms = [q for r in runs for q, c, n in r if q and n == "watches"]
+    cam_terms = [q for r in runs for q, c, n in r if q and n == "cameras"]
+    assert sum(q in s.focus_pool for q in watch_terms) >= 50  # one lots/old search each poll
+    assert sum(q in s.modern_pool for q in watch_terms) >= 50  # one modern search each poll
+    assert len(watch_terms) == len(cam_terms) == 50 * 3
+    assert sum(q in niches.CAMERAS.focus_pool for q in cam_terms) >= 50
     feeds = {(c, n) for r in runs for q, c, n in r if c}
-    assert feeds == {("1677", "watches"), ("1676", "watches"), ("1943", "watches")}
+    assert feeds == {("1677", "watches"), ("1676", "watches"), ("1943", "watches"), ("2344", "cameras"), ("1935", "cameras")}
 
 
 def test_luxury_needs_a_surer_claude():

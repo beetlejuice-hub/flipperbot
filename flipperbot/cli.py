@@ -86,11 +86,18 @@ def main(argv: list[str] | None = None) -> None:
 
         if not facebook.installed():
             sys.exit("Facebook support isn't installed. Paste the install command again, then retry.")
-        print("Getting the browser Facebook needs (once, ~150 MB)...")
         import subprocess
 
-        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-        facebook.login()
+        if not facebook.channel():
+            print("Google Chrome isn't installed, so getting a Chromium browser (once, ~150 MB).")
+            print("(Installing Google Chrome from google.com/chrome first gives a steadier window.)")
+            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+        try:
+            facebook.login()
+        except facebook.NotLoggedIn as e:
+            sys.exit(str(e))
+        except Exception as e:
+            sys.exit(f"The browser stopped ({type(e).__name__}: {str(e)[:200]}). Run `flipperbot facebook-login` again.")
         db.kv_set("facebook", {"state": "ok", "next_at": 0})
         if autostart.running():
             subprocess.run(["launchctl", "kickstart", "-k", f"gui/{__import__('os').getuid()}/{autostart.LABEL}"], capture_output=True)

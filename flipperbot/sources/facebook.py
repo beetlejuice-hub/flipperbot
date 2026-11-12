@@ -3,6 +3,7 @@
 your Mac, logged in once by hand with your SECOND Facebook account, its
 session kept in ~/.flipperbot/facebook-profile.
 
+The browser is your real Google Chrome when installed (in its own profile), else Chromium.
 Why a browser: Facebook blocks plain requests and hides Marketplace search
 behind a login. Why slow: a logged-in account that searches too often gets
 checkpointed, so the bot does a couple of searches every 30-60 minutes and
@@ -22,6 +23,8 @@ import os
 import random
 import re
 import time
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from ..config import HOME
@@ -114,30 +117,99 @@ def to_listing(item: dict[str, Any], eur_to_ron: float = 5.0) -> Listing | None:
 
 
 # --------------------------------------------------------------------------
+# The browser: your real Google Chrome when it's installed (steady, and what Facebook sees every
+# day), in its own profile at ~/.flipperbot/facebook-profile, so your normal Chrome is untouched.
+# Without Chrome, the toolkit's own Chromium.
+
+CHROME_APPS = [Path("/Applications/Google Chrome.app"), Path.home() / "Applications" / "Google Chrome.app"]
+_CHANNEL_FILE = "flipperbot-channel.txt"
+
+
+def channel() -> str:
+    """'chrome' or '' (bundled Chromium). Fixed at the first login: the profile has to be reopened
+    by the same browser it was made with, or the saved login can't be read back."""
+    saved = PROFILE / _CHANNEL_FILE
+    if saved.exists():
+        return saved.read_text().strip()
+    return "chrome" if any(p.exists() for p in CHROME_APPS) else ""
+
+
+@contextmanager
+def session(headless: bool) -> Iterator[Any]:
+    from playwright.sync_api import sync_playwright
+
+    browser, _, _ = _lib()
+    PROFILE.mkdir(parents=True, exist_ok=True)
+    options: dict[str, Any] = {
+        "headless": headless, "viewport": {"width": 1300, "height": 950},
+        "locale": "ro-RO", "timezone_id": "Europe/Bucharest",
+    }
+    if headless:
+        options["user_agent"] = browser.USER_AGENT  # same as the library: headless Chrome names itself in its UA
+    if channel():
+        options["channel"] = channel()
+    with sync_playwright() as pw:
+        ctx = pw.chromium.launch_persistent_context(str(PROFILE), **options)
+        try:
+            yield ctx
+        finally:
+            try:
+                ctx.close()
+            except Exception:
+                pass
+
+
+def logged_in(ctx: Any) -> bool:
+    """Facebook sets the c_user cookie once you're logged in."""
+    try:
+        return any(c.get("name") == "c_user" for c in ctx.cookies("https://www.facebook.com"))
+    except Exception:
+        return False
+
+
+def _page(ctx: Any) -> Any:
+    return ctx.pages[-1] if ctx.pages else ctx.new_page()
+
+
+# --------------------------------------------------------------------------
 # Login, once, by hand
 
 
-def login() -> None:
-    """Open a real browser window to log in with the second account, clear Facebook's consent
-    screen if it shows, and set the account's Marketplace radius to 500 km around Bucharest."""
-    browser, _, scraper = _lib()
-    print("A browser window will open on Facebook.")
-    print("Log in with your SECOND Facebook account (never your main one). If Facebook shows a")
-    print("Marketplace consent or data screen, accept it. Then come back here and press Enter.\n")
-    with browser.FacebookSession(headless=False) as ctx:
-        page = ctx.new_page()
+def login(wait_minutes: int = 15) -> None:
+    """Open a Chrome window on Facebook's login page and wait (no Enter needed) until you're logged
+    in with the second account. Then let you clear any Marketplace consent screen, and set the
+    account's Marketplace radius to 500 km around Bucharest."""
+    _, _, scraper = _lib()
+    which = "Google Chrome" if channel() == "chrome" else "a Chromium browser window"
+    print(f"Opening {which} on Facebook (a separate profile: your normal Chrome isn't touched).")
+    print("Log in there with your SECOND Facebook account (never your main one), including any code")
+    print("Facebook asks for. Don't close that window: this continues by itself once you're in.\n")
+    with session(headless=False) as ctx:
+        page = _page(ctx)
+        if not logged_in(ctx):
+            page.goto("https://www.facebook.com/login", wait_until="domcontentloaded")
+            deadline = time.time() + wait_minutes * 60
+            while not logged_in(ctx):
+                if time.time() > deadline:
+                    raise NotLoggedIn(f"Not logged in after {wait_minutes} minutes. Run `flipperbot facebook-login` again.")
+                if not ctx.pages:  # window closed by hand: open the login page again
+                    _page(ctx).goto("https://www.facebook.com/login", wait_until="domcontentloaded")
+                time.sleep(2)
+        print("✓ Logged in.")
+        (PROFILE / _CHANNEL_FILE).write_text(channel())
+        page = _page(ctx)
         page.goto(scraper.build_search_url("ceas", COUNTRY), wait_until="domcontentloaded")
-        input("Logged in and you can see Marketplace results? Press Enter: ")
-        if not browser.is_logged_in(page):
-            raise NotLoggedIn("Still not logged in. Run `flipperbot facebook-login` again.")
+        print("\nThe window now shows Marketplace. If Facebook asks about Marketplace or how your data is")
+        print("used, accept it there. When you see watch listings, come back here.")
+        input("Press Enter: ")
         try:
-            scraper.set_account_search_radius(page, ANCHOR["radius_km"], "ceas", country=COUNTRY, verbose=False)
+            scraper.set_account_search_radius(_page(ctx), ANCHOR["radius_km"], "ceas", country=COUNTRY, verbose=False)
             print("Search area set: 500 km around Bucharest (covers most of Romania).")
         except Exception as e:  # the account still works with whatever radius it has
             print(f"Couldn't set the search radius by itself ({type(e).__name__}).")
-            print("In that window: Marketplace → Location → Bucharest, radius 500 km, then Apply.")
+            print("In that window: click the location at the top of Marketplace → Bucharest, radius 500 km, Apply.")
             input("Press Enter when done: ")
-    print("Facebook is set up. The bot uses this login from now on.")
+    print("Facebook is set up. The bot uses this login from now on, in the background.")
 
 
 # --------------------------------------------------------------------------
@@ -156,9 +228,11 @@ def search(
 ) -> Iterator[Listing]:
     """Search each query (newest first, a few scrolls), then open the new watch-looking
     listings for description and photos. Raises NotLoggedIn when the session is gone."""
-    browser, _, scraper = _lib()
-    with browser.FacebookSession(headless=True) as ctx:
-        page = ctx.new_page()
+    _, _, scraper = _lib()
+    with session(headless=True) as ctx:
+        if not logged_in(ctx):
+            raise NotLoggedIn("no Facebook login saved, or it expired")
+        page = _page(ctx)
         details_left = max_details
         for i, q in enumerate(queries):
             if i:

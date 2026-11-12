@@ -85,3 +85,60 @@ def test_not_set_up_means_no_facebook(monkeypatch):
     db = DB(":memory:")
     monkeypatch.setattr(facebook, "installed", lambda: True)
     assert not bot.facebook_due(db, s)
+
+
+class FakePage:
+    def __init__(self, ctx):
+        self.ctx, self.visited = ctx, []
+
+    def goto(self, url, **kw):
+        self.visited.append(url)
+
+
+class FakeCtx:
+    """Logs in after a few checks; the window gets closed once along the way."""
+    def __init__(self):
+        self.checks, self.pages = 0, []
+        self.opened = 0
+
+    def new_page(self):
+        self.opened += 1
+        p = FakePage(self)
+        self.pages.append(p)
+        return p
+
+    def cookies(self, url):
+        self.checks += 1
+        if self.checks == 2:
+            self.pages.clear()  # you closed the window
+        return [{"name": "c_user", "value": "1"}] if self.checks >= 4 else []
+
+
+def test_login_waits_by_itself_and_reopens_a_closed_window(monkeypatch, tmp_path):
+    from contextlib import contextmanager
+
+    ctx = FakeCtx()
+
+    @contextmanager
+    def fake_session(headless):
+        assert headless is False
+        yield ctx
+
+    class Scraper:
+        @staticmethod
+        def build_search_url(q, country):
+            return f"https://www.facebook.com/marketplace/bucharest/search?query={q}"
+
+        @staticmethod
+        def set_account_search_radius(page, km, q, country, verbose):
+            assert km == 500
+
+    monkeypatch.setattr(facebook, "PROFILE", tmp_path)
+    monkeypatch.setattr(facebook, "session", fake_session)
+    monkeypatch.setattr(facebook, "_lib", lambda: (None, None, Scraper))
+    monkeypatch.setattr(facebook.time, "sleep", lambda s: None)
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+    facebook.login()
+    assert ctx.opened == 2  # the closed window was reopened on the login page
+    assert any("marketplace" in u for p in ctx.pages for u in p.visited)
+    assert (tmp_path / "flipperbot-channel.txt").exists()

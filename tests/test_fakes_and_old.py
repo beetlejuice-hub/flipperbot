@@ -117,3 +117,43 @@ def test_sleeper_brands_and_brand_bound_references():
     assert "collectible" in identify("Ceas Vulcain Cricket vechi").flags
     assert identify("Ceas Eberhard Scafograf").brand.segment == "vintage"
     assert "collectible" not in identify("Ceas Marathon Navigator").flags  # a Tissot reference, not this brand
+
+
+def test_a_too_cheap_seiko_gets_a_skeptical_second_check_that_finds_the_fake(monkeypatch, tmp_path):
+    import json
+    import subprocess
+
+    from flipperbot import ai
+    from flipperbot.scoring import claude_score
+
+    s = Settings()
+    monkeypatch.setattr(Settings, "photos_dir", property(lambda self: tmp_path))
+    monkeypatch.setattr(ai, "log_call", lambda *a: None)
+    monkeypatch.setattr(ai, "available", lambda s_: True)
+    db = DB(":memory:")
+    market = [olx.parse_offer(offer(100 + i, "Ceas Seiko Presage Cocktail Time automatic", p)) for i, p in enumerate([2300, 2400, 2500, 2400, 2350])]
+    bot.process(db, [*market, olx.parse_offer(offer(1, "Ceas barbatesc automatic Seiko Presage", 300))], s, alert=False)
+    row = db.get("olx:1")
+    first = {"verdict": "buy", "authenticity": "likely_genuine", "confidence": 82, "resale_ron_low": 1700,
+             "resale_ron_high": 2100, "watches": [], "summary": "Seiko Presage, buy"}
+    hunt = {"verdict": "fake", "confidence": 90, "reference": "SSA405J1",
+            "evidence": ["caseback reads MADW IN JAPAN", "case code 4R35-01T0 is a closed-dial date-only case",
+                         "21 jewels on the rotor; a 4R38 has 24", "no black-dial open heart on a bracelet exists"]}
+    prompts = []
+
+    def run(args, input, **kw):
+        prompts.append(input)
+        answer = first if len(prompts) == 1 else hunt
+        return subprocess.CompletedProcess(args, 0, json.dumps({"result": json.dumps(answer)}), "")
+
+    monkeypatch.setattr(ai.subprocess, "run", run)
+    result = ai.check(db, row, s)
+    assert "TOO CHEAP TO BE TRUE" in prompts[0] and "LETTER BY LETTER" in prompts[0]
+    assert "skeptical" in prompts[1] and "Seiko Presage" in prompts[1]
+    assert result["authenticity"] == "likely_fake" and result["verdict"] == "skip" and "MADW" in result["authenticity_notes"]
+    assert db.get("olx:1")["score"] == 0
+    assert not bot.confirmed(result, s, row["segment"], row["price_ron"])[0]
+    # Can't confirm it's real: no 8+. Not even checked by the skeptic: too cheap to trust.
+    assert claude_score(ai.apply_fake_hunt(first, {**hunt, "verdict": "unsure"}), 300)[0] <= 7
+    assert claude_score(first, 300)[0] <= 7
+    assert claude_score({**first, "verified": True}, 300)[0] == 10

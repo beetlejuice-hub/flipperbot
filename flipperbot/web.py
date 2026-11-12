@@ -554,6 +554,13 @@ function aiBox(a, l) {
     names && h("div", {}, names),
     h("div", {}, `authenticity: ${a.authenticity || "?"} · resale ${lei(a.resale_ron_low)}–${lei(a.resale_ron_high)}` + (a.repair_cost_ron ? ` · repair ~${lei(a.repair_cost_ron)}` : "")),
     a.summary && h("div", { class: "reason" }, a.summary),
+    // the fake checks: what failed or couldn't be read, and the skeptical second check
+    (a.authenticity_checks || []).filter(c => c && c.result && c.result !== "pass").length
+      ? h("div", { class: "reason" }, "Checks not passed: " + a.authenticity_checks.filter(c => c && c.result && c.result !== "pass")
+          .map(c => `${c.check} (${c.result})${c.detail ? ": " + c.detail : ""}`).slice(0, 4).join(" · ")) : null,
+    a.fake_hunt ? h("div", { class: a.fake_hunt.verdict === "fake" ? "err" : "reason" },
+      "🔍 Second check: " + ({ fake: "FAKE", unsure: "couldn't confirm it's real", genuine: "confirmed real" }[a.fake_hunt.verdict] || a.fake_hunt.verdict)
+      + ((a.fake_hunt.evidence || []).length ? ": " + a.fake_hunt.evidence.slice(0, 4).join(" · ") : "")) : null,
     (a.questions_for_seller || []).length ? h("div", { class: "reason" }, "Ask the seller: " + a.questions_for_seller.slice(0, 3).join(" · ")) : null);
 }
 

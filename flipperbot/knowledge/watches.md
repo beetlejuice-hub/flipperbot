@@ -12,6 +12,8 @@ reading along. Prices are relative, not quotes: always check sold prices for the
 - Over-polished cases (soft edges, blurred bevels) lose value. Never polish to flip.
 - Box, papers, receipts, service records add 10-25% on modern Swiss/luxury; little on cheap or very old pieces.
 - Cheap luxury (Rolex, Omega, AP, Hublot, Patek, Cartier, Tag) on OLX is usually a replica: start from "fake".
+  Popular Seikos are faked too (Presage Cocktail Time, SKX, "Seiko mods" sold as originals): under a third of the
+  real price = replica until caseback text, case code, calibre, jewel count and the exact reference all check out.
 - Sleepers sellers don't recognise: Universal Geneve, Zodiac, Eberhard, Vulcain (Cricket), Movado (vintage), Enicar,
   Doxa, Eterna, Cyma, Juvenia, Nivada, Excelsior Park, Minerva, Angelus, Gallet, Wittnauer, Heuer (pre-TAG),
   early Seiko automatics (6139, 6105, 62MAS, King/Grand Seiko, Lord Marvel), Soviet Strela/3017, Okean, early Sturmanskie,
@@ -85,6 +87,20 @@ Pocket watches:
   modest unless solid gold.
 
 ## Fakes: how to tell, by brand
+
+The checklist (any clear fail = fake; a real watch passes all of them):
+1. **Text, letter by letter**: dial, caseback, rotor, clasp. Replicas misspell ("MADW IN JAPAN") and get fonts wrong.
+2. **Codes belong together**: the caseback/case code, the movement calibre and the model reference must match the
+   maker's records (Seiko case 4R35-01T0 = a closed-dial date watch, not an open heart; Omega caseback reference vs calibre).
+3. **Movement**: jewel count and rotor text for that calibre (Seiko 4R35/4R36: 23-24 jewels; "21 JEWELS" on a 4R
+   rotor is wrong); generic or Chinese bridges through an open heart or display back.
+4. **The configuration exists**: find the real reference with this exact dial colour, case, bracelet/strap and size.
+   Replicas invent combinations (e.g. a black-dial Presage Cocktail Time open heart on a bracelet: the real faceted-index
+   open heart, SSA405J1, is dark blue on leather). Seiko prints a calibre-dial code next to "MADE IN JAPAN" at 6.
+5. **Size**: stated diameter vs the real one (Cocktail Time 40.5 mm, not 43).
+6. **Packaging and seller**: cheap white boxes with thick misaligned logos, bracelets wrapped in crinkly film, the same
+   watch listed many times, stock photos.
+7. **Price**: under about a third of what a real one sells for is a replica until every point above passes.
 
 General:
 - Ticking seconds hand on a watch that should sweep (Rolex, Omega automatic, most Swiss automatics) = quartz fake.

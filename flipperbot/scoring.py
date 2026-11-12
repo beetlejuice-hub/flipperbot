@@ -17,7 +17,7 @@ RULE_MAX = 7  # free rules alone never go above 7: an 8+ needs an AI to agree
 
 # Bump when the rules that judge or score a listing change: the bot then re-judges every stored listing
 # once at start, so an update never leaves old listings with stale or missing scores.
-RULES_VERSION = 5
+RULES_VERSION = 6
 
 # Reasons a listing is not worth anyone's time, from the tier's own reason text.
 _DEAD = ("someone buying", "repair shop", "replica", "over budget", "fashion brand", "part/accessory", "locked to",
@@ -93,6 +93,13 @@ def claude_score(result: dict[str, Any] | None, price: int | None = None, good_p
     why = f"Claude: {verdict}, {int(conf)}% sure"
     if result.get("authenticity") == "unsure":
         score = min(score, 7)
+    fh = result.get("fake_hunt") or {}
+    if fh.get("verdict") == "fake":
+        return 0, "Claude's second check: fake"
+    low = result.get("resale_ron_low")
+    if price and isinstance(low, (int, float)) and price < 0.35 * low and not result.get("verified"):
+        # Under a third of what it sells for: replicas are, real ones almost never. No 8+ without the fake check.
+        score, why = min(score, 7), f"{why}, but too cheap to trust without the second (fake) check"
     profit = claude_profit(result, price)
     if not result.get("resale_ron_low") and not result.get("resale_ron_high"):
         score, why = min(score, 6), f"{why}, but no price estimate"

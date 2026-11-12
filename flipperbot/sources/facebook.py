@@ -217,7 +217,7 @@ def login(wait_minutes: int = 15) -> None:
 
 
 def search(
-    queries: list[str],
+    queries: list[tuple[str, str]] | list[str],  # (query, niche)
     *,
     is_new: Callable[[str], bool],
     looks_like_watch: Callable[[Listing], bool],
@@ -234,7 +234,8 @@ def search(
             raise NotLoggedIn("no Facebook login saved, or it expired")
         page = _page(ctx)
         details_left = max_details
-        for i, q in enumerate(queries):
+        for i, query in enumerate(queries):
+            q, niche = query if isinstance(query, tuple) else (query, "watches")
             if i:
                 time.sleep(random.uniform(*pause))
             try:
@@ -246,11 +247,13 @@ def search(
                 l = to_listing(item, eur_to_ron)
                 if l is None:
                     continue
+                l.niche = niche
                 if details_left > 0 and is_new(l.key) and looks_like_watch(l):
                     time.sleep(random.uniform(*pause))
                     try:
                         detail = scraper.fetch_detail(page, l.source_id, fetch_seller_listings=False)
                         l = to_listing({**item, **{k: v for k, v in detail.items() if v}}, eur_to_ron) or l
+                        l.niche = niche
                     except (scraper.LoginRequiredError, scraper.MarketplaceConsentRequiredError) as e:
                         raise NotLoggedIn(str(e)) from e
                     except Exception as e:  # one broken listing page shouldn't stop the run

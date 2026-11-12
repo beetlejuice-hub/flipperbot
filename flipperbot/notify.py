@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from . import net
+from . import net, niches
 from .config import Settings
 
 EMOJI = {"real_good": "🔥🔥", "good": "🔥", "mid": "🤔", "suspect": "⚠️", "bad": "·"}
@@ -75,7 +75,7 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
         return html.escape(x, quote=False)
 
     lines = [
-        f"{EMOJI.get(row['tier'], '')} <b>{LABEL.get(row['tier'], row['tier'])}</b>{' · LOT' if 'lot' in (row['flags'] or '') else ''} · {row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''}",
+        f"{niches.get(row['niche'] if 'niche' in row.keys() else None).icon} {EMOJI.get(row['tier'], '')} <b>{LABEL.get(row['tier'], row['tier'])}</b>{' · LOT' if 'lot' in (row['flags'] or '') else ''} · {row['price_ron']} lei{' (neg.)' if row['negotiable'] else ''}",
         f"<b>{e(row['title'])}</b>",
         e(row["city"] or ""),
         e(row["reason"] or ""),
@@ -85,7 +85,7 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
     lines.append("")
     is_lot = "lot" in (row["flags"] or "")
     if ai and "error" not in ai:
-        ws = ai.get("watches") or []
+        ws = (ai.get("items") or ai.get("watches")) or []
         if is_lot:  # the notable ones, with Claude's value for each
             ws = sorted(ws, key=lambda w: (not w.get("notable"), -(w.get("value_ron") or 0)))[:6]
         watches = ("\n" if is_lot else "; ").join(

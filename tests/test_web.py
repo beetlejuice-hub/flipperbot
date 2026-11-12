@@ -88,3 +88,34 @@ def test_busy_port_moves_on_and_open_finds_the_real_one(tmp_path, monkeypatch):
     finally:
         srv.shutdown()
         vault.shutdown()
+
+
+def test_send_to_claude_queues_and_runs_one_at_a_time(server, monkeypatch):
+    import time
+
+    order = []
+
+    def fake_check(db, row, s):
+        order.append(row["key"])
+        time.sleep(0.2)
+        result = {"verdict": "buy", "authenticity": "likely_genuine", "confidence": 80,
+                  "resale_ron_low": 900, "resale_ron_high": 1100, "items": [{"brand": "Seiko", "model": "SKX007"}]}
+        db.set_ai(row["key"], result)
+        return result
+
+    sent = []
+    monkeypatch.setattr(web.ai, "check", fake_check)
+    monkeypatch.setattr(web.ai, "available", lambda s: True)
+    monkeypatch.setattr(web.notify, "send", lambda s, text, photo=None: sent.append(text))
+    first = post(server + "/api/ai/olx:200", {"X-Flipperbot": "1"})
+    second = post(server + "/api/ai/olx:100", {"X-Flipperbot": "1"})
+    assert first["ai_running"] and second["ai_queued"] == 1
+    for _ in range(50):
+        if get(server + "/api/listing?key=olx:100")["ai"]:
+            break
+        time.sleep(0.1)
+    assert order == ["olx:200", "olx:100"]
+    card = get(server + "/api/listing?key=olx:200")
+    assert card["ai"]["verdict"] == "buy" and not card["ai_running"]
+    # olx:200 is a real good deal Claude confirmed: its verdict also went to Telegram, once
+    assert len(sent) == 1 and "SKX007" in sent[0]

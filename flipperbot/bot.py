@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import datetime
 from typing import Any, Callable
 
-from . import ai, notify
+from . import ai, niches, notify
 from .config import Settings
 from .db import DB, TIER_RANK
 from .identify import find_brands, identify, normalize
@@ -19,19 +19,8 @@ from .models import Listing
 from .sources import olx
 from .tiers import judge
 
-WATCH_WORDS = ["ceas", "watch", "chrono", "cronograf", "cronometru", "automatic", "mecanic", "quartz", "diver"]
-NOT_WATCHES = ["opel", "jante", "anvelope", "telefon", "apartament", "masina", "autoturism", "bicicleta", "parfum"]
-
-
-# OLX.ro categories: 1677 = men's watches, 1676 = women's watches (checked November 2026).
-# Elsewhere "ceas" also means car dashboard clocks, wall clocks, smartwatches; those are skipped
-# unless the title names a watch brand (a Tissot filed under the wrong category still counts).
-WATCH_CATEGORIES = ["1677", "1676"]
-WATCH_WORDS = ["ceas", "watch", "chrono", "cronograf", "cronometru", "automatic", "mecanic", "quartz", "diver"]
-NOT_WATCHES = [
-    "bord", "perete", "pendul", "cuc", "de masa", "masa", "semineu", "desteptator", "smart", "smartwatch", "apple watch", "galaxy watch",
-    "opel", "jante", "anvelope", "telefon", "apartament", "masina", "autoturism", "bicicleta", "parfum",
-]
+# Watches' OLX categories (kept here for older code and tests; niches.py has every niche's).
+WATCH_CATEGORIES = list(niches.WATCHES.categories)
 
 
 def watch_categories(db: DB) -> list[str]:
@@ -47,24 +36,30 @@ def learn_categories(db: DB, listings: list[Listing]) -> None:
     db.kv_set("olx_ceas_categories", dict(counts))
 
 
-def is_watch(l: Listing, cats: list[str]) -> bool:
+def is_relevant(l: Listing, niche: str | None = None) -> bool:
+    """Is this listing really one of the niche's things? Not a car-dashboard 'ceas', not a
+    phone 'camera'. In the niche's OLX categories everything counts; elsewhere the title needs a
+    niche word (Facebook) or a brand plus a niche word."""
+    n = niches.get(niche or l.niche)
     t = normalize(l.title)
-    if any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", t) for w in NOT_WATCHES):
+    if any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", t) for w in n.not_words):
         return False
-    if l.source == "olx" and l.category_id in cats:
+    if l.source == "olx" and l.category_id in n.categories:
         return True
-    if l.source != "olx" and "ceas" in t.split():  # no watch categories elsewhere: the word will do
-        return True
-    # Outside the watch categories ("Opel Omega" parts, a Tissot filed under Jewellery):
-    # it needs a watch brand and a watch word in the title.
-    return bool(find_brands(l.title)) and any(w in t for w in WATCH_WORDS)
+    if l.source != "olx" and any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", t) for w in n.strong_words):
+        return True  # no categories elsewhere: the word will do
+    return bool(find_brands(l.title, n.key)) and any(w in t for w in n.words)
+
+
+def is_watch(l: Listing, cats: list[str] | None = None) -> bool:
+    return is_relevant(l, "watches")
 
 
 def row_to_listing(r: Any) -> Listing:
     return Listing(
         source=r["source"], source_id=r["source_id"], url=r["url"], title=r["title"],
         description=r["description"] or "", price_ron=r["price_ron"], negotiable=bool(r["negotiable"]),
-        params=json.loads(r["params"] or "{}"), seller_id=r["seller_id"] or "",
+        params=json.loads(r["params"] or "{}"), seller_id=r["seller_id"] or "", niche=r["niche"] or "watches",
         city=r["city"] or "", photos=json.loads(r["photos"] or "[]"), category_id=r["category_id"] or "",
     )
 
@@ -72,7 +67,7 @@ def row_to_listing(r: Any) -> Listing:
 def evaluate(db: DB, l: Listing, s: Settings) -> Any:
     # OLX has its own "brand" field on watch listings; count it as part of the description.
     brand_field = l.params.get("brand") if isinstance(l.params.get("brand"), str) else ""
-    ident = identify(l.title, f"{l.description} {brand_field}")
+    ident = identify(l.title, f"{l.description} {brand_field}", l.niche)
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key) if ident.model_key else []
     verdict = judge(l, ident, comps, s)
     if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and "vintage" not in ident.flags and l.seller_id:
@@ -93,10 +88,9 @@ def evaluate(db: DB, l: Listing, s: Settings) -> Any:
 
 def process(db: DB, listings: list[Listing], s: Settings, *, alert: bool = True) -> list[Any]:
     """Store, judge, alert. Returns rows that should get an AI look."""
-    cats = watch_categories(db)
     for_ai = []
     for l in listings:
-        if not is_watch(l, cats):
+        if not is_relevant(l):
             continue
         change, prev = db.upsert(l)
         if change == "seen" and prev is not None and prev["tier"]:
@@ -109,22 +103,36 @@ def process(db: DB, listings: list[Listing], s: Settings, *, alert: bool = True)
     return for_ai
 
 
-def pick_searches(db: DB, s: Settings) -> list[tuple[str | None, str | None]]:
-    feeds: list[tuple[str | None, str | None]] = [(None, c) for c in watch_categories(db)]
-    n_focus = round(s.searches_per_poll * s.focus_share)
-    terms = random.sample(s.focus_pool, min(n_focus, len(s.focus_pool)))
-    rest = [t for t in s.search_pool if t not in terms]
-    terms += random.sample(rest, min(s.searches_per_poll - len(terms), len(rest)))
-    return feeds + [(t, None) for t in terms]
+Search = tuple  # (query or None, OLX category or None, niche)
 
 
-def fetch_all(searches: list[tuple[str | None, str | None]], s: Settings, pages: int = 1, log: Callable[[str], None] = print) -> list[Listing]:
+def pick_searches(db: DB, s: Settings) -> list[Search]:
+    """For each niche: its category feeds (newest listings), then a few random searches, most of
+    them from its focus pool (lots, old, inherited)."""
+    out: list[Search] = []
+    for key in s.niches:
+        n = niches.get(key)
+        search_pool = s.search_pool if key == "watches" else list(n.search_pool)
+        focus_pool = s.focus_pool if key == "watches" else list(n.focus_pool)
+        out += [(None, c, key) for c in n.feeds]
+        n_focus = round(s.searches_per_poll * s.focus_share)
+        terms = random.sample(focus_pool, min(n_focus, len(focus_pool)))
+        rest = [t for t in search_pool if t not in terms]
+        terms += random.sample(rest, min(s.searches_per_poll - len(terms), len(rest)))
+        out += [(t, None, key) for t in terms]
+    return out
+
+
+def fetch_all(searches: list[Search], s: Settings, pages: int = 1, log: Callable[[str], None] = print) -> list[Listing]:
     out: list[Listing] = []
-    for i, (query, cat) in enumerate(searches):
+    for i, search in enumerate(searches):
+        query, cat, key = (*search, "watches")[:3] if len(search) == 2 else search
         if i:
             time.sleep(random.uniform(*s.pause_between_requests_s))
         got = list(olx.search(query, category_id=cat, pages=pages, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s))
-        log(f"  olx {'category ' + cat if cat else repr(query)}: {len(got)}")
+        for l in got:
+            l.niche = key
+        log(f"  olx {niches.get(key).icon} {'category ' + cat if cat else repr(query)}: {len(got)}")
         out.extend(got)
     return out
 
@@ -153,10 +161,11 @@ def poll_facebook(db: DB, s: Settings, log: Callable[[str], None] = print) -> in
     state = db.kv_get("facebook", {})
     next_at = time.time() + random.uniform(*s.facebook_every_min) * 60
     try:
+        pool = [(q, key) for key in s.niches for q in niches.get(key).facebook_queries]
         listings = list(facebook.search(
-            random.sample(facebook.QUERIES, s.facebook_searches_per_run),
+            random.sample(pool, min(s.facebook_searches_per_run, len(pool))),
             is_new=lambda key: db.get(key) is None,
-            looks_like_watch=lambda l: is_watch(l, []),
+            looks_like_watch=lambda l: is_relevant(l),
             max_details=s.facebook_max_details, eur_to_ron=s.eur_to_ron, log=log,
         ))
     except facebook.NotLoggedIn as e:
@@ -218,7 +227,7 @@ def claude_value(db: DB, row: Any, result: dict[str, Any], s: Settings) -> str |
         tier = "good"
     if not tier or TIER_RANK[tier] <= TIER_RANK.get(row["tier"], 0):
         return None
-    notable = [w for w in result.get("watches") or [] if w.get("notable")]
+    notable = [w for w in (result.get("items") or result.get("watches")) or [] if w.get("notable")]
     what = f"{len(notable)} notable watches inside" if "lot" in (row["flags"] or "") and notable else "Claude's valuation"
     db.conn.execute(
         "UPDATE listings SET tier=?, est_value_ron=?, profit_ron=?, reason=? WHERE key=?",
@@ -266,7 +275,11 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
     ones it confirms (not fake, buy/negotiate, at least alert_min_confidence% sure) go to
     Telegram, as one message with Claude's notes. The rest stay on the dashboard with Claude's
     notes there. A deal Claude can't check yet (daily limit) waits for the next chance.
-    Then, with budget left, Claude looks at a good one for the dashboard."""
+    Then, with budget left, Claude looks at a good one for the dashboard.
+
+    Off unless `ai_auto` is on: by default Claude only checks what you send it from the dashboard."""
+    if not s.ai_auto:
+        return
     for r in pending_alerts(db, s):
         if r["ai"]:
             result = json.loads(r["ai"])

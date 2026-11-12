@@ -48,7 +48,7 @@ class DB:
         self.conn.executescript(SCHEMA)
         # Columns added after the first release: add them to older databases.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
-        for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0"):
+        for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0", "niche TEXT DEFAULT 'watches'"):
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -68,7 +68,7 @@ class DB:
             region=l.region, photos=json.dumps(l.photos), created_at=l.created_at,
             refreshed_at=l.refreshed_at, seller_id=l.seller_id, seller_name=l.seller_name,
             business=int(l.business), delivery=int(l.delivery), condition=l.condition,
-            category_id=l.category_id, params=json.dumps(l.params, ensure_ascii=False), last_seen=t,
+            category_id=l.category_id, params=json.dumps(l.params, ensure_ascii=False), last_seen=t, niche=l.niche,
         )
         if prev is None:
             cols.update(key=l.key, first_seen=t)
@@ -134,7 +134,7 @@ class DB:
     # -- price book ------------------------------------------------------------
 
     def comparable_prices(self, model_key: str, exclude_key: str | None = None, days: int = 365) -> list[int]:
-        """Asking prices of working, single, real watches of this model."""
+        """Asking prices of working, single, real items of this model."""
         rows = self.conn.execute(
             """SELECT key, price_ron, flags FROM listings
                WHERE model_key=? AND price_ron IS NOT NULL AND price_ron > 0

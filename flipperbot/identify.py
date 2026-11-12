@@ -32,22 +32,26 @@ def _phrase_re(phrase: str) -> re.Pattern[str]:
 # --------------------------------------------------------------------------
 # Brands
 
-_BRAND_PATTERNS: list[tuple[re.Pattern[str], Brand, int]] = sorted(
-    (
-        (_phrase_re(normalize(p)), b, len(p))
-        for b in BRANDS
-        for p in {b.name, *b.aliases}
-    ),
-    key=lambda t: -t[2],  # longest first: "grand seiko" before "seiko", "tag heuer" before "heuer"
-)
+_PATTERNS: dict[str, list[tuple[re.Pattern[str], Brand, int]]] = {}
 
 
-def find_brands(text: str) -> list[Brand]:
+def _brand_patterns(niche: str) -> list[tuple[re.Pattern[str], Brand, int]]:
+    if niche not in _PATTERNS:
+        from .niches import get
+
+        _PATTERNS[niche] = sorted(
+            ((_phrase_re(normalize(p)), b, len(p)) for b in get(niche).brands for p in {b.name, *b.aliases}),
+            key=lambda t: -t[2],  # longest first: "grand seiko" before "seiko", "carl zeiss jena" before "carl zeiss"
+        )
+    return _PATTERNS[niche]
+
+
+def find_brands(text: str, niche: str = "watches") -> list[Brand]:
     """Brands mentioned in `text`, in order of first appearance, no duplicates."""
     t = normalize(text)
     taken: list[tuple[int, int]] = []
     hits: list[tuple[int, Brand]] = []
-    for pattern, brand, _ in _BRAND_PATTERNS:
+    for pattern, brand, _ in _brand_patterns(niche):
         for m in pattern.finditer(t):
             s, e = m.span()
             if any(s < te and e > ts for ts, te in taken):
@@ -101,6 +105,15 @@ def find_refs(text: str, brand: Brand | None) -> list[str]:
 # What kind of listing is it
 
 
+def _family_re(fam: str) -> re.Pattern[str]:
+    """'jupiter 9' also matches 'jupiter-9' and 'jupiter9'; 'ae-1' matches 'ae 1'."""
+    parts = [re.escape(p) for p in re.split(r"[\s-]+", normalize(fam)) if p]
+    return re.compile(r"(?<![a-z0-9])" + r"[\s-]?".join(parts) + r"(?![a-z0-9])")
+
+
+FOCAL = re.compile(r"(?<![0-9.,])(\d{2,3})\s?mm(?![a-z])")
+
+
 def _any(t: str, phrases: list[str]) -> bool:
     return any(_phrase_re(p).search(t) for p in phrases)
 
@@ -111,6 +124,9 @@ BROKEN = [
     "necesita revizie", "necesita service", "pentru piese", "pt piese", "pt. piese", "nu porneste",
     "se opreste", "sta pe loc", "geam spart", "sticla sparta", "fara coroana", "ax rupt",
     "for parts", "not working", "broken",
+    # cameras and lenses
+    "ciuperca", "ciuperci", "fungus", "ceata", "lentila zgariata", "nu declanseaza", "obturator blocat",
+    "obturatorul nu", "nu armeaza", "blocat", "aperture blocata", "diafragma blocata", "separare", "nu functioneaza blitul",
 ]
 BATTERY = [
     "fara baterie", "necesita baterie", "trebuie baterie", "baterie descarcata", "bateria descarcata",
@@ -148,16 +164,18 @@ PART_START = [
     "curea", "bratara", "cutie", "geam", "coroana", "mecanism", "cadran", "baterie", "baterii",
     "suport", "husa", "folie", "incarcator", "cablu", "cutii", "zale", "catarama",
     "capac", "capace", "capacitori", "cadrane", "mecanisme", "coroane", "geamuri", "ace", "curele",
-    "bratari", "accesorii", "accesoriu", "piese", "sticla", "sticle", "rotor", "ax", "arc", "set", "kit", "scule", "unelte",
+    "bratari", "accesorii", "accesoriu", "piese", "sticla",
+    "parasolar", "filtru", "filtre", "adaptor", "inel", "inele", "geanta", "trepied", "blit", "acumulator",
+    "acumulatori", "telecomanda", "grip", "capac", "teleconvertor", "monitor", "stabilizator", "gimbal", "sticle", "rotor", "ax", "arc", "set", "kit", "scule", "unelte",
 ]
 BOX_PAPERS = ["full set", "fullset", "cutie si acte", "cutie si certificat", "cu acte", "certificat de garantie", "box and papers", "card garantie"]
 GOLD = re.compile(r"(?<![a-z0-9])(aur|gold)(?![a-z0-9])[^.]{0,20}(14k|18k|14 k|18 k|585|750|masiv)|(14k|18k|585|750)[^.]{0,15}(aur|gold)")
 PLATED = ["placat", "placata", "aurit", "aurita", "gold plated", "gold filled", "dublat", "laminat"]
-VINTAGE = ["vintage", "vechi", "veche", "de colectie", "colectie", "antic", "antica", "retro", "sovietic", "rusesc", "urss", "cccp"]
+VINTAGE = ["pe film", "analogic", "35mm film", "film 35mm", "burduf", "ddr", "gdr", "urss", "vintage", "vechi", "veche", "de colectie", "colectie", "antic", "antica", "retro", "sovietic", "rusesc", "urss", "cccp"]
 VINTAGE_YEAR = re.compile(r"(?<![0-9])(?:an(?:ul|ii)?\s*)?(?:18[5-9]\d|19[0-8]\d|anii\s*[2-8]0)(?![0-9])")
 POCKET = ["buzunar", "pocket watch", "ceas de buzunar"]
-LOT = ["lot", "loturi", "colectie de ceasuri", "colectie ceasuri", "mai multe ceasuri", "set ceasuri", "set de ceasuri", "lot de ceasuri", "ceasuri vechi", "ceasuri de colectie"]
-LOT_COUNT = re.compile(r"(?<![a-z0-9])(\d{1,3})\s*(?:buc|bucati|ceasuri|bc)(?![a-z])")
+LOT = ["lot aparate", "lot obiective", "aparate foto vechi", "obiective vechi", "colectie aparate", "lot", "loturi", "colectie de ceasuri", "colectie ceasuri", "mai multe ceasuri", "set ceasuri", "set de ceasuri", "lot de ceasuri", "ceasuri vechi", "ceasuri de colectie"]
+LOT_COUNT = re.compile(r"(?<![a-z0-9])(\d{1,3})\s*(?:buc|bucati|ceasuri|bc|aparate|obiective)(?![a-z])")
 
 
 @dataclass
@@ -169,17 +187,23 @@ class Identity:
     flags: set[str] = field(default_factory=set)
     lot_count: int | None = None
     brand_in_title: bool = False  # False: only the description names it, a weaker signal
+    niche: str = "watches"
+    focal: str | None = None  # lenses: "58" (mm)
+    lens: bool = False
 
     @property
     def model_key(self) -> str | None:
-        """What we price by: 'seiko|SKX007', 'omega|seamaster', or just 'omega'."""
+        """What we price by: 'seiko|SKX007', 'omega|seamaster', 'helios|44 2|58', or just 'omega'."""
         if not self.brand:
             return None
         b = self.brand.name.lower()
+        fam = self.family.replace("-", " ") if self.family else None
+        if self.lens and fam:  # a lens name means little without its focal length
+            return f"{b}|{fam}|{self.focal}" if self.focal else f"{b}|{fam}"
         if self.refs:
             return f"{b}|{self.refs[0]}"
-        if self.family:
-            return f"{b}|{self.family}"
+        if fam:
+            return f"{b}|{fam}"
         return b
 
     @property
@@ -192,26 +216,35 @@ class Identity:
 _SWAP = re.compile(r"(?<![a-z])(?:sch|schb|schimb|schimbat|schimbare|accept schimb|sau schimb)(?![a-z]).*$")
 
 
-def identify(title: str, description: str = "") -> Identity:
+def identify(title: str, description: str = "", niche: str = "watches") -> Identity:
     title = _SWAP.sub("", normalize(title)).strip() or title
     title_n = normalize(title)
     full_n = normalize(f"{title} . {description}")
 
     # The title is what the seller is selling; the description often name-drops
     # other brands ("like Rolex"), so it only counts if the title has none.
-    title_brands = find_brands(title)
-    brands = title_brands or find_brands(description)
+    from .niches import get
+
+    nich = get(niche)
+    title_brands = find_brands(title, niche)
+    brands = title_brands or find_brands(description, niche)
     # "Audemars Piguet x Swatch Royal Pop", "Omega x Swatch MoonSwatch": it's a Swatch.
-    if any(b.name == "Swatch" for b in brands) or "moonswatch" in title_n:
+    if niche == "watches" and (any(b.name == "Swatch" for b in brands) or "moonswatch" in title_n):
         brands = [b for b in BRANDS if b.name == "Swatch"] + [b for b in brands if b.name != "Swatch"]
     brand = brands[0] if brands else None
     refs = find_refs(title, brand) or find_refs(description, brand)
     family = None
     if brand:
-        for fam in brand.families:
-            if _phrase_re(normalize(fam)).search(full_n):
-                family = fam
+        # Title first: descriptions mention other models ("fits Canon FD, also have AE-1").
+        for text in (title_n, full_n):
+            family = next((fam for fam in brand.families if _family_re(fam).search(text)), None)
+            if family:
                 break
+    lens = bool(family and family in nich.lens_families)
+    focal = None
+    if niche == "cameras":
+        m = FOCAL.search(title_n) or FOCAL.search(full_n)
+        focal = m.group(1) if m else None
 
     flags: set[str] = set()
     if _any(full_n, BROKEN):
@@ -224,6 +257,8 @@ def identify(title: str, description: str = "") -> Identity:
         flags.add("fake_signs")
     if _any(full_n, SHOP_TALK):
         flags.add("shop_talk")
+    if niche == "cameras" and brand and brand.name == "Leica" and re.search(r"(?<![a-z])(fed|zorki|zorkiy|kiev)(?![a-z])", title_n):
+        flags.add("fake_signs")  # a Soviet FED/Zorki engraved "Leica": the classic fake
     if _any(full_n, NAIVE):
         flags.add("naive")
     if _any(title_n, WANTED):
@@ -255,5 +290,5 @@ def identify(title: str, description: str = "") -> Identity:
 
     return Identity(
         brand=brand, brands=brands, refs=refs, family=family, flags=flags, lot_count=lot_count,
-        brand_in_title=bool(title_brands),
+        brand_in_title=bool(title_brands), niche=niche, focal=focal, lens=lens,
     )

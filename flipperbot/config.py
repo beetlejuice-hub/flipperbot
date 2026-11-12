@@ -51,7 +51,8 @@ class Settings:
     searches_per_poll: int = 3  # random terms from the pool, plus the watch category feeds
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
-    search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))
+    niches: list[str] = field(default_factory=lambda: ["watches", "cameras"])  # what to hunt (see niches.py)
+    search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))  # watches; cameras' are in niches.py
     focus_pool: list[str] = field(default_factory=lambda: list(FOCUS_POOL))
     focus_share: float = 0.67  # of each poll's searches, how many come from focus_pool
     eur_to_ron: float = 5.0
@@ -75,8 +76,11 @@ class Settings:
     mid_discount: float = 0.15
     min_comps: int = 4  # listings of the same model needed to trust a market price
 
-    # AI (Claude Code on this machine, on your subscription)
+    # AI (Claude Code on this machine, on your subscription). Claude only checks what you send it
+    # from the dashboard ("Send to Claude"). ai_auto = true lets the bot send real good deals, lots and
+    # old watches to Claude by itself, and message Telegram when Claude confirms one.
     ai_enabled: bool = True
+    ai_auto: bool = False
     ai_daily_limit: int = 15  # a $20 plan runs out fast; raise it if you never hit limits
     # Claude looks at every real_good before it's sent to Telegram, then at good ones with what's left
     # of the day's budget (those only show on the dashboard).

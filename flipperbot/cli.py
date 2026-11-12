@@ -162,10 +162,15 @@ def main(argv: list[str] | None = None) -> None:
         bot.deliver(db, s)
 
     elif args.cmd == "backfill":
-        for i, term in enumerate(s.search_pool):
-            print(f"[{i + 1}/{len(s.search_pool)}] {term}")
+        from . import niches
+
+        jobs = [(t, None, k) for k in s.niches for t in (s.search_pool + s.focus_pool if k == "watches"
+                                                          else list(niches.get(k).search_pool + niches.get(k).focus_pool))]
+        for i, job in enumerate(jobs):
+            term = job[0]
+            print(f"[{i + 1}/{len(jobs)}] {niches.get(job[2]).icon} {term}")
             try:
-                listings = bot.fetch_all([(term, None)], s, pages=args.pages)
+                listings = bot.fetch_all([job], s, pages=args.pages)
             except olx.Blocked as e:
                 sys.exit(f"{e}. Stopping; try again later.")
             bot.learn_categories(db, listings)

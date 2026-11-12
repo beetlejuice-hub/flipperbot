@@ -30,6 +30,7 @@ class Listing:
     condition: str = ""  # "used", "new", "damaged" when the site says
     category_id: str = ""
     params: dict[str, Any] = field(default_factory=dict)
+    niche: str = "watches"  # what it is: see niches.py
 
     @property
     def key(self) -> str:

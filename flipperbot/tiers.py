@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from .config import Settings
 from .identify import Identity
 from .models import Listing
-from .watchdb import VALUABLE_SEGMENTS
+from .niches import get as niche_of
 
 
 @dataclass
@@ -46,7 +46,8 @@ def market_price(prices: list[int]) -> int | None:
 
 def repair_cost(ident: Identity, s: Settings) -> int:
     if "broken" in ident.flags:
-        return s.repair_ron.get(ident.segment or "", 300)
+        costs = s.repair_ron if ident.niche == "watches" else niche_of(ident.niche).repair_ron
+        return costs.get(ident.segment or "", 300)
     if "battery" in ident.flags:
         return s.battery_fix_ron
     return 0
@@ -56,6 +57,8 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
     price = l.price_ron
     f = ident.flags
     seg = ident.segment
+    VALUABLE_SEGMENTS = niche_of(ident.niche).valuable_segments
+    noun = niche_of(ident.niche).noun
 
     # --- not for us ---------------------------------------------------------
     if not price or price < 10:
@@ -73,7 +76,7 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
     if "part" in f and "lot" not in f:
         if seg == "luxury":
             return Verdict("mid", f"{ident.brand.name} part/accessory")
-        return Verdict("bad", "part/accessory, not a watch")
+        return Verdict("bad", f"part/accessory, not a {noun}")
 
     # --- replica seller talk on a luxury/Swiss brand ------------------------------
     if ident.brand_in_title and "naive" not in f and (
@@ -94,7 +97,7 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
     if "lot" in f:
         segs = {b.segment for b in ident.brands}
         names = ", ".join(b.name for b in ident.brands) or "no brands named"
-        n = f"{ident.lot_count} watches" if ident.lot_count else "lot"
+        n = f"{ident.lot_count} items" if ident.lot_count else "lot"
         if "solid_gold" in f or segs & {"luxury"}:
             return Verdict("good", f"{n} with {names}{', gold' if 'solid_gold' in f else ''}")
         if segs & (VALUABLE_SEGMENTS | {"soviet"}):
@@ -113,7 +116,7 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
     )
     if old_unclear and (ident.brand is None or seg in VALUABLE_SEGMENTS | {"soviet", "japan"}) and price <= 2000:
         who = ident.brand.name if ident.brand else "unnamed"
-        why = "seller doesn't seem to know what it is" if "naive" in f else "old watch, model unclear"
+        why = "seller doesn't seem to know what it is" if "naive" in f else f"old {noun}, model unclear"
         return Verdict("good" if seg in VALUABLE_SEGMENTS else "mid", f"{who}: {why}: Claude will look at the photos")
 
     # --- priced against the market -------------------------------------------------

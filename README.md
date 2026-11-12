@@ -1,5 +1,7 @@
 # flipperbot
 
+Hunts **watches** ⌚ and **cameras & lenses** 📷 (more can be added in `flipperbot/niches.py`).
+
 Watches OLX.ro for underpriced watches (single ones, lots, broken ones),
 sorts every listing into **bad / suspect / mid / good / real good**, and shows them
 on a dashboard. Claude (on your Claude subscription) reads the real good ones'
@@ -44,14 +46,13 @@ why the bot rated it, and Claude's verdict. Tabs for Deals, Maybe, Likely fake, 
 checked; buttons to star, hide, or *Ask Claude* about any listing. It's served by the bot itself,
 so it's there whenever the bot runs. `flipperbot open` opens it.
 
-**Telegram stays quiet except for confirmed deals.** A real good deal is sent only after Claude has
-read its description and photos and says: not fake, buy or negotiate, and at least 50% sure
-(`alert_min_confidence`). One message: the deal and Claude's notes (how sure, real or fake, condition,
-resale, what to offer). Everything else, including real good deals Claude didn't confirm, is on the
-dashboard with Claude's notes. A real good deal waiting for Claude (daily limit used up) is checked at
-the next chance. Claude also checks good ones on the dashboard with what's left of the day's budget. (To open the dashboard on your phone too, on the same Wi-Fi, set
-`dashboard_lan = true` in the settings file; then it's at `http://<your-mac-name>.local:8789`.
-Anyone on that Wi-Fi could see it, so only at home.)
+**Claude only checks what you send it.** Every card on the dashboard has a **Send to Claude** button.
+Claude works through what you sent one at a time (the card shows its place in the queue), reads the
+description and photos (lots: zoomed in, item by item), checks for fakes, and finds what it really
+sells for. Its notes land on the card. If it confirms one as a real good deal (not fake, buy/negotiate,
+at least 50% sure; 60% for luxury/Swiss), the verdict also goes to your phone on Telegram. Nothing else is
+sent to Telegram. Scraping and judging run by themselves all the time. (`ai_auto = true` in the settings
+file lets the bot send deals to Claude by itself instead.)
 
 From Terminal:
 

@@ -77,6 +77,7 @@ def setup_deal(s):
 
 def test_without_claude_nothing_is_sent_and_the_deal_waits(capsys):
     s = Settings()
+    s.ai_auto = True  # these test the automatic mode
     s.claude_bin = "no-such-claude"
     db, for_ai, deal = setup_deal(s)
 
@@ -96,6 +97,7 @@ def test_without_claude_nothing_is_sent_and_the_deal_waits(capsys):
 
 def deliver_with(monkeypatch, verdict):
     s = Settings()
+    s.ai_auto = True  # these test the automatic mode
     db, _, _ = setup_deal(s)
     order = []
 
@@ -138,6 +140,7 @@ def test_unconfirmed_deals_stay_on_the_dashboard(monkeypatch):
 
 def test_mid_rejudged_on_price_drop():
     s = Settings()
+    s.ai_auto = True  # these test the automatic mode
     db = DB(":memory:")
     market = [olx.parse_offer(offer(100 + i, "Ceas Orient Bambino", p)) for i, p in enumerate([600, 650, 600, 620, 640])]
     bot.process(db, market, s)
@@ -169,6 +172,7 @@ def test_dashboard_and_wall_clocks_are_not_watches():
 
 def test_replica_dealer_pattern():
     s = Settings()
+    s.ai_auto = True  # these test the automatic mode
     db = DB(":memory:")
     market = [olx.parse_offer(offer(100 + i, "TAG Heuer Carrera Calibre 5", p)) for i, p in enumerate([11000, 12000, 11500, 12500, 11800])]
     for l in market:
@@ -181,3 +185,16 @@ def test_replica_dealer_pattern():
     assert db.get("olx:300")["tier"] == "real_good"  # one cheap one: could be a real deal
     assert db.get("olx:302")["tier"] == "suspect"  # the third from the same seller: a pattern
     assert "replicas" in db.get("olx:302")["reason"]
+
+
+def test_by_default_claude_never_runs_by_itself(monkeypatch):
+    s = Settings()
+    assert s.ai_auto is False
+    db, _, _ = setup_deal(s)
+    called = []
+    monkeypatch.setattr(bot.ai, "available", lambda s_: True)
+    monkeypatch.setattr(bot.ai, "check", lambda *a: called.append(a))
+    monkeypatch.setattr(bot.notify, "send", lambda *a, **k: called.append(a))
+    bot.deliver(db, s)
+    assert called == []  # no Claude, no Telegram: the deals wait on the dashboard
+    assert db.get("olx:200")["tier"] == "real_good"

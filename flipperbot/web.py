@@ -23,13 +23,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from . import ai, notify
+from . import ai, niches, notify
 from .config import Settings
 from .db import DB, TIER_RANK
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1"}
-_running_ai: set[str] = set()
-_lock = threading.Lock()
+# Claude checks you asked for, in the order you asked: one at a time, first in the list is running.
+_queue: list[str] = []
+_cv = threading.Condition()
+_worker: threading.Thread | None = None
 
 
 def _url_file() -> Path:
@@ -64,14 +66,16 @@ def listing_json(r: Any) -> dict[str, Any]:
     photos = json.loads(r["photos"] or "[]")
     a = json.loads(r["ai"]) if r["ai"] else None
     return {
-        "key": r["key"], "source": r["source"], "url": r["url"], "title": r["title"], "price": r["price_ron"],
+        "key": r["key"], "source": r["source"], "niche": r["niche"] or "watches",
+        "icon": niches.get(r["niche"]).icon, "url": r["url"], "title": r["title"], "price": r["price_ron"],
         "negotiable": bool(r["negotiable"]), "city": r["city"], "tier": r["tier"], "reason": r["reason"],
         "value": r["est_value_ron"], "profit": r["profit_ron"], "model": r["model_key"],
         "flags": json.loads(r["flags"] or "[]"), "delivery": bool(r["delivery"]),
         "photo": _small_photo(photos[0]) if photos else None, "photos": len(photos),
         "first_seen": r["first_seen"], "last_seen": r["last_seen"],
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a,
-        "ai_running": r["key"] in _running_ai,
+        "ai_running": bool(_queue) and _queue[0] == r["key"],
+        "ai_queued": _queue.index(r["key"]) if r["key"] in _queue[1:] else None,  # how many ahead
     }
 
 
@@ -92,9 +96,12 @@ ORDER = {
 }
 
 
-def query(db: DB, view: str, q: str = "", sort: str = "", limit: int = 120) -> list[dict[str, Any]]:
+def query(db: DB, view: str, q: str = "", sort: str = "", limit: int = 120, niche: str = "") -> list[dict[str, Any]]:
     where, default_sort = VIEWS.get(view, VIEWS["deals"])
     args: list[Any] = []
+    if niche in niches.ALL:
+        where = f"({where}) AND niche = ?"
+        args.append(niche)
     if q:
         where += " AND (title LIKE ? OR model_key LIKE ? OR city LIKE ?)"
         args += [f"%{q}%"] * 3
@@ -103,13 +110,15 @@ def query(db: DB, view: str, q: str = "", sort: str = "", limit: int = 120) -> l
     return [listing_json(r) for r in rows]
 
 
-def stats(db: DB, s: Settings) -> dict[str, Any]:
+def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
     c = db.conn
-    counts = {r["tier"]: r["n"] for r in c.execute("SELECT tier, COUNT(*) n FROM listings WHERE hidden=0 GROUP BY tier")}
+    nf, na = ("AND niche = ?", [niche]) if niche in niches.ALL else ("", [])
+    counts = {r["tier"]: r["n"] for r in c.execute(f"SELECT tier, COUNT(*) n FROM listings WHERE hidden=0 {nf} GROUP BY tier", na)}
     return {
-        "total": c.execute("SELECT COUNT(*) FROM listings").fetchone()[0],
+        "total": c.execute(f"SELECT COUNT(*) FROM listings WHERE 1=1 {nf}", na).fetchone()[0],
         "counts": {t: counts.get(t, 0) for t in TIER_RANK},
-        "starred": c.execute("SELECT COUNT(*) FROM listings WHERE starred=1").fetchone()[0],
+        "starred": c.execute(f"SELECT COUNT(*) FROM listings WHERE starred=1 {nf}", na).fetchone()[0],
+        "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
         "priced_models": c.execute(
             "SELECT COUNT(*) FROM (SELECT model_key FROM listings WHERE model_key LIKE '%|%' GROUP BY model_key HAVING COUNT(*) >= ?)",
             (s.min_comps,),
@@ -122,16 +131,51 @@ def stats(db: DB, s: Settings) -> dict[str, Any]:
     }
 
 
-def _ai_in_background(s: Settings, key: str) -> None:
+def _check(s: Settings, key: str) -> None:
+    """One Claude check you asked for. Its notes land on the dashboard; if Claude values it as a
+    real good deal and is sure enough, it also goes to Telegram (so the verdict reaches your phone)."""
+    from . import bot
+
     db = DB(s.db_path)
-    try:
-        row = db.get(key)
-        if row:
-            s.ai_daily_limit = max(s.ai_daily_limit, ai.used_today(db) + 1)  # you asked: it runs
-            ai.check(db, row, s)  # the result shows on the dashboard; Telegram is for real good deals only
-    finally:
-        with _lock:
-            _running_ai.discard(key)
+    row = db.get(key)
+    if not row:
+        return
+    s.ai_daily_limit = max(s.ai_daily_limit, ai.used_today(db) + 1)  # you asked: it runs
+    result = ai.check(db, row, s)
+    if not result:
+        return
+    bot.claude_value(db, row, result, s)
+    row = db.get(key)
+    ok, _ = bot.confirmed(result, s, row["segment"])
+    if ok and row["tier"] == "real_good":  # you sent it: the verdict goes to your phone too
+        notify.send(s, notify.deal_text(row, result), (json.loads(row["photos"] or "[]") or [None])[0])
+        db.mark_notified(key, "real_good")
+
+
+def _work(s: Settings) -> None:
+    while True:
+        with _cv:
+            while not _queue:
+                _cv.wait()
+            key = _queue[0]
+        try:
+            _check(s, key)
+        except Exception as e:  # one failed check mustn't stop the queue
+            print(f"Claude check failed for {key}: {e!r}")
+        finally:
+            with _cv:
+                _queue.pop(0)
+
+
+def send_to_claude(s: Settings, key: str) -> None:
+    global _worker
+    with _cv:
+        if key not in _queue:
+            _queue.append(key)
+            _cv.notify()
+        if _worker is None or not _worker.is_alive():
+            _worker = threading.Thread(target=_work, args=(s,), daemon=True)
+            _worker.start()
 
 
 def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
@@ -167,9 +211,12 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
             if u.path == "/":
                 self._send(200, PAGE.encode(), "text/html; charset=utf-8")
             elif u.path == "/api/listings":
-                self._json(query(db, qs.get("view", "deals"), qs.get("q", ""), qs.get("sort", "")))
+                self._json(query(db, qs.get("view", "deals"), qs.get("q", ""), qs.get("sort", ""), niche=qs.get("niche", "")))
+            elif u.path == "/api/listing":
+                row = db.get(qs.get("key", ""))
+                self._json(listing_json(row) if row else {"error": "unknown listing"}, 200 if row else 404)
             elif u.path == "/api/stats":
-                self._json(stats(db, s))
+                self._json(stats(db, s, qs.get("niche", "")))
             else:
                 self._send(404, b"not found", "text/plain")
 
@@ -190,10 +237,7 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
             else:
                 if not ai.available(s):
                     return self._json({"error": "Claude Code isn't installed on this Mac (see README)."}, 400)
-                with _lock:
-                    if key not in _running_ai:
-                        _running_ai.add(key)
-                        threading.Thread(target=_ai_in_background, args=(s, key), daemon=True).start()
+                send_to_claude(s, key)
             self._json(listing_json(db.get(key)))
 
     return Handler
@@ -293,15 +337,17 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .actions a, .actions button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--ink); cursor: pointer; text-decoration: none; }
 .actions a.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .actions button:disabled { opacity: .5; cursor: default; }
+.actions button.claude { border-color: var(--g); color: var(--g); font-weight: 600; }
 .empty { color: var(--muted); text-align: center; padding: 60px 20px; }
 .err { color: var(--sus); font-size: 13px; }
 </style>
 </head>
 <body>
 <header><div class="bar">
-  <div class="top"><h1>⌚ flipperbot</h1><span class="status" id="status">loading…</span></div>
+  <div class="top"><h1>flipperbot</h1><span class="status" id="status">loading…</span></div>
   <nav id="tabs"></nav>
   <div class="tools">
+    <select id="niche" aria-label="What"><option value="">All</option><option value="watches">⌚ Watches</option><option value="cameras">📷 Cameras</option></select>
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
       <option value="">Best first</option><option value="new">Newest</option><option value="cheap">Cheapest</option>
@@ -323,9 +369,12 @@ const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "li
 const EMPTY = {
   deals: "No deals yet. The bot checks OLX every 5–10 minutes; good finds land here and on Telegram.",
   maybe: "Nothing to look at twice yet.", suspect: "No likely fakes.", starred: "Star a listing to keep it here.",
-  checked: "Nothing checked by Claude yet. Press “Ask Claude” on any listing.", new: "Nothing yet.", hidden: "Nothing hidden.",
+  checked: "Nothing checked by Claude yet. Press “Send to Claude” on any listing.", new: "Nothing yet.", hidden: "Nothing hidden.",
 };
 let view = location.hash.slice(1) || "deals", stats = null;
+const nicheSel = document.getElementById("niche");
+nicheSel.value = localStorage.getItem("flipperbot-niche") || "";
+nicheSel.addEventListener("change", () => { localStorage.setItem("flipperbot-niche", nicheSel.value); refreshStats(); load(); });
 
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
@@ -355,7 +404,7 @@ const act = (action, key) => api(`/api/${action}/${encodeURIComponent(key)}`, { 
 function aiBox(a, l) {
   if (a.error) return h("div", { class: "ai" }, h("span", { class: "err" }, "Claude couldn't check it: " + String(a.error).slice(0, 160)));
   const isLot = (l.flags || []).includes("lot");
-  const ws = (a.watches || []).slice().sort((x, y) => (y.notable === true) - (x.notable === true) || (y.value_ron || 0) - (x.value_ron || 0));
+  const ws = (a.items || a.watches || []).slice().sort((x, y) => (y.notable === true) - (x.notable === true) || (y.value_ron || 0) - (x.value_ron || 0));
   const label = w => [w.brand, w.model, w.reference].filter(Boolean).join(" ") || "unidentified";
   const names = isLot
     ? h("div", { class: "lot" }, ws.slice(0, 8).map(w => h("div", {}, (w.notable ? "⭐ " : "• ") + label(w),
@@ -400,10 +449,14 @@ function card(l) {
   const el = h("article", { class: "card" });
   const draw = () => {
     const img = l.photo ? h("img", { src: l.photo, alt: "", loading: "lazy", referrerpolicy: "no-referrer", onerror: e => e.target.replaceWith("⌚") }) : "⌚";
-    const aiBtn = l.ai ? null : h("button", { disabled: l.ai_running, onclick: async e => {
-      e.target.disabled = true; e.target.textContent = "Claude is looking…";
-      try { Object.assign(l, await act("ai", l.key)); poll(l, el); } catch (err) { e.target.textContent = err.message; }
-    } }, l.ai_running ? "Claude is looking…" : "🤖 Ask Claude");
+    const waiting = l.ai_running || l.ai_queued != null;
+    const aiLabel = l.ai_running ? "Claude is looking…" : l.ai_queued != null ? `In Claude's queue (${l.ai_queued} ahead)`
+      : l.ai ? "🤖 Send to Claude again" : "🤖 Send to Claude";
+    const aiBtn = h("button", { class: l.ai ? "" : "claude", disabled: waiting, onclick: async e => {
+      e.target.disabled = true; e.target.textContent = "Sending…";
+      try { Object.assign(l, await act("ai", l.key)); draw(); poll(l, el); } catch (err) { e.target.textContent = err.message; }
+    } }, aiLabel);
+    if (waiting && !el.polling) poll(l, el);
     el.replaceChildren(
       h("a", { class: "ph", href: l.url, target: "_blank", rel: "noopener noreferrer" }, img),
       h("div", { class: "body" },
@@ -412,7 +465,7 @@ function card(l) {
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
         l.ai ? aiBox(l.ai, l) : null,
-        h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
+        h("div", { class: "meta" }, [l.icon + " " + (l.source === "facebook" ? "Facebook" : "OLX"), l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         h("div", { class: "actions" },
           h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.source === "facebook" ? "Open on Facebook ↗" : "Open on OLX ↗"),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),
@@ -424,11 +477,13 @@ function card(l) {
 }
 
 function poll(l, el) {
-  const t = setInterval(async () => {
-    const rows = await api(`/api/listings?view=checked&q=${encodeURIComponent(l.title.slice(0, 40))}`);
-    const got = rows.find(r => r.key === l.key);
-    if (got && got.ai) { Object.assign(l, got); el.redraw(); clearInterval(t); refreshStats(); }
-  }, 8000);
+  if (el.polling) return;
+  el.polling = setInterval(async () => {
+    let got; try { got = await api(`/api/listing?key=${encodeURIComponent(l.key)}`); } catch { return; }
+    const before = l.ai_running || l.ai_queued != null;
+    Object.assign(l, got); el.redraw();
+    if (!(got.ai_running || got.ai_queued != null)) { clearInterval(el.polling); el.polling = null; if (before) refreshStats(); }
+  }, 6000);
 }
 
 function drawTabs() {
@@ -438,7 +493,7 @@ function drawTabs() {
 }
 
 async function refreshStats() {
-  try { stats = await api("/api/stats"); } catch { return; }
+  try { stats = await api(`/api/stats?niche=${nicheSel.value}`); } catch { return; }
   const p = stats.last_poll, fresh = p && (Date.now() - new Date(p.at)) < 20 * 60000;
   document.getElementById("status").replaceChildren(
     h("span", { class: "dot" + (fresh ? " on" : "") }),
@@ -457,7 +512,7 @@ let loading = 0;
 async function load() {
   const mine = ++loading;
   const q = document.getElementById("q").value.trim(), sort = document.getElementById("sort").value;
-  const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}`);
+  const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}&niche=${nicheSel.value}`);
   if (mine !== loading) return;
   document.getElementById("grid").replaceChildren(...rows.map(card));
   const empty = document.getElementById("empty");

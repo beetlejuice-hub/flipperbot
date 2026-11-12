@@ -41,6 +41,7 @@ def make_db(s):
 
 def test_lots_go_first_and_claude_values_them_into_a_sent_deal(monkeypatch):
     s = Settings()
+    s.ai_auto = True  # these test the automatic mode
     db = make_db(s)
     assert db.get("olx:500")["tier"] == "mid"
     assert [r["key"] for r in bot.pending_ai(db, s)][:2] == ["olx:500", "olx:150"]  # the lot first
@@ -66,6 +67,7 @@ def test_lots_go_first_and_claude_values_them_into_a_sent_deal(monkeypatch):
 
 def test_claude_value_never_downgrades_or_sends_unconfirmed(monkeypatch):
     s = Settings()
+    s.ai_auto = True  # these test the automatic mode
     db = make_db(s)
     sent = []
     result = {**LOT_RESULT, "confidence": 30}

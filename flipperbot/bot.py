@@ -289,7 +289,11 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
                 log(f"  real good deal waiting for Claude ({why_not}): {r['title']}")
                 continue
             log(f"  Claude checking a real good deal: {r['title']}")
-            result = ai.check(db, r, s)
+            try:
+                result = ai.check(db, r, s)
+            except ai.UsageLimit:
+                log("  Claude's usage limit reached: trying again next poll")
+                return
             if result is None:
                 continue
         row = db.get(r["key"])
@@ -304,7 +308,10 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
         if ai_skip_reason(db, s):
             return
         log(f"  Claude checking {'a lot' if 'lot' in (r['flags'] or '') else 'for the dashboard'}: {r['title']}")
-        result = ai.check(db, r, s)
+        try:
+            result = ai.check(db, r, s)
+        except ai.UsageLimit:
+            return
         if result and claude_value(db, r, result, s) == "real_good":
             row = db.get(r["key"])
             ok, why = confirmed(result, s, row["segment"])

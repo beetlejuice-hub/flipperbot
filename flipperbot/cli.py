@@ -202,7 +202,12 @@ def main(argv: list[str] | None = None) -> None:
         if not ai.available(s):
             sys.exit("`claude` isn't on PATH. Install Claude Code and log in first.")
         s.ai_daily_limit = max(s.ai_daily_limit, ai.used_today(db) + 1)  # a manual check always runs
-        res = ai.check(db, row, s)
+        try:
+            res = ai.check(db, row, s)
+        except ai.UsageLimit as e:
+            import time
+
+            sys.exit(f"Claude's usage limit is reached; it resets around {time.strftime('%H:%M', time.localtime(e.until))}.")
         print(json.dumps(res, indent=2, ensure_ascii=False))
 
     elif args.cmd == "telegram-setup":

@@ -61,7 +61,7 @@ Then:
    - Price: far too low for the model and condition.
    If it's a vintage or inherited watch, also watch for redials (repainted dials) and franken watches (mixed parts).
 3. Condition: what's visibly wrong, and what a repair would need and roughly cost in Romania.
-4. Value: use web search to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
+4. Value: use web search (at most 4 searches: be targeted) to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
 5. Decide: buy, negotiate (and to what price), or skip.
 6. confidence: 0-100, how sure you are that this is a genuine watch AND a profitable flip at the asking or
    offer price. Be honest: with blurry photos, no caseback/movement photos or a vague description, stay low.
@@ -141,12 +141,12 @@ def big(url: str) -> str:
     return re.sub(r";s=\d+x\d+", ";s=2000x2000", url)
 
 
-def CLAUDE_ARGS(claude_bin: str) -> list[str]:
+def CLAUDE_ARGS(claude_bin: str, model: str = "") -> list[str]:
     """Headless Claude Code, prompt on stdin. It may read the photos and search the web,
     nothing else: no shell, no file edits, and no fetching pages. Listing text is written by
     strangers, so Claude must have no way to act on it or send anything anywhere."""
     return [
-        claude_bin, "-p", "--output-format", "json",
+        claude_bin, "-p", "--output-format", "json", *(["--model", model] if model else []),
         "--allowedTools", "Read", "WebSearch",
         "--disallowedTools", "Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "Task",
     ]
@@ -198,17 +198,62 @@ def extract_json(text: str) -> dict[str, Any] | None:
         return None
 
 
+class UsageLimit(RuntimeError):
+    """Claude's plan limit is reached. `until` is when it resets (epoch seconds), best guess."""
+
+    def __init__(self, message: str, until: float):
+        super().__init__(message)
+        self.until = until
+
+
+_LIMIT = re.compile(r"usage limit|hit your limit|limit reached|rate limit|out of (?:extra )?usage|session limit", re.I)
+
+
+def limit_reset(text: str, now: float | None = None) -> float | None:
+    """If Claude's output says the plan limit is hit, when it resets (epoch seconds); else None.
+    Knows 'Claude AI usage limit reached|1731430800' and 'resets 3pm' / 'resets at 15:30';
+    otherwise assumes an hour."""
+    import time as _time
+    from datetime import datetime, timedelta
+
+    if not text or not _LIMIT.search(text):
+        return None
+    now = now or _time.time()
+    m = re.search(r"\|(\d{10})", text)
+    if m:
+        return float(m.group(1))
+    m = re.search(r"resets?(?: at)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", text, re.I)
+    if m:
+        hour, minute, ampm = int(m.group(1)), int(m.group(2) or 0), (m.group(3) or "").lower()
+        if ampm == "pm" and hour < 12:
+            hour += 12
+        if ampm == "am" and hour == 12:
+            hour = 0
+        base = datetime.fromtimestamp(now)
+        at = base.replace(hour=hour % 24, minute=minute, second=0, microsecond=0)
+        if at.timestamp() <= now:
+            at += timedelta(days=1)
+        return at.timestamp() + 60
+    return now + 3600
+
+
+def is_limit_error(result: dict[str, Any] | None) -> bool:
+    return bool(result and "error" in result and _LIMIT.search(str(result["error"])))
+
+
 def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
-    """Run Claude on one listing row. Returns the parsed verdict, or None."""
+    """Run Claude on one listing row. Returns the parsed verdict, or None.
+    Raises UsageLimit when Claude's plan limit is hit (nothing is saved, so it can be retried)."""
     if not available(s) or used_today(db) >= s.ai_daily_limit:
         return None
     folder = s.photos_dir / row["key"].replace(":", "_")
     flags = set(json.loads(row["flags"] or "[]"))
     is_lot = "lot" in flags
     urls = json.loads(row["photos"] or "[]")
-    photos = download_photos([big(u) for u in urls] if is_lot else urls, folder, max_photos=10 if is_lot else 8)
+    # Every image costs plan usage: a few good photos, and zoomed quarters only where a lot needs them.
+    photos = download_photos([big(u) for u in urls] if is_lot else urls, folder, max_photos=8 if is_lot else s.ai_max_photos)
     if is_lot:
-        photos += [t for p in photos[:6] for t in tiles(p)]
+        photos += [t for p in photos[:3] for t in tiles(p)]
     template, lot_text, old_text = PROMPT, LOT_BLOCK, OLD_BLOCK
     prompt = template.format(
         source=row["source"], url=row["url"], title=row["title"], price=row["price_ron"],
@@ -219,9 +264,9 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         old_block=old_text if flags & {"naive", "vintage", "pocket"} and not is_lot else "",
         seller_listings=seller_listings(db, row),
     )
-    db.kv_set(f"ai_used:{date.today().isoformat()}", used_today(db) + 1)
     try:
-        proc = subprocess.run(CLAUDE_ARGS(s.claude_bin), input=prompt, cwd=folder, capture_output=True, text=True, timeout=s.ai_timeout_s)
+        proc = subprocess.run(CLAUDE_ARGS(s.claude_bin, s.ai_model), input=prompt, cwd=folder, capture_output=True,
+                              text=True, timeout=s.ai_timeout_s)
     except subprocess.TimeoutExpired:
         return None
     try:
@@ -230,6 +275,11 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         text = proc.stdout
     result = extract_json(text)
+    if result is None or "watches" not in result and "verdict" not in result:
+        until = limit_reset(f"{text}\n{proc.stdout}\n{proc.stderr}")
+        if until:
+            raise UsageLimit((text or proc.stderr or "usage limit")[:300], until)
+    db.kv_set(f"ai_used:{date.today().isoformat()}", used_today(db) + 1)
     if result is None:
         result = {"error": (proc.stderr or text or "no output")[-500:]}
     db.set_ai(row["key"], result)

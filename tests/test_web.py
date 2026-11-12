@@ -155,3 +155,28 @@ def test_buttons_work_with_browser_encoded_keys(server):
     assert card["starred"] is True
     post(server + "/api/skip/olx%3A200", {"X-Flipperbot": "1"})
     assert get(server + "/api/listing?key=olx%3A200")["triage"] == "skip"
+
+
+def test_queue_waits_out_the_usage_limit(server, monkeypatch):
+    import time as _t
+
+    calls = []
+
+    def fake_check(db, row, s):
+        calls.append(row["key"])
+        if len(calls) == 1:
+            raise web.ai.UsageLimit("limit", _t.time() + 0.5)
+        result = {"verdict": "skip", "authenticity": "unsure", "confidence": 20}
+        db.set_ai(row["key"], result)
+        return result
+
+    monkeypatch.setattr(web.ai, "check", fake_check)
+    monkeypatch.setattr(web.ai, "available", lambda s: True)
+    post(server + "/api/ai/olx:101", {"X-Flipperbot": "1"})
+    _t.sleep(0.2)
+    assert get(server + "/api/stats")["ai_paused_until"]  # paused, shown on the dashboard
+    for _ in range(60):
+        if get(server + "/api/listing?key=olx%3A101")["ai"]:
+            break
+        _t.sleep(0.1)
+    assert calls == ["olx:101", "olx:101"]  # tried again after the reset, not dropped

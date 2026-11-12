@@ -86,6 +86,9 @@ class Settings:
     # of the day's budget (those only show on the dashboard).
     ai_tiers: list[str] = field(default_factory=lambda: ["real_good", "good"])
     ai_timeout_s: int = 420
+    # Sonnet is far lighter on a Claude plan's usage limit than Opus and plenty for this.
+    ai_model: str = "sonnet"
+    ai_max_photos: int = 5  # per single watch; lots get 8 plus zoomed quarters of the first 3
     claude_bin: str = "claude"
 
     # Dashboard (http://localhost:8789; if another app has that port, the next free one:

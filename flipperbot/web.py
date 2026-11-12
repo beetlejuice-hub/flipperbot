@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import time
 import urllib.request
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -65,6 +66,8 @@ def _small_photo(u: str) -> str:
 def listing_json(r: Any) -> dict[str, Any]:
     photos = json.loads(r["photos"] or "[]")
     a = json.loads(r["ai"]) if r["ai"] else None
+    if ai.is_limit_error(a):  # an older check that only hit the usage limit: not really checked
+        a = None
     return {
         "key": r["key"], "source": r["source"], "niche": r["niche"] or "watches",
         "icon": niches.get(r["niche"]).icon, "url": r["url"], "title": r["title"], "price": r["price_ron"],
@@ -133,6 +136,8 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         ).fetchone()[0],
         "last_poll": db.kv_get("last_poll"),
         "ai_used": ai.used_today(db), "ai_limit": s.ai_daily_limit, "ai_available": ai.available(s),
+        "ai_paused_until": time.strftime("%H:%M", time.localtime(_paused_until)) if _paused_until > time.time() else None,
+        "ai_queue": len(_queue),
         "telegram": notify.enabled(s),
         "facebook": {k: v for k, v in (db.kv_get("facebook") or {}).items() if k in ("state", "at", "listings")},
         "today": date.today().isoformat(),
@@ -160,19 +165,33 @@ def _check(s: Settings, key: str) -> None:
         db.mark_notified(key, "real_good")
 
 
+_paused_until = 0.0  # Claude's plan limit: the queue waits until then
+
+
 def _work(s: Settings) -> None:
+    global _paused_until
     while True:
         with _cv:
             while not _queue:
                 _cv.wait()
             key = _queue[0]
+        wait = _paused_until - time.time()
+        if wait > 0:  # the limit resets at _paused_until; your requests stay queued meanwhile
+            time.sleep(min(wait, 60))
+            continue
+        done = True
         try:
             _check(s, key)
+        except ai.UsageLimit as e:
+            _paused_until = e.until
+            done = False  # same listing again once the limit resets
+            print(f"Claude's usage limit reached; queue paused until {time.strftime('%H:%M', time.localtime(e.until))}")
         except Exception as e:  # one failed check mustn't stop the queue
             print(f"Claude check failed for {key}: {e!r}")
         finally:
-            with _cv:
-                _queue.pop(0)
+            if done:
+                with _cv:
+                    _queue.pop(0)
 
 
 def send_to_claude(s: Settings, key: str) -> None:
@@ -495,7 +514,8 @@ function card(l) {
   const draw = () => {
     const img = l.photo ? h("img", { src: l.photo, alt: "", loading: "lazy", referrerpolicy: "no-referrer", onerror: e => e.target.replaceWith("⌚") }) : "⌚";
     const waiting = l.ai_running || l.ai_queued != null;
-    const aiLabel = l.ai_running ? "Claude is looking…" : l.ai_queued != null ? `In Claude's queue (${l.ai_queued} ahead)`
+    const aiLabel = l.ai_running && stats && stats.ai_paused_until ? `Waiting for Claude (limit resets ~${stats.ai_paused_until})`
+      : l.ai_running ? "Claude is looking…" : l.ai_queued != null ? `In Claude's queue (${l.ai_queued} ahead)`
       : l.ai ? "🤖 Send to Claude again" : "🤖 Send to Claude";
     const aiBtn = h("button", { class: l.ai ? "" : "claude", disabled: waiting, onclick: async e => {
       e.target.disabled = true; e.target.textContent = "Sending…";
@@ -544,7 +564,9 @@ async function refreshStats() {
     h("span", { class: "dot" + (fresh ? " on" : "") }),
     p ? `${fresh ? "running" : "not running"} · last check ${ago(p.at)}` : "waiting for the first check",
     ` · ${stats.total.toLocaleString("ro-RO")} listings tracked · ${stats.priced_models} models priced`,
-    stats.ai_available ? ` · Claude ${stats.ai_used}/${stats.ai_limit} today` : " · Claude not installed",
+    !stats.ai_available ? " · Claude not installed"
+      : stats.ai_paused_until ? ` · Claude hit your plan's usage limit: ${stats.ai_queue} waiting, resumes ~${stats.ai_paused_until}`
+      : ` · Claude ${stats.ai_used} checks today` + (stats.ai_queue ? `, ${stats.ai_queue} in queue` : ""),
     stats.telegram ? "" : " · Telegram not set up",
     !stats.facebook.state ? " · Facebook not set up" :
       stats.facebook.state === "logged_out" ? " · Facebook logged out: run flipperbot facebook-login" :

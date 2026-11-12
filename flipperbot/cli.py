@@ -13,6 +13,7 @@
   ai <url|key>     run the Claude check on one stored listing now
   telegram-setup   find your Telegram chat id after you've messaged your bot
   stats            what's in the database
+  ebay-setup       add your free eBay developer keys, so estimates also use eBay listings
   claude-test      check that the bot can use Claude on this Mac (one tiny call, the way checks run)
   facebook-login   set up Facebook Marketplace: log in once with your SECOND account
   facebook-poll    one Facebook search run now (to test it), then exit
@@ -53,6 +54,7 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("make-app")
     sub.add_parser("open")
     sub.add_parser("dashboard")  # serve the dashboard only, without polling
+    sub.add_parser("ebay-setup")
     sub.add_parser("claude-test")
     sub.add_parser("facebook-login")
     sub.add_parser("facebook-poll")
@@ -103,6 +105,30 @@ def main(argv: list[str] | None = None) -> None:
                 threading.Event().wait()
             except KeyboardInterrupt:
                 pass
+
+    elif args.cmd == "ebay-setup":
+        from .sources import ebay
+
+        print("eBay prices come through eBay's official API. The keys are free:")
+        print("1. Go to https://developer.ebay.com and sign up (any eBay account works).")
+        print("2. Open 'Application Keysets' (from your name, top right), and create a PRODUCTION keyset.")
+        print("   (If it asks about marketplace account deletion notifications, choose to opt out: the bot")
+        print("    stores no eBay user data.)")
+        print("3. Copy the 'App ID (Client ID)' and the 'Cert ID (Client Secret)'.\n")
+        s.ebay_client_id = input("App ID (Client ID): ").strip()
+        s.ebay_client_secret = input("Cert ID (Client Secret): ").strip()
+        try:
+            got = ebay._search_api(db, s, "seiko skx007")
+        except Exception as e:
+            sys.exit(f"eBay didn't accept those keys ({str(e)[:150]}). Check them and run: flipperbot ebay-setup")
+        config.set_value("ebay_client_id", s.ebay_client_id)
+        config.set_value("ebay_client_secret", s.ebay_client_secret)
+        print(f"✓ eBay works ({len(got)} listings for a test search). Estimates now use eBay when OLX can't price a model.")
+        if autostart.running():
+            import os
+            import subprocess
+
+            subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{autostart.LABEL}"], capture_output=True)
 
     elif args.cmd == "claude-test":
         import subprocess
@@ -361,7 +387,7 @@ def _rescore(db: DB, s: config.Settings) -> None:
     for r in db.all():
         l = bot.row_to_listing(r)
         if bot.is_relevant(l):
-            bot.evaluate(db, l, s)
+            bot.evaluate(db, l, s, ebay_cached_only=True)
         else:
             db.conn.execute("UPDATE listings SET tier='bad', reason=? WHERE key=?", (f"not a {niches.get(l.niche).noun}", l.key))
     db.conn.commit()

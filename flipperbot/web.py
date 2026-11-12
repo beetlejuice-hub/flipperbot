@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from . import ai, niches, notify
 from .config import MAX_LISTING_AGE_DAYS, Settings
 from .db import DB, TIER_RANK
+from .pricecheck import price_links
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1"}
 # Claude checks you asked for, in the order you asked: one at a time, first in the list is running.
@@ -63,10 +64,6 @@ def _small_photo(u: str) -> str:
     return re.sub(r";s=\d+x\d+", ";s=400x400", u)
 
 
-_FILLER = {"ceas", "ceasuri", "barbatesc", "barbati", "dama", "de", "mana", "vand", "vând", "vînd", "original", "nou",
-           "stare", "foarte", "buna", "impecabil", "impecabila", "superb", "rar", "pentru", "si", "cu", "la", "in", "-", "–"}
-
-
 def _first_price(r: Any, db: DB | None) -> int | None:
     """The price it was first seen at, if it has dropped since: room to negotiate."""
     if db is None:
@@ -74,31 +71,6 @@ def _first_price(r: Any, db: DB | None) -> int | None:
     row = db.conn.execute(
         "SELECT price_ron FROM prices WHERE key=? AND price_ron IS NOT NULL ORDER BY seen_at LIMIT 1", (r["key"],)).fetchone()
     return row[0] if row and r["price_ron"] and row[0] > r["price_ron"] else None
-
-
-def price_query(r: Any) -> str:
-    """What to search to price this watch: the model the bot identified, else the title's key words."""
-    mk = r["model_key"] or ""
-    if "|" in mk:
-        return " ".join(dict.fromkeys(mk.replace("|", " ").split()))
-    words = [w for w in re.split(r"[\s,/!.()]+", (r["title"] or "").lower()) if w and w not in _FILLER]
-    return " ".join(words[:6])
-
-
-def price_links(r: Any) -> list[list[str]]:
-    """Free one-click price checks, no Claude: eBay sold listings (real sale prices), Chrono24 asking
-    prices, OLX and Okazii in Romania."""
-    from urllib.parse import quote_plus
-
-    q = price_query(r)
-    if not q:
-        return []
-    return [
-        ["eBay sold", f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(q)}&LH_Sold=1&LH_Complete=1"],
-        ["Chrono24", f"https://www.chrono24.com/search/index.htm?query={quote_plus(q)}"],
-        ["OLX", f"https://www.olx.ro/oferte/q-{quote_plus(q.replace(' ', '-'))}/"],
-        ["Okazii", f"https://www.google.com/search?q={quote_plus('site:okazii.ro ' + q)}"],
-    ]
 
 
 def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
@@ -114,6 +86,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "flags": json.loads(r["flags"] or "[]"), "delivery": bool(r["delivery"]),
         "photo": _small_photo(photos[0]) if photos else None, "photos": len(photos),
         "first_seen": r["first_seen"], "last_seen": r["last_seen"], "ai_at": r["ai_at"],
+        "ebay": json.loads(r["ebay"]) if r["ebay"] else None,
         "listed_at": r["created_at"] or None, "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
         "ai_running": bool(_queue) and _queue[0] == r["key"],
@@ -130,7 +103,7 @@ INTERESTING = f"""triage IS NULL AND hidden = 0 AND last_seen >= datetime('now',
          OR (tier = 'mid' AND (flags LIKE '%"lot"%' OR flags LIKE '%"naive"%' OR reason LIKE '%Claude will look%')))"""
 
 VIEWS = {
-    "interesting": (INTERESTING, "rank"),
+    "interesting": (INTERESTING, "posted"),  # newest posted first: that's where the deals are
     "deals": ("tier IN ('real_good','good') AND hidden=0", "rank"),
     "maybe": ("tier = 'mid' AND hidden=0", "rank"),
     "suspect": ("tier = 'suspect' AND hidden=0", "new"),
@@ -142,6 +115,7 @@ VIEWS = {
 ORDER = {
     "rank": "CASE tier WHEN 'real_good' THEN 4 WHEN 'good' THEN 3 WHEN 'mid' THEN 2 WHEN 'suspect' THEN 1 ELSE 0 END DESC, COALESCE(profit_ron,0) DESC, last_seen DESC",
     "new": "first_seen DESC",
+    "posted": "COALESCE(NULLIF(created_at, ''), first_seen) DESC",
     "ai": "ai_at IS NULL, ai_at DESC",
     "cheap": "price_ron ASC",
 }
@@ -435,7 +409,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
   <div class="tools">
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
-      <option value="">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option>
+      <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option>
     </select>
   </div>
 </div></header>
@@ -511,7 +485,8 @@ function aiBox(a, l) {
 // watch and at sold prices), else the bot's realistic range from similar listings. Profit from the low end.
 function priceBox(l) {
   const a = l.ai && !l.ai.error && l.ai.resale_ron_high ? l.ai : null;
-  let lo = l.value, hi = l.value_high || l.value, profit = l.profit, src = "realistic, from similar listings";
+  let lo = l.value, hi = l.value_high || l.value, profit = l.profit;
+  let src = (l.reason || "").startsWith("eBay:") ? `realistic, from ${l.ebay ? l.ebay.n + " " : ""}eBay listings` : "realistic, from similar listings";
   if (a) {
     hi = a.resale_ron_high; lo = a.resale_ron_low || hi; src = "Claude's estimate";
     profit = Math.round(lo - l.price - (a.repair_cost_ron || 0));
@@ -573,6 +548,8 @@ function card(l) {
         l.ai ? aiBox(l.ai, l) : null,
         l.price_links && l.price_links.length ? h("div", { class: "checks" }, "Check prices: ",
           l.price_links.flatMap(([name, href], i) => [i ? " · " : "", h("a", { href, target: "_blank", rel: "noopener noreferrer" }, name)])) : null,
+        l.ebay && !(l.reason || "").startsWith("eBay:") ? h("div", { class: "checks" },
+          `eBay (${l.ebay.n} listed, used): realistic ~${l.ebay.low.toLocaleString("ro-RO")}–${lei(l.ebay.high)}`) : null,
         h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX",
           l.first_price ? `price cut from ${lei(l.first_price)}` : "",
           l.listed_at ? `listed ${ago(l.listed_at)}` : "", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),

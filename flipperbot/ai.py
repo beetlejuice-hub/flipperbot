@@ -61,12 +61,13 @@ Then:
    - Price: far too low for the model and condition.
    If it's a vintage or inherited watch, also watch for redials (repainted dials) and franken watches (mixed parts).
 3. Condition: what's visibly wrong, and what a repair would need and roughly cost in Romania.
-4. Value: use web search (at most 4 searches: be targeted) to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
+4. Value: use web search (at most 4 searches: be targeted; one of them eBay SOLD listings for this exact model) to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
 5. Decide: buy, negotiate (and to what price), or skip.
 6. confidence: 0-100, how sure you are that this is a genuine watch AND a profitable flip at the asking or
    offer price. Be honest: with blurry photos, no caseback/movement photos or a vague description, stay low.
 
 Other listings by the same seller that the bot has seen: {seller_listings}
+{ebay_line}
 
 {lot_block}{old_block}Answer with ONLY one JSON object, no other text:
 {{
@@ -216,6 +217,17 @@ def download_photos(urls: list[str], folder: Path, max_photos: int = 8) -> list[
     return out
 
 
+def ebay_line(row: Any) -> str:
+    try:
+        e = json.loads(row["ebay"]) if "ebay" in row.keys() and row["ebay"] else None
+    except (TypeError, ValueError):
+        e = None
+    if not e:
+        return ""
+    return (f"eBay Germany right now (used, buy-it-now, asking prices): {e['n']} similar listings, median ask "
+            f"~{e['median_ask']} lei. That's asking, not sold: check sold prices too.\n")
+
+
 def seller_listings(db: DB, row: Any, limit: int = 10) -> str:
     if not row["seller_id"]:
         return "unknown"
@@ -303,6 +315,7 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         lot_block=lot_text if is_lot else "",
         old_block=old_text if flags & {"naive", "vintage", "pocket"} and not is_lot else "",
         seller_listings=seller_listings(db, row),
+        ebay_line=ebay_line(row),
     )
     lean = not db.kv_get("claude_no_lean_flags", False)
     try:

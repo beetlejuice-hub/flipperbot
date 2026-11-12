@@ -87,7 +87,7 @@ def recent_price_cut(db: DB, l: Listing, days: int = 14) -> bool:
         l.previous_price_ron and l.price_ron and l.price_ron < l.previous_price_ron)
 
 
-def evaluate(db: DB, l: Listing, s: Settings) -> Any:
+def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) -> Any:
     # OLX has its own "brand" field on watch listings; count it as part of the description.
     brand_field = l.params.get("brand") if isinstance(l.params.get("brand"), str) else ""
     ident = identify(l.title, f"{l.description} {brand_field}", l.niche)
@@ -105,6 +105,7 @@ def evaluate(db: DB, l: Listing, s: Settings) -> Any:
         if n >= 2:
             verdict.tier = "suspect"
             verdict.reason = f"seller has {n + 1} cheap luxury listings: likely replicas · " + verdict.reason
+    ebay_summary = with_ebay(db, l, ident, verdict, s, ebay_cached_only)
     age = listing_age_days(l.created_at)
     if age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good") and not recent_price_cut(db, l):
         # Up for months and still "cheap"? A real deal would be gone: overpriced, fake, or bait.
@@ -113,7 +114,40 @@ def evaluate(db: DB, l: Listing, s: Settings) -> Any:
     elif age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good"):
         verdict.reason = f"old listing ({age} days), but the price was just cut · " + verdict.reason
     db.set_verdict(l.key, ident, verdict)
+    db.conn.execute("UPDATE listings SET ebay=? WHERE key=?", (json.dumps(ebay_summary) if ebay_summary else None, l.key))
+    db.conn.commit()
     return db.get(l.key)
+
+
+def with_ebay(db: DB, l: Listing, ident: Any, verdict: Any, s: Settings, cached_only: bool = False) -> dict | None:
+    """When local listings can't price it, ask eBay (Germany, used) for this exact model. The range becomes
+    the estimate; at most "good" from eBay alone (an international asking-price market): a Telegram alert
+    still needs local data or Claude. Returns eBay's summary for the card, or None."""
+    from . import pricecheck
+    from .sources import ebay
+    from .tiers import repair_cost
+
+    if not ebay.enabled(s) or not ident.brand or ident.segment == "fashion" or not l.price_ron or l.price_ron > s.budget_ron:
+        return None
+    if ident.flags & {"lot", "wanted", "service", "replica", "part", "modded"} or verdict.tier == "suspect":
+        return None
+    if "|" not in (ident.model_key or "") and not ident.collectible:
+        return None  # "omega" alone: eBay can't price that either
+    summary = ebay.lookup(db, s, pricecheck.query_for(ident.model_key, l.title), cached_only=cached_only)
+    if not summary or verdict.est_value_ron is not None:
+        return summary  # local data already priced it: eBay is shown alongside
+    repair = repair_cost(ident, s)
+    profit = summary["low"] - l.price_ron - repair
+    discount = 1 - l.price_ron / summary["median_ask"]
+    verdict.est_value_ron, verdict.est_high_ron, verdict.profit_ron = summary["low"], summary["high"], profit
+    note = (f"eBay: {summary['n']} similar listed, realistic ~{summary['low']}–{summary['high']} lei, "
+            f"{round(discount * 100)}% under what they ask")
+    if discount >= s.good_discount and profit >= s.good_profit_ron:
+        verdict.tier = "good"
+    elif verdict.tier == "bad" and discount >= s.mid_discount and profit > 0:
+        verdict.tier = "mid"
+    verdict.reason = note + " · " + verdict.reason
+    return summary
 
 
 def process(db: DB, listings: list[Listing], s: Settings, *, alert: bool = True) -> list[Any]:
@@ -162,7 +196,8 @@ def fetch_all(searches: list[Search], s: Settings, pages: int = 1, log: Callable
         query, cat, key = (*search, "watches")[:3] if len(search) == 2 else search
         if i:
             time.sleep(random.uniform(*s.pause_between_requests_s))
-        got = list(olx.search(query, category_id=cat, pages=pages, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s))
+        n_pages = max(pages, s.feed_pages) if cat and not query else pages
+        got = list(olx.search(query, category_id=cat, pages=n_pages, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s))
         for l in got:
             l.niche = key
         log(f"  olx {niches.get(key).icon} {'category ' + cat if cat else repr(query)}: {len(got)}")

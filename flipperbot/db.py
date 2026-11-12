@@ -49,7 +49,7 @@ class DB:
         # Columns added after the first release: add them to older databases.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
         for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0", "niche TEXT DEFAULT 'watches'",
-                    "triage TEXT", "est_high_ron INTEGER"):  # your call on an Interesting listing: claude / skip / fake
+                    "triage TEXT", "est_high_ron INTEGER", "ebay TEXT"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()

@@ -117,6 +117,16 @@ date, not a paid "refresh" that pushes it back to the top) tops out at *maybe*, 
 in the last two weeks. Old listings never reach Interesting, Telegram or an automatic Claude check
 (`max_listing_age_days`).
 
+**Newest first.** OLX's own "newest" order is by last paid refresh, so the bot reads 3 pages of each watch
+category every poll (`feed_pages`) and judges by the real posting date; Facebook is searched newest
+first. The Interesting tab lists the newest posted first.
+
+**eBay.** With free eBay developer keys (`flipperbot ebay-setup`, 5 minutes), the bot looks a model up on
+eBay Germany (used, buy-it-now) when OLX listings can't price it: the card shows "eBay: N listed, realistic
+~X–Y lei" and Claude gets the numbers. eBay's free API only has asking prices (sold prices are for eBay
+partners), so the range is shaded down, and eBay alone never makes a deal "real good". Real sold prices
+are the "eBay sold" link on every card, and Claude searches them when it checks.
+
 **Checking prices without Claude.** Every card has *Check prices: eBay sold · Chrono24 · OLX · Okazii*,
 searching the model the bot identified: eBay's sold listings are real sale prices, the others what
 people ask. Cards also say how long a listing has been up and if its price was cut (room to negotiate).

@@ -61,6 +61,9 @@ class Settings:
     # Polling
     poll_every_min: tuple[int, int] = (5, 10)  # random wait between polls
     searches_per_poll: int = 3  # random terms from the pool, plus the watch category feeds
+    # OLX's "newest" order is by last paid refresh, so most of page 1 is old listings bumped back up;
+    # 3 pages per watch category catch everything newly posted between two polls.
+    feed_pages: int = 3
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
     niches: list[str] = field(default_factory=lambda: ["watches"])  # what to hunt (see niches.py)
@@ -115,6 +118,11 @@ class Settings:
     # on the same Wi-Fi, at http://<your-mac-name>.local:<port> (anyone on that Wi-Fi can see it).
     dashboard_port: int = 8789
     dashboard_lan: bool = False
+
+    # eBay (official Browse API, free keys from developer.ebay.com: `flipperbot ebay-setup`)
+    ebay_client_id: str = ""
+    ebay_client_secret: str = ""
+    ebay_daily_calls: int = 300
 
     # Telegram
     telegram_token: str = ""

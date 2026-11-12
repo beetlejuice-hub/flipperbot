@@ -18,9 +18,16 @@ import statistics
 from dataclasses import dataclass
 
 from .config import Settings
-from .identify import Identity
+from .identify import Identity, _family_re, _smart_words, normalize
 from .models import Listing
 from .niches import get as niche_of
+
+
+# Below these a current smartwatch is almost surely a clone. Older models (Series 3, SE) are just cheap.
+SMART_FLOORS = {
+    "apple watch|ultra 2": 1000, "apple watch|ultra": 900, "apple watch|series 10": 500, "apple watch|series 9": 450,
+    "samsung galaxy watch|watch ultra": 600, "garmin|fenix 8": 1200, "garmin|epix pro": 1000,
+}
 
 
 @dataclass
@@ -116,6 +123,12 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
     ):
         why = "Japanese/Chinese movement or 'premium quality'" if "fake_signs" in f else "shop talk: many models, gift box"
         return Verdict("suspect", f"{ident.brand.name} sold the way replicas are ({why})")
+
+    # --- smartwatches: only current models are worth faking ------------------------
+    floor = SMART_FLOORS.get(ident.model_key or "")
+    in_title = bool(ident.family) and bool(_family_re(ident.family).search(_smart_words(normalize(l.title))))  # not "fits a Fenix 8"
+    if floor and in_title and price < floor and ident.brand_in_title and "broken" not in f:
+        return Verdict("suspect", f"{ident.brand.name} {ident.family} at {price} lei: far too cheap for a real one (clone?)")
 
     # --- too cheap to be real ---------------------------------------------------
     # A luxury name only in the description ("I also have a Rolex", "like an Omega"): no accusation, a look.
@@ -220,3 +233,23 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
             return Verdict("mid", f"{ident.model_key} at {price} lei, no price history yet")
         return Verdict("bad", f"{ident.model_key} at {price} lei, no price history yet")
     return Verdict("bad", f"{name}: nothing stands out")
+
+
+def liquidity(ages: list[int]) -> dict | None:
+    """How fast this model sells, estimated from its listings still for sale: how long they've been up
+    (models that sell fast don't sit) and how many there are (competition). None with fewer than 3.
+    A proxy, not measured sales: it gets better as the bot's history grows."""
+    if len(ages) < 3:
+        return None
+    a = sorted(ages)
+    median_age = round(statistics.median(a))
+    n = len(a)
+    if median_age <= 20 and n <= 25:
+        label = "fast"
+    elif median_age <= 60:
+        label = "normal"
+    elif median_age <= 150 and n < 40:
+        label = "slow"
+    else:
+        label = "very slow"
+    return {"label": label, "median_days": median_age, "for_sale": n}

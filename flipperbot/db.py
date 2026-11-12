@@ -49,7 +49,7 @@ class DB:
         # Columns added after the first release: add them to older databases.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
         for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0", "niche TEXT DEFAULT 'watches'",
-                    "triage TEXT", "est_high_ron INTEGER", "ebay TEXT"):  # your call on an Interesting listing: claude / skip / fake
+                    "triage TEXT", "est_high_ron INTEGER", "ebay TEXT", "liquidity TEXT"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -138,6 +138,28 @@ class DB:
         self.conn.commit()
 
     # -- price book ------------------------------------------------------------
+
+    def comparable_ages(self, model_key: str, exclude_key: str | None = None) -> list[int]:
+        """How many days each comparable listing still for sale (seen in the last 14 days) has been up."""
+        from datetime import datetime
+
+        rows = self.conn.execute(
+            """SELECT key, created_at, flags FROM listings WHERE model_key=? AND COALESCE(created_at, '') != ''
+               AND last_seen >= datetime('now', '-14 days')""",
+            (model_key,),
+        ).fetchall()
+        bad = {"broken", "lot", "replica", "part", "wanted", "service"}
+        out = []
+        for r in rows:
+            if r["key"] == exclude_key or bad & set(json.loads(r["flags"] or "[]")):
+                continue
+            try:
+                created = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            now = datetime.now(created.tzinfo) if created.tzinfo else datetime.now()
+            out.append(max(0, (now - created).days))
+        return out
 
     def comparable_prices(self, model_key: str, exclude_key: str | None = None, days: int = 365) -> list[int]:
         """Asking prices of working, single, real items of this model."""

@@ -99,6 +99,12 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
         head += f" → sells for {money(lo, hi)}"
     if profit and profit > 0:
         head += f" (+{profit:,})".replace(",", ".")
+    try:
+        liq = json.loads(row["liquidity"]) if "liquidity" in row.keys() and row["liquidity"] else None
+    except (TypeError, ValueError):
+        liq = None
+    if liq:
+        head += f" · ⏱ sells {liq['label']}"
     lines = [head + lot, f"<b>{e(row['title'][:80])}</b>"]
     if ai and "error" not in ai:
         verdict = (ai.get("verdict") or "?").upper()

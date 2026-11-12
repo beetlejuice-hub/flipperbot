@@ -106,6 +106,16 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
             verdict.tier = "suspect"
             verdict.reason = f"seller has {n + 1} cheap luxury listings: likely replicas · " + verdict.reason
     ebay_summary = with_ebay(db, l, ident, verdict, s, ebay_cached_only)
+    liq = None
+    if "|" in (ident.model_key or ""):  # only a precisely named model says anything about how it sells
+        from .tiers import liquidity
+
+        liq = liquidity(db.comparable_ages(ident.model_key, exclude_key=l.key))
+    if liq and verdict.tier in ("good", "real_good") and liq["label"] in ("slow", "very slow"):
+        # A cheap buy you can't sell isn't a deal: similar ones sit for months.
+        verdict.tier = "mid" if liq["label"] == "very slow" or verdict.tier == "good" else "good"
+        verdict.reason = (f"sells {liq['label']}: similar ones have been up ~{liq['median_days']} days, "
+                          f"{liq['for_sale']} for sale · " + verdict.reason)
     age = listing_age_days(l.created_at)
     if age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good") and not recent_price_cut(db, l):
         # Up for months and still "cheap"? A real deal would be gone: overpriced, fake, or bait.
@@ -114,7 +124,8 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     elif age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good"):
         verdict.reason = f"old listing ({age} days), but the price was just cut · " + verdict.reason
     db.set_verdict(l.key, ident, verdict)
-    db.conn.execute("UPDATE listings SET ebay=? WHERE key=?", (json.dumps(ebay_summary) if ebay_summary else None, l.key))
+    db.conn.execute("UPDATE listings SET ebay=?, liquidity=? WHERE key=?",
+                    (json.dumps(ebay_summary) if ebay_summary else None, json.dumps(liq) if liq else None, l.key))
     db.conn.commit()
     return db.get(l.key)
 

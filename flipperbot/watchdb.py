@@ -122,9 +122,11 @@ BRANDS: list[Brand] = [
     Brand("Chaika", "soviet", ("ceaika",), 0, ()),
     Brand("Zim", "soviet", (), 0, ()),
     # --- smartwatches: resell well when they're the real thing, unlocked ----------------
-    Brand("Apple Watch", "smart", ("apple watch", "iwatch", "i watch", "applewatch"), 400,
+    Brand("Apple Watch", "smart", ("apple watch", "iwatch", "i watch", "applewatch"), 0,  # floors per model: tiers.SMART_FLOORS
           ("ultra 2", "ultra", "series 10", "series 9", "series 8", "series 7", "series 6", "series 5", "series 4", "se 2", "se")),
-    Brand("Garmin", "smart", (), 0, ("fenix 8", "fenix 7x", "fenix 7 pro", "fenix 7", "fenix 6x", "fenix 6", "epix pro", "epix",
+    Brand("Garmin", "smart", (), 0, ("fenix 8", "fenix 7x pro", "fenix 7s pro", "fenix 7 pro", "fenix 7x", "fenix 7s", "fenix 7",
+                                     "fenix 6x pro", "fenix 6s pro", "fenix 6 pro", "fenix 6x", "fenix 6s", "fenix 6", "fenix 5",
+                                     "epix pro", "epix",
                                      "forerunner 965", "forerunner 955", "forerunner 945", "forerunner 265", "forerunner 255",
                                      "forerunner 165", "forerunner 55", "venu 3", "venu 2 plus", "venu 2", "venu sq",
                                      "instinct 2x", "instinct 2", "instinct", "enduro", "vivoactive 5", "vivoactive 4",

@@ -164,7 +164,7 @@ WANTED = ["cumpar", "cumparam", "caut ceas", "caut ceasuri", "achizitionez", "ac
 SERVICE = ["reparatii ceasuri", "service ceasuri", "reparam ceasuri", "schimb baterii", "atelier"]
 PART_START = [
     "curea", "bratara", "cutie", "geam", "coroana", "mecanism", "cadran", "baterie", "baterii",
-    "suport", "husa", "folie", "incarcator", "cablu", "cutii", "zale", "catarama",
+    "suport", "husa", "folie", "incarcator", "cablu", "cabluri", "cutii", "zale", "catarama",
     "capac", "capace", "capacitori", "cadrane", "mecanisme", "coroane", "geamuri", "ace", "curele",
     "bratari", "accesorii", "accesoriu", "piese", "sticla",
     "parasolar", "filtru", "filtre", "adaptor", "inel", "inele", "geanta", "trepied", "blit", "acumulator",
@@ -180,6 +180,10 @@ LOT = ["lot", "loturi", "colectie de ceasuri", "colectie ceasuri", "mai multe ce
 LOT_COUNT = re.compile(r"(?<![a-z0-9])(\d{1,3})\s*(?:buc|bucati|ceasuri|bc)(?![a-z])")
 
 
+# Accessories wherever the word sits in the title ("Huse antisoc ... pentru Apple Watch").
+ACCESSORY_ANYWHERE = ["pentru apple watch", "for apple watch", "huse", "husa pentru", "husa protectie", "statie incarcare",
+                      "statie de incarcare", "cablu incarcare", "protectie ecran", "folie protectie", "curea pentru",
+                      "curele pentru", "bratara pentru", "bratari pentru", "schimbare la carcasa"]
 MECHANICAL = ["mecanic", "mecanica", "intoarcere manuala", "remontare manuala", "intoarcere", "manual wind",
               "rubine", "rubin", "jewels", "rubis", "hand wound", "handaufzug"]
 QUARTZ = ["quartz", "cuart", "cuartz", "baterie", "battery"]
@@ -233,10 +237,16 @@ def _without_trade_talk(description: str) -> str:
     return " ".join(p for p in parts if not _TRADE.search(normalize(p)))
 
 
+def _smart_words(t: str) -> str:
+    """Romanian smartwatch names: "seria 8"/"serie 8" -> "series 8", "apple watch 5" -> "apple watch series 5"."""
+    t = re.sub(r"(?<![a-z])seri[ae](?= ?\d)", "series", t)
+    return re.sub(r"(apple watch|iwatch) (\d{1,2})(?![0-9])", r"\1 series \2", t)
+
+
 def identify(title: str, description: str = "", niche: str = "watches") -> Identity:
-    title = _SWAP.sub("", normalize(title)).strip() or title
+    title = _smart_words(_SWAP.sub("", normalize(title)).strip() or title)
     title_n = normalize(title)
-    full_n = normalize(f"{title} . {description}")
+    full_n = _smart_words(normalize(f"{title} . {description}"))
 
     # The title is what the seller is selling; the description often name-drops
     # other brands ("like Rolex"), so it only counts if the title has none.
@@ -252,7 +262,8 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
     family = None
     if brand:
         # Title first: descriptions mention other models ("also have a Seamaster").
-        for text in (title_n, full_n):
+        # Smartwatch descriptions name other models ("like a Fenix 8", "fits Ultra"): title only.
+        for text in ((title_n,) if brand.segment == "smart" else (title_n, full_n)):
             family = next((fam for fam in brand.families if _family_re(fam).search(text)), None)
             if family:
                 break
@@ -276,8 +287,8 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
         flags.add("wanted")
     if _any(title_n, SERVICE):
         flags.add("service")
-    first = title_n.split(" ", 1)[0] if title_n else ""
-    if first in PART_START:
+    first = re.split(r"[^a-z0-9]+", title_n)[0] if title_n else ""  # "husa/carcasa ..." -> "husa"
+    if first in PART_START or _any(title_n, ACCESSORY_ANYWHERE):
         flags.add("part")
     if _any(full_n, BOX_PAPERS):
         flags.add("box_papers")

@@ -219,6 +219,17 @@ def download_photos(urls: list[str], folder: Path, max_photos: int = 8) -> list[
     return out
 
 
+def liquidity_line(row: Any) -> str:
+    try:
+        q = json.loads(row["liquidity"]) if "liquidity" in row.keys() and row["liquidity"] else None
+    except (TypeError, ValueError):
+        q = None
+    if not q:
+        return ""
+    return (f"How fast this model sells on OLX (bot's estimate): {q['label']}; similar listings have been up "
+            f"~{q['median_days']} days, {q['for_sale']} for sale. Factor in how long reselling would take.\n")
+
+
 def ebay_line(row: Any) -> str:
     try:
         e = json.loads(row["ebay"]) if "ebay" in row.keys() and row["ebay"] else None
@@ -317,7 +328,7 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         lot_block=lot_text if is_lot else "",
         old_block=old_text if flags & {"naive", "vintage", "pocket"} and not is_lot else "",
         seller_listings=seller_listings(db, row),
-        ebay_line=ebay_line(row),
+        ebay_line=ebay_line(row) + liquidity_line(row),
     )
     lean = not db.kv_get("claude_no_lean_flags", False)
     try:

@@ -87,6 +87,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "photo": _small_photo(photos[0]) if photos else None, "photos": len(photos),
         "first_seen": r["first_seen"], "last_seen": r["last_seen"], "ai_at": r["ai_at"],
         "ebay": json.loads(r["ebay"]) if r["ebay"] else None,
+        "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
         "listed_at": r["created_at"] or None, "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
         "ai_running": bool(_queue) and _queue[0] == r["key"],
@@ -384,6 +385,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .ai .lot { display: flex; flex-direction: column; gap: 2px; }
 .v-buy { color: var(--rg); } .v-negotiate { color: var(--mid); } .v-skip { color: var(--sus); }
 .checks { font-size: 12.5px; color: var(--muted); }
+.liq { font-size: 13px; font-weight: 600; } .liq span { font-weight: 400; color: var(--muted); }
+.liq-fast { color: var(--rg); } .liq-normal { color: var(--g); } .liq-slow { color: var(--mid); } .liq-very-slow { color: var(--sus); }
 .checks a { color: var(--ink); }
 .meta { color: var(--muted); font-size: 12px; margin-top: auto; padding-top: 4px; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -548,6 +551,8 @@ function card(l) {
         l.ai ? aiBox(l.ai, l) : null,
         l.price_links && l.price_links.length ? h("div", { class: "checks" }, "Check prices: ",
           l.price_links.flatMap(([name, href], i) => [i ? " · " : "", h("a", { href, target: "_blank", rel: "noopener noreferrer" }, name)])) : null,
+        l.liquidity ? h("div", { class: "liq liq-" + l.liquidity.label.replace(" ", "-") },
+          `⏱ sells ${l.liquidity.label}`, h("span", {}, ` · similar ones up ~${l.liquidity.median_days} days, ${l.liquidity.for_sale} for sale`)) : null,
         l.ebay && !(l.reason || "").startsWith("eBay:") ? h("div", { class: "checks" },
           `eBay (${l.ebay.n} listed, used): realistic ~${l.ebay.low.toLocaleString("ro-RO")}–${lei(l.ebay.high)}`) : null,
         h("div", { class: "meta" }, [l.source === "facebook" ? "Facebook" : "OLX",

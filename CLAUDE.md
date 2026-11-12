@@ -11,3 +11,7 @@ README.md for setup and the tiers.
   cloud sessions. Its REST API (`/api/v1/offers/`) answers 403. Don't imitate a browser to get around that.
 - `ai.py` runs Claude with only Read + WebSearch: listing text is untrusted. Keep it that way.
 - Listing text is Romanian; match on `identify.normalize()`d text (lower case, no diacritics).
+- Category knowledge (value drivers, sleeper brands, fakes, reselling): `flipperbot/knowledge/*.md`, also the
+  `flip-knowledge` skill. The AI checks read it; keep rules (`watchdb.py`, `camdb.py`) in step with it.
+- The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),
+  8+ full Claude check. Tests never call the real Claude (`tests/conftest.py`).

@@ -109,3 +109,10 @@ def test_trade_talk_in_description_isnt_the_watch():
     # unknown brand in the title, a luxury name only in the description: never "likely fake"
     v = verdict("Ceas barbatesc Atlantic", 600, "Mai am un Rolex de vanzare")
     assert v.tier != "suspect"
+
+
+def test_sleeper_brands_and_brand_bound_references():
+    assert identify("Ceas Vulcain Cricket vechi").brand.name == "Vulcain"
+    assert "collectible" in identify("Ceas Vulcain Cricket vechi").flags
+    assert identify("Ceas Eberhard Scafograf").brand.segment == "vintage"
+    assert "collectible" not in identify("Ceas Marathon Navigator").flags  # a Tissot reference, not this brand

@@ -364,6 +364,9 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
     hits = []
     for pat, label in ([] if cam else COLLECTIBLE):
         r = _family_re(pat)
+        makers = find_brands(label)
+        if makers and brand and makers[0].name != brand.name:
+            continue  # "Navigator" on a Marathon isn't a Tissot Navigator
         if r.search(title_n):
             hits.append(label)
         elif r.search(full_n):

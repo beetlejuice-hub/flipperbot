@@ -35,6 +35,10 @@ Then type `claude`, log in, type `/exit`. The bot uses it by itself from then on
 
 ## Using it
 
+**One click: the Flipperbot app** (in Applications, Launchpad or Spotlight; drag it to the Dock to keep
+it there). Clicking it starts the bot if it isn't running and opens the dashboard. The bot also starts
+by itself whenever you log in, so mostly you only click it to look at deals. (No app yet? `flipperbot make-app`.)
+
 **Dashboard: http://localhost:8789** on the Mac (bookmark it; if another app already uses that port, it takes the next free one; `flipperbot open` always finds it). Every deal with its photo, price,
 why the bot rated it, and Claude's verdict. Tabs for Deals, Maybe, Likely fake, Starred, Claude
 checked; buttons to star, hide, or *Ask Claude* about any listing. It's served by the bot itself,
@@ -53,7 +57,7 @@ From Terminal:
 
 | command | what it does |
 |---|---|
-| `flipperbot open` | open the dashboard |
+| `flipperbot open` | open the dashboard (same as clicking the app, without starting the bot) |
 | `flipperbot show` | the best listings found, with why |
 | `flipperbot show --tier mid -n 100` | one tier |
 | `flipperbot ai <olx link>` | Claude-check one listing now |

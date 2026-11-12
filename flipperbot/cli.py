@@ -1,5 +1,7 @@
 """flipperbot <command>
 
+  app              what the Flipperbot app runs: start the bot if it isn't running, open the dashboard
+  make-app         (Mac) put the one-click Flipperbot app in Applications
   open             open the dashboard in your browser (usually http://localhost:8789)
   setup            first-time setup: Telegram (guided) and a check that Claude Code is there
   run              poll forever (every 5-10 min), alert, AI-check, daily summary at 20:00
@@ -46,6 +48,8 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("target")
     sub.add_parser("telegram-setup")
     sub.add_parser("stats")
+    sub.add_parser("app")
+    sub.add_parser("make-app")
     sub.add_parser("open")
     sub.add_parser("dashboard")  # serve the dashboard only, without polling
     sub.add_parser("facebook-login")
@@ -64,6 +68,23 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "setup":
         _setup(s)
+
+    elif args.cmd == "app":
+        import subprocess
+        import time
+
+        if sys.platform == "darwin" and not autostart.running():
+            autostart.enable()
+        for _ in range(40):  # the bot needs a few seconds to put its dashboard up
+            if web.is_flipperbot(web.url(s)):
+                break
+            time.sleep(1)
+        subprocess.run(["open" if sys.platform == "darwin" else "xdg-open", web.url(s)], capture_output=True)
+
+    elif args.cmd == "make-app":
+        from . import macapp
+
+        print(f"Made {macapp.make()}: click it to start flipperbot and open the dashboard. Drag it to the Dock to keep it there.")
 
     elif args.cmd in ("open", "dashboard"):
         import subprocess
@@ -281,7 +302,15 @@ def _setup(s: config.Settings) -> None:
                     break
                 time.sleep(1)
             subprocess.run(["open", web.url(s)], capture_output=True)
-            print(f"\nYour dashboard: {web.url(s)}  (it just opened in your browser; `flipperbot open` brings it back)")
+            print(f"\nYour dashboard: {web.url(s)}  (it just opened in your browser)")
+            try:
+                from . import macapp
+
+                app = macapp.make()
+                print(f"One-click app: {app}. Click Flipperbot (in Applications, Launchpad or Spotlight) to open the")
+                print("dashboard, starting the bot first if it isn't running. Drag it to the Dock to keep it there.")
+            except Exception as e:
+                print(f"(Couldn't make the Flipperbot app: {e}. `flipperbot make-app` tries again.)")
             return
     print("All set. Start the bot with:  flipperbot run")
 

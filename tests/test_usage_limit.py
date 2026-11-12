@@ -48,3 +48,26 @@ def test_model_and_fewer_photos():
 def test_old_limit_errors_dont_count_as_checked():
     assert ai.is_limit_error({"error": "Claude AI usage limit reached|1731430800"})
     assert not ai.is_limit_error({"error": "timeout"})
+
+
+def test_lean_call_and_fallback_for_older_claude(tmp_path, monkeypatch):
+    s = Settings()
+    monkeypatch.setattr(Settings, "photos_dir", property(lambda self: tmp_path))
+    monkeypatch.setattr(ai, "log_call", lambda *a: None)
+    db = DB(":memory:")
+    bot.process(db, [olx.parse_offer(offer(1, "Ceas Seiko SKX007", 400))], s, alert=False)
+    monkeypatch.setattr(ai, "available", lambda s: True)
+    calls = []
+
+    def run(args, **kw):
+        calls.append(args)
+        if "--tools" in args:
+            return subprocess.CompletedProcess(args, 1, "", "error: unknown option '--tools'")
+        return subprocess.CompletedProcess(args, 0, json.dumps({"result": '{"verdict": "skip", "watches": []}'}), "")
+
+    monkeypatch.setattr(ai.subprocess, "run", run)
+    assert ai.check(db, db.get("olx:1"), s)["verdict"] == "skip"
+    assert "--tools" in calls[0] and "--system-prompt" in calls[0] and "--tools" not in calls[1]
+    assert db.kv_get("claude_no_lean_flags") is True  # remembered: plain calls from now on
+    lean = ai.CLAUDE_ARGS("claude", "sonnet")
+    assert lean[lean.index("--tools") + 1] == "Read,WebSearch" and "Bash" in lean[lean.index("--disallowedTools") + 1:]

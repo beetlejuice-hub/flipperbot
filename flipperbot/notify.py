@@ -97,7 +97,9 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
     from . import niches
 
     icon = niches.get(row["niche"] if "niche" in row.keys() else None).icon
-    head = f"{icon} {EMOJI.get(row['tier'], '')} <b>{row['price_ron']:,} lei</b>".replace(",", ".")
+    score = row["score"] if "score" in row.keys() and row["score"] is not None else None
+    head = f"{icon} <b>{score}/10</b> · <b>{row['price_ron']:,} lei</b>".replace(",", ".") if score is not None else \
+        f"{icon} {EMOJI.get(row['tier'], '')} <b>{row['price_ron']:,} lei</b>".replace(",", ".")
     if lo:
         head += f" → sells for {money(lo, hi)}"
     if profit and profit > 0:

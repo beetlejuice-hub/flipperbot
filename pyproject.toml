@@ -21,3 +21,4 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["real_quick: the test drives the quick AI step itself (with a stand-in for Claude)"]

@@ -90,6 +90,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
         "listed_at": r["created_at"] or None, "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
+        "score": r["score"], "score_why": r["score_why"],
         "ai_running": bool(_queue) and _queue[0] == r["key"],
         "ai_queued": _queue.index(r["key"]) if r["key"] in _queue[1:] else None,  # how many ahead
     }
@@ -97,24 +98,28 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
 
 # What the bot finds interesting and you haven't decided on yet: deals, lots, old watches whose model
 # isn't clear, sellers who don't know what they have. Only recently seen ones (still for sale).
-INTERESTING = f"""triage IS NULL AND hidden = 0 AND last_seen >= datetime('now', '-3 days')
+# Interesting: score 5+ that you haven't decided on, still for sale and freshly posted.
+INTERESTING = f"""triage IS NULL AND hidden = 0 AND COALESCE(score, 0) >= 5 AND last_seen >= datetime('now', '-3 days')
     AND (COALESCE(created_at, '') = '' OR substr(created_at, 1, 10) >= date('now', '-{MAX_LISTING_AGE_DAYS} days')
-         OR reason LIKE '%price was just cut%')
-    AND (tier IN ('real_good', 'good')
-         OR (tier = 'mid' AND (flags LIKE '%"lot"%' OR flags LIKE '%"naive"%' OR reason LIKE '%Claude will look%')))"""
+         OR reason LIKE '%price was just cut%')"""
 
 VIEWS = {
-    "interesting": (INTERESTING, "posted"),  # newest posted first: that's where the deals are
-    "deals": ("tier IN ('real_good','good') AND hidden=0", "rank"),
-    "maybe": ("tier = 'mid' AND hidden=0", "rank"),
-    "suspect": ("tier = 'suspect' AND hidden=0", "new"),
+    "interesting": (INTERESTING, "rank"),
+    "top": ("COALESCE(score, 0) >= 8 AND hidden=0", "rank"),
+    "mid": ("score BETWEEN 5 AND 7 AND hidden=0", "rank"),
+    "low": ("score BETWEEN 1 AND 4 AND hidden=0", "posted"),
+    "removed": ("score = 0 AND hidden=0", "posted"),
     "starred": ("starred=1", "rank"),
     "checked": ("ai IS NOT NULL", "ai"),
-    "new": ("tier IN ('real_good','good','mid','suspect') AND hidden=0", "new"),
     "hidden": ("hidden=1", "new"),
+    # older links
+    "deals": ("COALESCE(score, 0) >= 6 AND hidden=0", "rank"),
+    "maybe": ("score BETWEEN 3 AND 5 AND hidden=0", "rank"),
+    "suspect": ("tier = 'suspect' AND hidden=0", "new"),
+    "new": ("COALESCE(score, 0) > 0 AND hidden=0", "new"),
 }
 ORDER = {
-    "rank": "CASE tier WHEN 'real_good' THEN 4 WHEN 'good' THEN 3 WHEN 'mid' THEN 2 WHEN 'suspect' THEN 1 ELSE 0 END DESC, COALESCE(profit_ron,0) DESC, last_seen DESC",
+    "rank": "COALESCE(score, 0) DESC, COALESCE(NULLIF(created_at, ''), first_seen) DESC, COALESCE(profit_ron,0) DESC",
     "new": "first_seen DESC",
     "posted": "COALESCE(NULLIF(created_at, ''), first_seen) DESC",
     "ai": "ai_at IS NULL, ai_at DESC",
@@ -143,6 +148,8 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
     return {
         "total": c.execute(f"SELECT COUNT(*) FROM listings WHERE 1=1 {nf}", na).fetchone()[0],
         "counts": {t: counts.get(t, 0) for t in TIER_RANK},
+        "bands": dict(c.execute(f"""SELECT CASE WHEN score >= 8 THEN 'top' WHEN score >= 5 THEN 'mid' WHEN score >= 1 THEN 'low'
+                                     ELSE 'removed' END b, COUNT(*) FROM listings WHERE hidden=0 {nf} GROUP BY b""", na).fetchall()),
         "starred": c.execute(f"SELECT COUNT(*) FROM listings WHERE starred=1 {nf}", na).fetchone()[0],
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
@@ -363,6 +370,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.score { font-size: 15px; font-weight: 800; padding: 2px 9px; border-radius: 8px; font-variant-numeric: tabular-nums; }
+.shi { color: var(--bg); background: var(--rg); } .smid { color: var(--g); background: var(--g-bg); }
+.slo { color: var(--bad); background: var(--bad-bg); } .szero { color: var(--sus); background: var(--sus-bg); } .sx { color: var(--muted); }
+.why { font-size: 12px; color: var(--muted); }
 .pill { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
 .t-real_good { color: var(--rg); background: var(--rg-bg); } .t-good { color: var(--g); background: var(--g-bg); }
 .t-mid { color: var(--mid); background: var(--mid-bg); } .t-suspect { color: var(--sus); background: var(--sus-bg); }
@@ -421,17 +432,19 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 <script>
 const TABS = [
   ["interesting", "Interesting", s => s.interesting],
-  ["deals", "Deals", s => s.counts.real_good + s.counts.good],
-  ["maybe", "Maybe", s => s.counts.mid],
-  ["suspect", "Likely fake", s => s.counts.suspect],
+  ["top", "8–10", s => s.bands.top || 0],
+  ["mid", "5–7", s => s.bands.mid || 0],
+  ["low", "1–4", s => s.bands.low || 0],
+  ["removed", "Removed (0)", s => s.bands.removed || 0],
   ["starred", "Starred", s => s.starred],
   ["checked", "Claude checked", null],
-  ["new", "Newest", null],
   ["hidden", "Hidden", null],
 ];
 const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "likely fake", bad: "bad" };
 const EMPTY = {
-  interesting: "Nothing new to look at. The bot checks OLX every 5–10 minutes; interesting finds land here.",
+  interesting: "Nothing scored 5+ that you haven't decided on. The bot checks every 5–10 minutes; good finds land here.",
+  top: "Nothing at 8–10 yet: those need an AI to agree.", mid: "Nothing at 5–7.", low: "Nothing at 1–4.",
+  removed: "Nothing removed.",
   deals: "No deals yet. The bot checks OLX every 5–10 minutes; good finds land here and on Telegram.",
   maybe: "Nothing to look at twice yet.", suspect: "No likely fakes.", starred: "Star a listing to keep it here.",
   checked: "Nothing checked by Claude yet. Press “Send to Claude” on any listing.", new: "Nothing yet.", hidden: "Nothing hidden.",
@@ -548,7 +561,11 @@ function card(l) {
     el.replaceChildren(
       h("a", { class: "ph", href: l.url, target: "_blank", rel: "noopener noreferrer" }, img),
       h("div", { class: "body" },
-        h("div", { class: "row" }, h("span", { class: "pill t-" + l.tier }, LABEL[l.tier] || l.tier)),
+        h("div", { class: "row" },
+          h("span", { class: "score s" + (l.score == null ? "x" : l.score >= 8 ? "hi" : l.score >= 5 ? "mid" : l.score >= 1 ? "lo" : "zero") },
+            l.score == null ? "–" : `${l.score}/10`),
+          h("span", { class: "pill t-" + l.tier }, LABEL[l.tier] || l.tier)),
+        l.score_why ? h("div", { class: "why" }, l.score_why) : null,
         priceBox(l),
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),

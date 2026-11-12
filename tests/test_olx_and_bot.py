@@ -79,6 +79,7 @@ def setup_deal(s):
 def test_without_claude_nothing_is_sent_and_the_deal_waits(capsys):
     s = Settings()
     s.ai_auto = True  # these test the automatic mode
+    s.ai_quick = False  # the full check by tier, as before the 0-10 score
     s.claude_bin = "no-such-claude"
     db, for_ai, deal = setup_deal(s)
 
@@ -98,7 +99,9 @@ def test_without_claude_nothing_is_sent_and_the_deal_waits(capsys):
 
 def deliver_with(monkeypatch, verdict):
     s = Settings()
+    s.ai_quick = False
     s.ai_auto = True  # these test the automatic mode
+    s.ai_quick = False  # the full check by tier, as before the 0-10 score
     db, _, _ = setup_deal(s)
     order = []
 
@@ -143,6 +146,7 @@ def test_unconfirmed_deals_stay_on_the_dashboard(monkeypatch):
 def test_mid_rejudged_on_price_drop():
     s = Settings()
     s.ai_auto = True  # these test the automatic mode
+    s.ai_quick = False  # the full check by tier, as before the 0-10 score
     db = DB(":memory:")
     market = [olx.parse_offer(offer(100 + i, "Ceas Orient Bambino", p)) for i, p in enumerate([600, 650, 600, 620, 640])]
     bot.process(db, market, s)
@@ -175,6 +179,7 @@ def test_dashboard_and_wall_clocks_are_not_watches():
 def test_replica_dealer_pattern():
     s = Settings()
     s.ai_auto = True  # these test the automatic mode
+    s.ai_quick = False  # the full check by tier, as before the 0-10 score
     db = DB(":memory:")
     market = [olx.parse_offer(offer(100 + i, "TAG Heuer Carrera Calibre 5", p)) for i, p in enumerate([11000, 12000, 11500, 12500, 11800])]
     for l in market:
@@ -191,6 +196,7 @@ def test_replica_dealer_pattern():
 
 def test_by_default_only_real_good_deals_are_checked_by_themselves(monkeypatch):
     s = Settings()
+    s.ai_quick = False
     assert s.ai_auto is False and s.ai_auto_real_good is True
     db, _, _ = setup_deal(s)
     checked, sent = [], []

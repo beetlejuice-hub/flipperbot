@@ -124,9 +124,13 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     elif age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good"):
         verdict.reason = f"old listing ({age} days), but the price was just cut · " + verdict.reason
     db.set_verdict(l.key, ident, verdict)
-    db.conn.execute("UPDATE listings SET ebay=?, liquidity=? WHERE key=?",
-                    (json.dumps(ebay_summary) if ebay_summary else None, json.dumps(liq) if liq else None, l.key))
+    from .scoring import rule_score
+
+    rs, rwhy = rule_score(verdict.tier, ident.flags, verdict.reason, verdict.profit_ron, liq, age, s.good_profit_ron)
+    db.conn.execute("UPDATE listings SET ebay=?, liquidity=?, rule_score=?, rule_why=? WHERE key=?",
+                    (json.dumps(ebay_summary) if ebay_summary else None, json.dumps(liq) if liq else None, rs, rwhy, l.key))
     db.conn.commit()
+    db.update_score(l.key)
     return db.get(l.key)
 
 
@@ -267,12 +271,16 @@ def _fresh(db: DB) -> str:
 
 
 def pending_alerts(db: DB, s: Settings) -> list[Any]:
+    """What gets the full Claude check by itself: listings scored 8+ (the quick AI read put them there),
+    or, with the quick step off, real good deals. Fresh, not yet checked or decided."""
     rank = "CASE {c} WHEN 'real_good' THEN 4 WHEN 'good' THEN 3 WHEN 'mid' THEN 2 WHEN 'suspect' THEN 1 WHEN 'bad' THEN 0 ELSE -1 END"
-    q = f"""SELECT * FROM listings WHERE tier IN ({','.join('?' * len(s.alert_tiers))})
-            AND {rank.format(c='tier')} > {rank.format(c='notified_tier')}
+    which = "score >= 8" if s.ai_quick else f"tier IN ({','.join(repr(t) for t in s.alert_tiers)})"
+    q = f"""SELECT * FROM listings WHERE ({which}) AND ai IS NULL
+            AND {rank.format(c='tier')} >= {rank.format(c='notified_tier')}
+            AND notified_tier IS NULL
             AND first_seen >= ? AND last_seen >= datetime('now', '-1 day') AND hidden = 0
-            ORDER BY COALESCE(profit_ron, 0) DESC"""
-    return db.conn.execute(q, [*s.alert_tiers, _fresh(db)]).fetchall()
+            ORDER BY COALESCE(score, 0) DESC, COALESCE(profit_ron, 0) DESC"""
+    return db.conn.execute(q, [_fresh(db)]).fetchall()
 
 
 def pending_ai(db: DB, s: Settings) -> list[Any]:
@@ -359,6 +367,10 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
 
     By default (`ai_auto_real_good`) only real good deals are checked by themselves; with `ai_auto`
     the bot also sends lots, old watches and good deals to Claude."""
+    from . import quick
+
+    if s.ai_auto or s.ai_auto_real_good:
+        quick.run(db, s, log)  # the cheap read first: it decides what's worth the full check
     if not (s.ai_auto or s.ai_auto_real_good):
         return
     for r in pending_alerts(db, s):
@@ -377,11 +389,14 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
                 return
             if result is None:
                 continue
+        claude_value(db, r, result, s)
         row = db.get(r["key"])
         ok, why = confirmed(result, s, row["segment"])
+        if ok and (row["score"] or 0) < 8:
+            ok, why = False, f"Claude's score {row['score']}/10"
         if ok:
             notify.send(s, notify.deal_text(row, result), (json.loads(row["photos"] or "[]") or [None])[0])
-            log(f"  sent to Telegram ({confidence(result)}% sure): {row['title']}")
+            log(f"  sent to Telegram ({row['score']}/10, {confidence(result)}% sure): {row['title']}")
         else:
             log(f"  not sent ({why}): {row['title']}")
         db.mark_notified(row["key"], row["tier"])  # decided either way; it's on the dashboard

@@ -105,6 +105,11 @@ class Settings:
     # background on your subscription, no Claude window needed; confirmed ones go to Telegram. Counts
     # toward ai_daily_limit. Everything else waits for "Send to Claude".
     ai_auto_real_good: bool = True
+    # The cheap AI step of the 0-10 score: fresh listings the rules put at 4-7 are read in batches of 20,
+    # text only, on the smallest model; the ones it scores 8+ get the full check (above) by themselves.
+    ai_quick: bool = True
+    quick_model: str = "haiku"
+    quick_daily_calls: int = 40  # batches a day (up to 20 listings each)
     ai_daily_limit: int = 15  # a $20 plan runs out fast; raise it if you never hit limits
     # Claude looks at every real_good before it's sent to Telegram, then at good ones with what's left
     # of the day's budget (those only show on the dashboard).

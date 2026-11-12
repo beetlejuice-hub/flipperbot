@@ -49,7 +49,9 @@ class DB:
         # Columns added after the first release: add them to older databases.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
         for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0", "niche TEXT DEFAULT 'watches'",
-                    "triage TEXT", "est_high_ron INTEGER", "ebay TEXT", "liquidity TEXT"):  # your call on an Interesting listing: claude / skip / fake
+                    "triage TEXT", "est_high_ron INTEGER", "ebay TEXT", "liquidity TEXT",
+                    # the 0-10 score: free rules, the quick AI read, and the final one
+                    "rule_score INTEGER", "rule_why TEXT", "quick TEXT", "quick_at TEXT", "score INTEGER", "score_why TEXT"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -100,6 +102,17 @@ class DB:
         )
         self.conn.commit()
 
+    def update_score(self, key: str) -> None:
+        """Recompute the final 0-10 score from what's known now (rules, quick AI, full Claude check)."""
+        from .scoring import final_score
+
+        row = self.get(key)
+        if row is None:
+            return
+        score, why = final_score(row)
+        self.conn.execute("UPDATE listings SET score=?, score_why=? WHERE key=?", (score, why, key))
+        self.conn.commit()
+
     def set_triage(self, key: str, triage: str | None) -> None:
         self.conn.execute("UPDATE listings SET triage=? WHERE key=?", (triage, key))
         self.conn.commit()
@@ -116,6 +129,12 @@ class DB:
     def set_ai(self, key: str, result: dict[str, Any]) -> None:
         self.conn.execute("UPDATE listings SET ai=?, ai_at=? WHERE key=?", (json.dumps(result, ensure_ascii=False), now(), key))
         self.conn.commit()
+        self.update_score(key)
+
+    def set_quick(self, key: str, quick: dict[str, Any]) -> None:
+        self.conn.execute("UPDATE listings SET quick=?, quick_at=? WHERE key=?", (json.dumps(quick, ensure_ascii=False), now(), key))
+        self.conn.commit()
+        self.update_score(key)
 
     def all(self) -> Iterable[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM listings").fetchall()

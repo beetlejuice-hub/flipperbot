@@ -194,7 +194,7 @@ def test_latest_checked_first(server, tmp_path):
     db.conn.commit()
     rows = get(server + "/api/listings?view=checked&sort=ai")
     assert [r["key"] for r in rows] == ["olx:101", "olx:100"] and rows[0]["ai_at"].startswith("2026-11-12T09")
-    assert [r["key"] for r in get(server + "/api/listings?view=deals&sort=ai")][0] == "olx:200"  # works on any tab
+    assert [r["key"] for r in get(server + "/api/listings?view=deals&sort=ai")][0] == "olx:101"  # works on any tab: latest check first
     assert 'value="ai">Latest checked by Claude' in web.PAGE
 
 

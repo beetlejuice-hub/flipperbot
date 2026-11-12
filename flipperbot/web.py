@@ -138,12 +138,18 @@ ORDER = {
 }
 
 
+def niche_keys(niche: str) -> list[str]:
+    """The categories asked for ("watches,cameras"); empty = all."""
+    return [k for k in dict.fromkeys((niche or "").split(",")) if k in niches.ALL]
+
+
 def query(db: DB, view: str, q: str = "", sort: str = "", limit: int = 120, niche: str = "") -> list[dict[str, Any]]:
     where, default_sort = VIEWS.get(view, VIEWS["deals"])
     args: list[Any] = []
-    if niche in niches.ALL:
-        where = f"({where}) AND niche = ?"
-        args.append(niche)
+    keys = niche_keys(niche)
+    if keys:
+        where = f"({where}) AND COALESCE(niche, 'watches') IN ({','.join('?' * len(keys))})"
+        args += keys
     if q:
         where += " AND (title LIKE ? OR model_key LIKE ? OR city LIKE ?)"
         args += [f"%{q}%"] * 3
@@ -154,7 +160,8 @@ def query(db: DB, view: str, q: str = "", sort: str = "", limit: int = 120, nich
 
 def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
     c = db.conn
-    nf, na = ("AND niche = ?", [niche]) if niche in niches.ALL else ("", [])
+    keys = niche_keys(niche)
+    nf, na = (f"AND COALESCE(niche, 'watches') IN ({','.join('?' * len(keys))})", keys) if keys else ("", [])
     counts = {r["tier"]: r["n"] for r in c.execute(f"SELECT tier, COUNT(*) n FROM listings WHERE hidden=0 {nf} GROUP BY tier", na)}
     return {
         "total": c.execute(f"SELECT COUNT(*) FROM listings WHERE 1=1 {nf}", na).fetchone()[0],
@@ -281,7 +288,10 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
             elif u.path == "/api/radar":
                 from . import radar
 
-                self._json(radar.report(db))
+                r = radar.report(db)
+                for c in r["cheap"]:
+                    c["photo"] = _small_photo(c["photo"]) if c["photo"] else None
+                self._json(r)
             else:
                 self._send(404, b"not found", "text/plain")
 
@@ -436,6 +446,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; background: var(--card); }
 .chip.hit { border-color: var(--accent); font-weight: 700; }
+.multi { position: relative; } .multi summary { list-style: none; cursor: pointer; padding: 7px 10px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--card); white-space: nowrap; } .multi summary::after { content: " ▾"; color: var(--muted); }
+.multi > div { position: absolute; z-index: 3; margin-top: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 4px; min-width: 190px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.multi label { display: flex; gap: 8px; align-items: center; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
 .err { color: var(--sus); font-size: 13px; }
 </style>
 </head>
@@ -444,7 +459,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
   <div class="top"><h1>flipperbot</h1><span class="status" id="status">loading…</span></div>
   <nav id="tabs"></nav>
   <div class="tools">
-    <select id="niche" aria-label="What"><option value="">All</option><option value="watches">⌚ Watches</option><option value="cameras">📷 Cameras</option></select>
+    <details id="niches" class="multi"><summary>All categories</summary><div id="nicheList"></div></details>
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
       <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option><option value="profit">Biggest profit (lei)</option><option value="profit_pct">Biggest profit (%)</option>
@@ -474,9 +489,27 @@ const EMPTY = {
   checked: "Nothing checked by Claude yet. Press “Send to Claude” on any listing.", new: "Nothing yet.", hidden: "Nothing hidden.",
 };
 let view = location.hash.slice(1) || "interesting", stats = null;
-const nicheSel = document.getElementById("niche");
-nicheSel.value = localStorage.getItem("flipperbot-niche") || "";
-nicheSel.addEventListener("change", () => { localStorage.setItem("flipperbot-niche", nicheSel.value); refreshStats(); load(); });
+// Which categories to list: tick the ones you want (none ticked = all). Remembered in this browser.
+let chosen = JSON.parse(localStorage.getItem("flipperbot-niches") || "null")
+  ?? (localStorage.getItem("flipperbot-niche") ? [localStorage.getItem("flipperbot-niche")] : []);
+const nicheParam = () => chosen.join(",");
+let nichesDrawn = "";
+function drawNiches(list) {
+  if (!list || JSON.stringify(list) === nichesDrawn) return;
+  nichesDrawn = JSON.stringify(list);
+  chosen = chosen.filter(k => list.some(n => n.key === k));
+  const summary = document.querySelector("#niches summary");
+  const label = () => { summary.textContent = !chosen.length || chosen.length === list.length ? "All categories"
+    : list.filter(n => chosen.includes(n.key)).map(n => `${n.icon} ${n.label}`).join(", "); };
+  document.getElementById("nicheList").replaceChildren(...list.map(n => h("label", {},
+    h("input", { type: "checkbox", checked: !chosen.length || chosen.includes(n.key) ? "" : null, onchange: e => {
+      const on = [...document.querySelectorAll("#nicheList input")].map((b, i) => b.checked ? list[i].key : null).filter(Boolean);
+      chosen = on.length === list.length ? [] : on;
+      localStorage.setItem("flipperbot-niches", JSON.stringify(chosen)); label(); refreshStats(); load();
+    } }), `${n.icon} ${n.label}`)));
+  label();
+}
+document.addEventListener("click", e => { const d = document.getElementById("niches"); if (d.open && !d.contains(e.target)) d.open = false; });
 
 
 function h(tag, attrs = {}, ...kids) {
@@ -649,7 +682,8 @@ function drawTabs() {
 }
 
 async function refreshStats() {
-  try { stats = await api(`/api/stats?niche=${nicheSel.value}`); } catch { return; }
+  try { stats = await api(`/api/stats?niche=${nicheParam()}`); } catch { return; }
+  drawNiches(stats.niches);
   const p = stats.last_poll, fresh = p && (Date.now() - new Date(p.at)) < 20 * 60000;
   document.getElementById("status").replaceChildren(
     h("span", { class: "dot" + (fresh ? " on" : "") }),
@@ -672,7 +706,7 @@ function radarView(r) {
   const sec = (title, sub, ...kids) => h("div", { class: "section" }, h("h2", {}, title), sub ? h("p", { class: "reason" }, sub) : null, ...kids);
   const cheap = r.cheap.length ? r.cheap.map(c => h("article", { class: "card" },
       c.photo ? h("a", { class: "ph", href: c.url, target: "_blank", rel: "noopener noreferrer" },
-        h("img", { src: c.photo, alt: "", loading: "lazy", referrerpolicy: "no-referrer" })) : null,
+        h("img", { src: c.photo, alt: "", loading: "lazy", referrerpolicy: "no-referrer", onerror: e => e.target.replaceWith("📈") })) : null,
       h("div", { class: "body" },
         h("div", { class: "row" }, h("span", { class: "score shi" }, `−${c.under_pct}%`), h("span", { class: "pill t-good" }, c.entry)),
         h("div", { class: "prices" },
@@ -684,7 +718,7 @@ function radarView(r) {
     : [h("div", { class: "rowx reason" }, "Nothing well under the usual price in the last 3 days. The bot searches 3 watchlist items an hour.")];
   const watch = r.watchlist.map(e => h("div", { class: "rowx" },
     h("b", {}, e.name), e.by === "Claude" ? h("span", { class: "reason" }, " · added by Claude") : null,
-    h("div", {}, e.n ? `OLX now: ${e.n} listings, median ${lei(e.median)}` : "OLX: not searched yet",
+    h("div", {}, e.n ? `OLX now: ${e.n} listings, median ${lei(e.median)}` : e.searched_at ? `OLX: none for sale right now (searched ${ago(e.searched_at)})` : "OLX: not searched yet",
       e.value_low ? ` · Claude: sells for ${lei(e.value_low)}–${lei(e.value_high)}` : "",
       e.wiki && e.wiki.ratio ? ` · interest ${e.wiki.ratio}× usual (${e.wiki.article.replaceAll("_", " ")} on Wikipedia)` : ""),
     h("div", { class: "why" }, e.why)));
@@ -694,7 +728,8 @@ function radarView(r) {
   const wanted = r.movers.wanted.map(m => h("span", { class: "chip" }, `${m.model}: ${m.wanted_ads} want to buy`));
   const gt = r.google_trends.map(t => h("span", { class: "chip" + (t.watchlist ? " hit" : "") }, t.title + (t.traffic ? ` (${t.traffic})` : "")));
   return [
-    sec("Hot items cheap on OLX right now", "Watchlist items listed in the last 3 days at least 20% under what the others ask (or under Claude's estimate). Check condition before buying.", ...cheap),
+    sec("Hot items cheap on OLX right now", "Watchlist items listed in the last 3 days at least 30% under what the others ask (or under Claude's estimate). Check condition before buying.",
+      r.cheap.length ? h("div", { class: "grid" }, ...cheap) : cheap),
     sec("Watchlist", "Things whose value just jumped, and why." + (r.claude_refreshed_at ? ` Claude last looked for new trends ${ago(new Date(r.claude_refreshed_at * 1000).toISOString())}.` : " Claude looks for new trends once a week."), h("div", { class: "rows" }, ...watch)),
     sec("Rising in your OLX data", "Models whose asking price went up: last 2 weeks vs the 4 months before.", h("div", { class: "rows" }, ...rising)),
     wanted.length ? sec("Most wanted", "Models people posted \"cumpăr\" ads for in the last 2 weeks: buyers waiting.", h("div", { class: "chips" }, ...wanted)) : null,
@@ -712,7 +747,7 @@ async function load() {
     return;
   }
   const q = document.getElementById("q").value.trim(), sort = document.getElementById("sort").value;
-  const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}&niche=${nicheSel.value}`);
+  const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}&niche=${nicheParam()}`);
   if (mine !== loading) return;
   document.getElementById("grid").replaceChildren(...rows.map(card));
   document.getElementById("hint").hidden = view !== "interesting" || !rows.length;

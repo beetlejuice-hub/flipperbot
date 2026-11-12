@@ -131,6 +131,7 @@ def poll(db: DB, s: Settings, search: Callable[..., Any] = olx.search, log: Call
                    last_seen=excluded.last_seen, entry=excluded.entry""",
                 (l.key, e["id"], l.title, l.price_ron, l.url, (l.photos or [None])[0], l.city, l.created_at, now(), now()))
         db.conn.commit()
+        db.kv_set("radar_searched", {**db.kv_get("radar_searched", {}), e["id"]: now()})
         log(f"  radar {e['name']}: {len(got)} on OLX")
         seen += len(got)
     return seen
@@ -338,11 +339,12 @@ def report(db: DB) -> dict[str, Any]:
     trends = db.kv_get("radar_gtrends", {})
     names = [(e, {w for g in e["must"] for alt in g.split("|") for w in alt.split() if len(w) > 2}) for e in entries]
     items, cheap = [], []
+    searched = db.kv_get("radar_searched", {})
     for e in entries:
         st = entry_stats(db, e)
         cheap += st.pop("cheap")
         items.append({**{k: e[k] for k in ("id", "name", "why", "by", "until", "value_low", "value_high", "query")},
-                      **st, "wiki": wiki.get(e["wiki"]) if e.get("wiki") else None})
+                      **st, "searched_at": searched.get(e["id"]), "wiki": wiki.get(e["wiki"]) if e.get("wiki") else None})
     gt = []
     for t in trends.get("items", []):
         hit = next((e["name"] for e, words in names if words & set(normalize(t["title"]).split())), None)

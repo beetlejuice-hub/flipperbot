@@ -79,3 +79,13 @@ random searches.
 3. Okazii.ro (auctions ending cheap), Publi24, Lajumate, Vinted.
 4. Mids: second price source; listings that sit unsold for weeks (negotiation targets).
 5. Learn from outcomes: mark what you bought and what it sold for, and tune the tiers from that.
+6. **More categories, picked with the dashboard's category boxes**: consoles and PC parts (now only on the
+   trend radar's watchlist), LEGO, then sneakers/clothes. Sneakers sell on Vinted (vinted.ro) and OLX:
+   Fuyucch1/Vinted-Notifications shows how Vinted's catalog search is read; check it answers plain
+   requests before relying on it, as with OLX (no browser imitation).
+7. **Seller reputation** (idea from BoPeng/ai-marketplace-monitor): OLX account age, number of listings,
+   business flag into the score and the Claude check: new accounts and dealers posing as private sellers.
+8. **Price history per model**: a weekly median snapshot per model, so the radar's "rising" uses a real
+   series instead of first-seen dates, and the dashboard can draw a small line per model.
+9. Google Trends interest over time per watchlist item (flack0x/trendspyg does it; ours reads only the
+   daily "trending now" RSS today). eBay Marketplace Insights (sold prices) needs eBay's approval: apply.

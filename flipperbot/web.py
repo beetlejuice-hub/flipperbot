@@ -149,7 +149,7 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "total": c.execute(f"SELECT COUNT(*) FROM listings WHERE 1=1 {nf}", na).fetchone()[0],
         "counts": {t: counts.get(t, 0) for t in TIER_RANK},
         "bands": dict(c.execute(f"""SELECT CASE WHEN score >= 8 THEN 'top' WHEN score >= 5 THEN 'mid' WHEN score >= 1 THEN 'low'
-                                     ELSE 'removed' END b, COUNT(*) FROM listings WHERE hidden=0 {nf} GROUP BY b""", na).fetchall()),
+                                     WHEN score = 0 THEN 'removed' ELSE 'unscored' END b, COUNT(*) FROM listings WHERE hidden=0 {nf} GROUP BY b""", na).fetchall()),
         "starred": c.execute(f"SELECT COUNT(*) FROM listings WHERE starred=1 {nf}", na).fetchone()[0],
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],

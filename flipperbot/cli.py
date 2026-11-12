@@ -383,17 +383,8 @@ def _setup(s: config.Settings) -> None:
 
 
 def _rescore(db: DB, s: config.Settings) -> None:
-    before: dict[str, int] = {}
-    for r in db.all():
-        l = bot.row_to_listing(r)
-        if bot.is_relevant(l):
-            bot.evaluate(db, l, s, ebay_cached_only=True)
-        else:
-            db.conn.execute("UPDATE listings SET tier='bad', reason=? WHERE key=?", (f"not a {niches.get(l.niche).noun}", l.key))
-    db.conn.commit()
-    for r in db.conn.execute("SELECT tier, COUNT(*) n FROM listings GROUP BY tier"):
-        before[r["tier"]] = r["n"]
-    print("tiers now:", dict(sorted(before.items(), key=lambda kv: -TIER_RANK.get(kv[0] or "bad", 0))))
+    tiers = bot.rescore_all(db, s)
+    print("tiers now:", dict(sorted(tiers.items(), key=lambda kv: -TIER_RANK.get(kv[0] or "bad", 0))))
 
 
 if __name__ == "__main__":

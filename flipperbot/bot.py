@@ -429,11 +429,49 @@ def digest(db: DB, s: Settings) -> int:
     return len(rows)
 
 
+def rescore_all(db: DB, s: Settings, log: Callable[[str], None] = print) -> dict[str, int]:
+    """Judge and score every stored listing again with today's rules. Returns how many per tier."""
+    from .scoring import RULES_VERSION
+
+    rows = db.all()
+    for i, r in enumerate(rows, 1):
+        l = row_to_listing(r)
+        if is_relevant(l):
+            evaluate(db, l, s, ebay_cached_only=True)
+        else:
+            why = f"not a {niches.get(l.niche).noun}"
+            db.conn.execute("UPDATE listings SET tier='bad', reason=?, rule_score=0, rule_why=?, score=0, score_why=? WHERE key=?",
+                            (why, why, why, l.key))
+        if i % 1000 == 0:
+            db.conn.commit()
+            log(f"  re-judged {i}/{len(rows)}")
+    db.conn.commit()
+    db.kv_set("rules_version", RULES_VERSION)
+    return {r["tier"]: r["n"] for r in db.conn.execute("SELECT tier, COUNT(*) n FROM listings GROUP BY tier")}
+
+
+def rescore_if_rules_changed(db: DB, s: Settings, log: Callable[[str], None] = print) -> bool:
+    """After an update (or on a fresh install) the stored scores may be missing or out of date: redo them once."""
+    from .scoring import RULES_VERSION
+
+    if db.kv_get("rules_version", 0) == RULES_VERSION:
+        return False
+    n = db.conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
+    log(f"The rules changed since last time: re-judging {n} stored listings (a minute or two)...")
+    rescore_all(db, s, log)
+    log("  done")
+    return True
+
+
 def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
     from . import web
 
     web.serve(s, background=True)
     print(f"flipperbot is running. Dashboard: {web.url(s)}")
+    try:
+        rescore_if_rules_changed(db, s)
+    except Exception as e:  # never let this stop the bot
+        print(f"  re-judging failed: {e!r}")
     while True:
         stamp = datetime.now().strftime("%H:%M")
         try:

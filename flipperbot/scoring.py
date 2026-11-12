@@ -15,9 +15,13 @@ from typing import Any
 
 RULE_MAX = 7  # free rules alone never go above 7: an 8+ needs an AI to agree
 
+# Bump when the rules that judge or score a listing change: the bot then re-judges every stored listing
+# once at start, so an update never leaves old listings with stale or missing scores.
+RULES_VERSION = 2
+
 # Reasons a listing is not worth anyone's time, from the tier's own reason text.
 _DEAD = ("someone buying", "repair shop", "replica", "over budget", "fashion brand", "part/accessory", "locked to",
-         "not a watch", "not a camera", "no price", "a real deal wouldn't last")
+         "not a watch", "not a camera", "a real deal wouldn't last")
 
 
 def rule_score(tier: str | None, flags: list[str] | set[str], reason: str | None, profit: int | None,
@@ -26,6 +30,8 @@ def rule_score(tier: str | None, flags: list[str] | set[str], reason: str | None
     f = set(flags or [])
     if tier == "suspect":
         return 0, "likely fake"
+    if reason == "no price":  # exact: "... no price history yet" is a different, often interesting, thing
+        return 0, "not worth it: no price"
     if f & {"replica", "locked", "wanted", "service"} or any(d in reason for d in _DEAD):
         return 0, "not worth it: " + next((d for d in _DEAD if d in reason), "replica/locked/wanted")
     if tier == "bad":

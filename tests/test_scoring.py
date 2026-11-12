@@ -21,6 +21,26 @@ def test_rule_scores():
     assert rule_score("mid", ["lot"], "lot", None, None, 10)[0] == 4
     assert rule_score("real_good", [], "x", 900, {"label": "fast"}, 1)[0] == 7  # capped: 8+ needs an AI
     assert rule_score("good", [], "x", 200, {"label": "very slow"}, 20)[0] == 4
+    # "no price" means the listing has no price; "no price history yet" is a different, often interesting, thing
+    assert rule_score("bad", [], "no price", None, None, 3)[0] == 0
+    assert rule_score("mid", [], "zodiac sea wolf at 400 lei, no price history yet", None, None, 3)[0] >= 3
+    assert rule_score("bad", [], "seiko|7s26 at 900 lei, no price history yet", None, None, 3)[0] == 1
+
+
+def test_old_listings_without_a_score_get_one_when_the_bot_starts():
+    from flipperbot import web
+    from flipperbot.scoring import RULES_VERSION
+
+    s = Settings()
+    db = setup(s)
+    db.conn.execute("UPDATE listings SET score=NULL, rule_score=NULL, score_why=NULL")  # a database from before the score
+    db.kv_set("rules_version", 0)
+    assert "removed" not in web.stats(db, s)["bands"]  # no score yet is not "removed"
+    assert bot.rescore_if_rules_changed(db, s, log=lambda m: None)
+    assert db.conn.execute("SELECT COUNT(*) FROM listings WHERE score IS NULL").fetchone()[0] == 0
+    assert db.get("olx:200")["score"] == 7
+    assert db.kv_get("rules_version") == RULES_VERSION
+    assert not bot.rescore_if_rules_changed(db, s, log=lambda m: None)  # only once per rules change
 
 
 def test_claude_scores():

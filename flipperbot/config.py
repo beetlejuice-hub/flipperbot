@@ -49,6 +49,8 @@ MODERN_POOL = [
     "seiko automatic", "ceas automatic nou", "ceas sigilat",
 ]
 
+MAX_LISTING_AGE_DAYS = 30
+
 # Repair cost to assume for a "broken" watch, by segment (lei). A dead battery
 # is its own, much cheaper case (`battery_fix_ron`).
 REPAIR_RON = {"japan": 250, "soviet": 200, "swiss": 600, "vintage": 500, "luxury": 1500}
@@ -120,6 +122,9 @@ class Settings:
     alert_tiers: list[str] = field(default_factory=lambda: ["real_good"])  # Telegram; the rest is on the dashboard
     # Telegram only gets a real_good deal once Claude has confirmed it: not likely fake, verdict buy or
     # negotiate, and at least this sure (0-100). Unchecked or unconfirmed deals stay on the dashboard.
+    # Good deals go fast. A listing up longer than this (OLX's own creation date, not its paid "refresh")
+    # can't be a deal: it tops out at "maybe". Unless its price was cut in the last two weeks.
+    max_listing_age_days: int = MAX_LISTING_AGE_DAYS
     alert_min_confidence: int = 50
     alert_min_confidence_luxury: int = 60  # luxury/Swiss: most cheap ones in Romania are replicas
     digest_telegram: bool = False  # the 20:00 summary of mids on Telegram (they're on the dashboard anyway)

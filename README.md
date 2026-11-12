@@ -112,6 +112,11 @@ broken watches ("ceasul bunicului", "mostenire", "din pod", "vechituri", pocket 
 where the model isn't clear, and sellers who write "nu stiu ce marca", "de la bunicul", "nu ma pricep", go
 to Claude (after lots), which identifies them from dial, case and movement and values them.
 
+**Only fresh listings are deals.** Good deals go fast: a listing posted more than 30 days ago (OLX's own
+date, not a paid "refresh" that pushes it back to the top) tops out at *maybe*, unless its price was cut
+in the last two weeks. Old listings never reach Interesting, Telegram or an automatic Claude check
+(`max_listing_age_days`).
+
 **Checking prices without Claude.** Every card has *Check prices: eBay sold · Chrono24 · OLX · Okazii*,
 searching the model the bot identified: eBay's sold listings are real sale prices, the others what
 people ask. Cards also say how long a listing has been up and if its price was cut (room to negotiate).

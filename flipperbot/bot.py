@@ -60,8 +60,31 @@ def row_to_listing(r: Any) -> Listing:
         source=r["source"], source_id=r["source_id"], url=r["url"], title=r["title"],
         description=r["description"] or "", price_ron=r["price_ron"], negotiable=bool(r["negotiable"]),
         params=json.loads(r["params"] or "{}"), seller_id=r["seller_id"] or "", niche=r["niche"] or "watches",
+        created_at=r["created_at"] or "",
         city=r["city"] or "", photos=json.loads(r["photos"] or "[]"), category_id=r["category_id"] or "",
     )
+
+
+def listing_age_days(created_at: str | None) -> int | None:
+    """Days since the seller first posted it (OLX's created_time, which a paid refresh doesn't change)."""
+    if not created_at:
+        return None
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    now = datetime.now(created.tzinfo) if created.tzinfo else datetime.now()
+    return max(0, (now - created).days)
+
+
+def recent_price_cut(db: DB, l: Listing, days: int = 14) -> bool:
+    """Did the seller lower the price lately? On an old listing that's a real signal."""
+    rows = db.conn.execute(
+        "SELECT price_ron, seen_at FROM prices WHERE key=? AND price_ron IS NOT NULL ORDER BY seen_at", (l.key,)
+    ).fetchall()
+    cutoff = (datetime.now() - __import__("datetime").timedelta(days=days)).isoformat()
+    return any(b["price_ron"] < a["price_ron"] and b["seen_at"][:19] >= cutoff[:19] for a, b in zip(rows, rows[1:])) or bool(
+        l.previous_price_ron and l.price_ron and l.price_ron < l.previous_price_ron)
 
 
 def evaluate(db: DB, l: Listing, s: Settings) -> Any:
@@ -82,6 +105,13 @@ def evaluate(db: DB, l: Listing, s: Settings) -> Any:
         if n >= 2:
             verdict.tier = "suspect"
             verdict.reason = f"seller has {n + 1} cheap luxury listings: likely replicas · " + verdict.reason
+    age = listing_age_days(l.created_at)
+    if age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good") and not recent_price_cut(db, l):
+        # Up for months and still "cheap"? A real deal would be gone: overpriced, fake, or bait.
+        verdict.tier = "mid"
+        verdict.reason = f"listed {age} days ago: a real deal wouldn't last that long · " + verdict.reason
+    elif age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good"):
+        verdict.reason = f"old listing ({age} days), but the price was just cut · " + verdict.reason
     db.set_verdict(l.key, ident, verdict)
     return db.get(l.key)
 

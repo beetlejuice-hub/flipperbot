@@ -25,7 +25,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import ai, niches, notify
-from .config import Settings
+from .config import MAX_LISTING_AGE_DAYS, Settings
 from .db import DB, TIER_RANK
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1"}
@@ -123,9 +123,11 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
 
 # What the bot finds interesting and you haven't decided on yet: deals, lots, old watches whose model
 # isn't clear, sellers who don't know what they have. Only recently seen ones (still for sale).
-INTERESTING = """triage IS NULL AND hidden = 0 AND last_seen >= datetime('now', '-3 days') AND (
-    tier IN ('real_good', 'good')
-    OR (tier = 'mid' AND (flags LIKE '%"lot"%' OR flags LIKE '%"naive"%' OR reason LIKE '%Claude will look%')))"""
+INTERESTING = f"""triage IS NULL AND hidden = 0 AND last_seen >= datetime('now', '-3 days')
+    AND (COALESCE(created_at, '') = '' OR substr(created_at, 1, 10) >= date('now', '-{MAX_LISTING_AGE_DAYS} days')
+         OR reason LIKE '%price was just cut%')
+    AND (tier IN ('real_good', 'good')
+         OR (tier = 'mid' AND (flags LIKE '%"lot"%' OR flags LIKE '%"naive"%' OR reason LIKE '%Claude will look%')))"""
 
 VIEWS = {
     "interesting": (INTERESTING, "rank"),

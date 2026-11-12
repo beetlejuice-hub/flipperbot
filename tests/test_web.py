@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 import threading
 import urllib.error
 import urllib.request
@@ -210,4 +211,4 @@ def test_price_check_links_and_negotiation_info(server, tmp_path):
     db.conn.execute("UPDATE prices SET seen_at='2026-11-02T10:00:00+00:00' WHERE key='olx:200' AND price_ron=400")
     db.conn.commit()
     card = get(server + "/api/listing?key=olx:200")
-    assert card["first_price"] == 600 and card["listed_at"].startswith("2026-11-11")
+    assert card["first_price"] == 600 and card["listed_at"][:10] == datetime.now().astimezone().isoformat()[:10]

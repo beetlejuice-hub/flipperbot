@@ -6,6 +6,7 @@ one has been captured from a home connection: see samples/README.md.
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from flipperbot import bot
@@ -20,7 +21,7 @@ def offer(id, title, price, currency="RON", desc="", cat=1677, prev=None):
         "url": f"https://www.olx.ro/d/oferta/x-ID{id}.html",
         "title": title,
         "description": desc,
-        "created_time": "2026-11-11T10:00:00+02:00",
+        "created_time": datetime.now().astimezone().isoformat(timespec="seconds"),
         "last_refresh_time": "2026-11-11T10:00:00+02:00",
         "offer_type": "offer",
         "business": False,
@@ -219,3 +220,23 @@ def test_all_automatic_claude_can_be_off(monkeypatch):
     monkeypatch.setattr(bot.notify, "send", lambda *a, **k: called.append(a))
     bot.deliver(db, s)
     assert called == []
+
+
+def test_old_listings_cant_be_deals():
+    s = Settings()
+    db = DB(":memory:")
+    market = [olx.parse_offer(offer(100 + i, "Ceas Seiko SKX007", p)) for i, p in enumerate([1000, 1100, 950, 1050, 1000])]
+    old = offer(300, "Ceas Seiko SKX007 diver", 400)
+    old["created_time"] = "2022-10-01T10:00:00+03:00"
+    fresh = offer(301, "Ceas Seiko SKX007 diver", 400)  # created today in the fixture
+    bot.process(db, [*market, olx.parse_offer(old), olx.parse_offer(fresh)], s, alert=False)
+    assert db.get("olx:301")["tier"] == "real_good"
+    row = db.get("olx:300")
+    assert row["tier"] == "mid" and "a real deal wouldn't last" in row["reason"]
+
+    # ...unless the seller just cut the price
+    cut = offer(300, "Ceas Seiko SKX007 diver", 350)
+    cut["created_time"] = "2022-10-01T10:00:00+03:00"
+    bot.process(db, [olx.parse_offer(cut)], s, alert=False)
+    row = db.get("olx:300")
+    assert row["tier"] == "real_good" and "price was just cut" in row["reason"]

@@ -166,7 +166,7 @@ def test_dashboard_and_wall_clocks_are_not_watches():
     cats = bot.WATCH_CATEGORIES
     assert not bot.is_watch(L("Ceas bord Audi A6 C7 2016", 3561), cats)
     assert not bot.is_watch(L("Ceas vechi cu pendul de perete", 235), cats)
-    assert not bot.is_watch(L("Apple watch SE 2", 1943), cats)
+    assert bot.is_watch(L("Apple watch SE 2", 1943), cats)  # smartwatches count too
     assert bot.is_watch(L("Tissot T-Race Chronograph", 460), cats)
     assert not bot.is_watch(L("Set lampi numar LED Astra G, Omega A/B Vectra B", 999), cats)
     assert bot.is_watch(L("Ceas elegant Atlantic", 1677), cats)

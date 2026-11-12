@@ -47,13 +47,15 @@ MODERN_POOL = [
     "tissot prx", "tissot seastar", "tissot le locle", "hamilton khaki", "hamilton jazzmaster",
     "longines hydroconquest", "longines conquest", "certina ds", "mido ocean star", "oris aquis",
     "seiko automatic", "ceas automatic nou", "ceas sigilat",
+    "apple watch", "apple watch ultra", "apple watch series", "garmin fenix", "garmin forerunner", "garmin venu",
+    "garmin instinct", "galaxy watch", "pixel watch", "huawei watch gt", "amazfit", "suunto", "smartwatch",
 ]
 
 MAX_LISTING_AGE_DAYS = 30
 
 # Repair cost to assume for a "broken" watch, by segment (lei). A dead battery
 # is its own, much cheaper case (`battery_fix_ron`).
-REPAIR_RON = {"japan": 250, "soviet": 200, "swiss": 600, "vintage": 500, "luxury": 1500}
+REPAIR_RON = {"japan": 250, "soviet": 200, "swiss": 600, "vintage": 500, "luxury": 1500, "smart": 200}
 
 
 @dataclass

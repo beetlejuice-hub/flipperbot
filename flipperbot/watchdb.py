@@ -121,6 +121,26 @@ BRANDS: list[Brand] = [
     Brand("Molnija", "soviet", ("molnia",), 0, ()),
     Brand("Chaika", "soviet", ("ceaika",), 0, ()),
     Brand("Zim", "soviet", (), 0, ()),
+    # --- smartwatches: resell well when they're the real thing, unlocked ----------------
+    Brand("Apple Watch", "smart", ("apple watch", "iwatch", "i watch", "applewatch"), 400,
+          ("ultra 2", "ultra", "series 10", "series 9", "series 8", "series 7", "series 6", "series 5", "series 4", "se 2", "se")),
+    Brand("Garmin", "smart", (), 0, ("fenix 8", "fenix 7x", "fenix 7 pro", "fenix 7", "fenix 6x", "fenix 6", "epix pro", "epix",
+                                     "forerunner 965", "forerunner 955", "forerunner 945", "forerunner 265", "forerunner 255",
+                                     "forerunner 165", "forerunner 55", "venu 3", "venu 2 plus", "venu 2", "venu sq",
+                                     "instinct 2x", "instinct 2", "instinct", "enduro", "vivoactive 5", "vivoactive 4",
+                                     "descent", "tactix", "marq", "quatix")),
+    Brand("Samsung Galaxy Watch", "smart", ("galaxy watch", "samsung watch", "samsung galaxy watch"), 0,
+          ("watch ultra", "watch 7", "watch 6 classic", "watch 6", "watch 5 pro", "watch 5", "watch 4 classic", "watch 4", "active 2")),
+    Brand("Google Pixel Watch", "smart", ("pixel watch",), 0, ("3", "2")),
+    Brand("Huawei Watch", "smart", ("huawei watch", "huawei"), 0, ("gt 5 pro", "gt 5", "gt 4", "gt 3 pro", "gt 3", "watch 4 pro", "ultimate", "fit 3")),
+    Brand("Amazfit", "smart", (), 0, ("t-rex 3", "t-rex 2", "t-rex", "balance", "gtr 4", "gts 4", "cheetah")),
+    Brand("Suunto", "smart", (), 0, ("race", "vertical", "9 peak", "9 baro", "5 peak", "ocean")),
+    Brand("Polar", "smart", (), 0, ("vantage v3", "vantage", "grit x2", "grit x", "pacer pro", "ignite")),
+    Brand("Coros", "smart", (), 0, ("vertix 2", "vertix", "apex 2 pro", "apex 2", "pace 3", "pace 2")),
+    Brand("Withings", "smart", (), 0, ("scanwatch", "steel hr")),
+    Brand("Fitbit", "fashion", (), 0, ()),
+    Brand("Xiaomi", "fashion", ("redmi watch", "mi band", "mi watch"), 0, ()),
+
     # --- fashion: resale is poor ---------------------------------------------
     *[
         Brand(n, "fashion", a)

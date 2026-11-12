@@ -44,7 +44,7 @@ def test_search_mix_old_modern_general():
     assert sum(q in s.modern_pool for q in terms) >= 50  # one modern search each poll
     assert len(terms) == 50 * 3
     feeds = {(c, n) for r in runs for q, c, n in r if c}
-    assert feeds == {("1677", "watches"), ("1676", "watches")}
+    assert feeds == {("1677", "watches"), ("1676", "watches"), ("1943", "watches")}
 
 
 def test_luxury_needs_a_surer_claude():

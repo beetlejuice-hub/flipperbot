@@ -37,18 +37,20 @@ WATCHES = Niche(
     key="watches", label="Watches", icon="⌚", noun="watch",
     brands=watchdb.BRANDS,
     valuable_segments=frozenset(watchdb.VALUABLE_SEGMENTS),
-    categories=("1677", "1676"),  # men's, women's watches
-    feeds=("1677", "1676"),
-    words=("ceas", "watch", "chrono", "cronograf", "cronometru", "automatic", "mecanic", "quartz", "diver"),
-    not_words=("bord", "perete", "pendul", "cuc", "desteptator", "smart", "smartwatch", "apple watch", "galaxy watch",
+    categories=("1677", "1676", "1943"),  # men's, women's watches, smartwatches
+    feeds=("1677", "1676", "1943"),
+    words=("ceas", "watch", "chrono", "cronograf", "cronometru", "automatic", "mecanic", "quartz", "diver", "smartwatch",
+           "fenix", "forerunner"),
+    not_words=("bord", "perete", "pendul", "cuc", "desteptator", "bratara fitness", "curea", "incarcator", "folie",
                "de masa", "masa", "semineu", "opel", "jante", "anvelope", "telefon", "apartament", "masina",
                "autoturism", "bicicleta", "parfum"),
     search_pool=(),  # from Settings.search_pool (config.SEARCH_POOL), so it stays configurable
     focus_pool=(),  # from Settings.focus_pool
     facebook_queries=("ceas", "ceasuri", "lot ceasuri", "ceas automatic", "ceas mecanic", "ceas vechi", "ceas defect",
-                      "ceas sovietic", "omega", "seiko", "tissot", "longines", "rolex", "poljot", "orient", "citizen"),
-    strong_words=("ceas", "ceasuri"),
-    repair_ron={"japan": 250, "soviet": 200, "swiss": 600, "vintage": 500, "luxury": 1500},
+                      "ceas sovietic", "omega", "seiko", "tissot", "longines", "rolex", "poljot", "orient", "citizen",
+                      "apple watch", "garmin", "galaxy watch", "smartwatch"),
+    strong_words=("ceas", "ceasuri", "smartwatch", "apple watch", "galaxy watch", "garmin"),
+    repair_ron={"japan": 250, "soviet": 200, "swiss": 600, "vintage": 500, "luxury": 1500, "smart": 200},
     claude_checks="""- Watch tells, e.g. Rolex: no display caseback, rehaut engraving, 2.5x cyclops, crown at 6; Omega: text
      alignment, Seamaster wave pattern, caseback medallion; AP/Hublot/Patek/Richard Mille under a few thousand
      lei are fakes. A Miyota/Seagull/generic movement in a Swiss brand = fake.

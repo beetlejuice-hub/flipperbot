@@ -117,6 +117,11 @@ date, not a paid "refresh" that pushes it back to the top) tops out at *maybe*, 
 in the last two weeks. Old listings never reach Interesting, Telegram or an automatic Claude check
 (`max_listing_age_days`).
 
+**Smartwatches too.** OLX's smartwatch category is read every poll alongside men's and women's watches:
+Apple Watch, Garmin, Galaxy Watch, Pixel, Huawei, Amazfit, Suunto, Polar, Coros... priced from their own
+listings. Apple Watch clones (HK9, DT8, T800 "Ultra"...) count as replicas; watches locked to an
+iCloud/Google account are skipped (stolen or unusable).
+
 **Newest first.** OLX's own "newest" order is by last paid refresh, so the bot reads 3 pages of each watch
 category every poll (`feed_pages`) and judges by the real posting date; Facebook is searched newest
 first. The Interesting tab lists the newest posted first.

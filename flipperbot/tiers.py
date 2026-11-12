@@ -97,6 +97,8 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
         return Verdict("bad", "someone buying, not selling")
     if "service" in f:
         return Verdict("bad", "repair shop ad")
+    if "locked" in f:
+        return Verdict("bad", "locked to someone's account (iCloud/Google): stolen or unusable")
     if "replica" in f:
         return Verdict("bad", "says replica/copy")
     if price > s.budget_ron:

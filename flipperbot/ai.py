@@ -60,6 +60,8 @@ Then:
    - The seller's other listings (below): a row of cheap luxury watches means a replica dealer.
    - Price: far too low for the model and condition.
    If it's a vintage or inherited watch, also watch for redials (repainted dials) and franken watches (mixed parts).
+   If it's a smartwatch: clones (Apple Watch Ultra copies like HK9/DT8/T800: wrong menus, fake "ultra" at a low
+   price), locked to an account (iCloud activation lock, Google), battery health, exact model, size, GPS vs cellular.
 3. Condition: what's visibly wrong, and what a repair would need and roughly cost in Romania.
 4. Value: use web search (at most 4 searches: be targeted; one of them eBay SOLD listings for this exact model) to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
 5. Decide: buy, negotiate (and to what price), or skip.

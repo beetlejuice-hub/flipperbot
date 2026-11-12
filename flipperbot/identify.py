@@ -132,6 +132,9 @@ BATTERY = [
 REPLICA = [
     "replica", "copie", "clona", "clone", "aaa", "aaa+", "imitatie", "nu este original", "nu e original",
     "inspired", "homage", "fake", "super clone", "superclone", "clone", "1:1", "mirror",
+    # Apple Watch clones
+    "hk9", "hk8", "hk9 pro", "dt8", "dt9", "dt no.1", "t800", "t900", "hello watch", "x8 ultra", "s8 ultra", "i8 ultra",
+    "z59 ultra", "gs8 ultra", "ultra 9", "series 10 ultra", "replica apple",
     # replica factories and how replica sellers write
     "noob", "noob factory", "vsf", "vs factory", "clean factory", "zf factory", "apf factory", "ar factory",
     "bt factory", "gm factory", "3k factory", "eta clone", "swiss clone", "calitate 1:1", "high quality",
@@ -154,6 +157,9 @@ NAIVE = [
     "din pod", "de la tata", "de la parinti", "vechi de tot", "vechituri", "obiecte vechi", "golesc casa",
     "eliberez casa", "din casa batraneasca",
 ]
+# Locked to someone's account: stolen, or unusable for the next owner.
+LOCKED = ["icloud blocat", "blocat icloud", "blocat in icloud", "blocat pe icloud", "cont icloud", "activation lock",
+          "blocat in cont", "blocat cont", "cont google", "frp", "nu stiu parola", "nu am parola", "blocat de operator"]
 WANTED = ["cumpar", "cumparam", "caut ceas", "caut ceasuri", "achizitionez", "achizitionam"]
 SERVICE = ["reparatii ceasuri", "service ceasuri", "reparam ceasuri", "schimb baterii", "atelier"]
 PART_START = [
@@ -264,6 +270,8 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
         flags.add("shop_talk")
     if _any(full_n, NAIVE):
         flags.add("naive")
+    if _any(full_n, LOCKED):
+        flags.add("locked")
     if _any(title_n, WANTED):
         flags.add("wanted")
     if _any(title_n, SERVICE):

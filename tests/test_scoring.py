@@ -52,6 +52,27 @@ def test_claude_scores():
     assert claude_score({"error": "x"}) is None
 
 
+def test_claudes_own_numbers_hold_the_score_down():
+    from flipperbot.scoring import quick_score
+
+    # "buy, 62% sure" but resale 250-420 minus 100 asked minus 175 repair = -25 lei: not an 8+
+    seiko = {"verdict": "buy", "confidence": 62, "authenticity": "likely_genuine", "resale_ron_low": 250,
+             "resale_ron_high": 420, "repair_cost_ron": 175}
+    score, why = claude_score(seiko, 100)
+    assert score <= 2 and "lose money" in why
+    assert not bot.confirmed(seiko, Settings(), "japan", 100)[0]  # and no Telegram message
+    # "negotiate, 68% sure" with ~90 lei left: under a good deal's profit
+    lot = {"verdict": "negotiate", "confidence": 68, "resale_ron_low": 420, "resale_ron_high": 530, "repair_cost_ron": 150}
+    assert claude_score(lot, 180)[0] == 6
+    assert not bot.confirmed(lot, Settings(), "japan", 180)[0]
+    # real profit keeps the 8+
+    good = {**lot, "repair_cost_ron": 0}
+    assert claude_score(good, 180)[0] == 8 and bot.confirmed(good, Settings(), "japan", 180)[0]
+    # the quick read alone never shows 8+: it only sends the listing to the full check
+    q = quick_score({"score": 8, "fake_risk": "low", "note": "71% underpriced"})
+    assert q[0] == 7 and "waiting for Claude" in q[1]
+
+
 def setup(s):
     db = DB(":memory:")
     market = [olx.parse_offer(offer(100 + i, "Ceas Seiko SKX007", p)) for i, p in enumerate([1000, 1100, 950, 1050, 1000])]

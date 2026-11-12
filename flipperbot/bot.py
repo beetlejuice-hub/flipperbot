@@ -274,7 +274,8 @@ def pending_alerts(db: DB, s: Settings) -> list[Any]:
     """What gets the full Claude check by itself: listings scored 8+ (the quick AI read put them there),
     or, with the quick step off, real good deals. Fresh, not yet checked or decided."""
     rank = "CASE {c} WHEN 'real_good' THEN 4 WHEN 'good' THEN 3 WHEN 'mid' THEN 2 WHEN 'suspect' THEN 1 WHEN 'bad' THEN 0 ELSE -1 END"
-    which = "score >= 8" if s.ai_quick else f"tier IN ({','.join(repr(t) for t in s.alert_tiers)})"
+    which = ("json_extract(quick, '$.score') >= 8 AND COALESCE(json_extract(quick, '$.fake_risk'), '') != 'high'"
+             if s.ai_quick else f"tier IN ({','.join(repr(t) for t in s.alert_tiers)})")
     q = f"""SELECT * FROM listings WHERE ({which}) AND ai IS NULL
             AND {rank.format(c='tier')} >= {rank.format(c='notified_tier')}
             AND notified_tier IS NULL
@@ -342,8 +343,10 @@ def confidence(result: dict[str, Any]) -> int:
     return {"likely_genuine": 60, "unsure": 40}.get(result.get("authenticity"), 0)  # older checks had no number
 
 
-def confirmed(result: dict[str, Any] | None, s: Settings, segment: str | None = None) -> tuple[bool, str]:
-    """Is Claude sure enough about this deal to message you? Luxury/Swiss needs more."""
+def confirmed(result: dict[str, Any] | None, s: Settings, segment: str | None = None,
+              price: int | None = None) -> tuple[bool, str]:
+    """Is Claude sure enough about this deal, and does its own math leave a real profit, to message you?
+    Luxury/Swiss needs more confidence."""
     if not result:
         return False, "not checked by Claude"
     if "error" in result:
@@ -355,6 +358,11 @@ def confirmed(result: dict[str, Any] | None, s: Settings, segment: str | None = 
     need = s.alert_min_confidence_luxury if segment in ("luxury", "swiss") else s.alert_min_confidence
     if confidence(result) < need:
         return False, f"Claude only {confidence(result)}% sure (needs {need})"
+    from .scoring import claude_profit
+
+    profit = claude_profit(result, price)
+    if profit is not None and profit < s.good_profit_ron:
+        return False, f"only ~{profit} lei profit by Claude's numbers (needs {s.good_profit_ron})"
     return True, ""
 
 
@@ -391,7 +399,7 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
                 continue
         claude_value(db, r, result, s)
         row = db.get(r["key"])
-        ok, why = confirmed(result, s, row["segment"])
+        ok, why = confirmed(result, s, row["segment"], row["price_ron"])
         if ok and (row["score"] or 0) < 8:
             ok, why = False, f"Claude's score {row['score']}/10"
         if ok:
@@ -412,7 +420,7 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
             return
         if result and claude_value(db, r, result, s) == "real_good":
             row = db.get(r["key"])
-            ok, why = confirmed(result, s, row["segment"])
+            ok, why = confirmed(result, s, row["segment"], row["price_ron"])
             if ok:
                 notify.send(s, notify.deal_text(row, result), (json.loads(row["photos"] or "[]") or [None])[0])
                 log(f"  Claude found a real good deal, sent ({confidence(result)}% sure): {row['title']}")

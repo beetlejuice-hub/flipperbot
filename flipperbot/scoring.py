@@ -17,7 +17,7 @@ RULE_MAX = 7  # free rules alone never go above 7: an 8+ needs an AI to agree
 
 # Bump when the rules that judge or score a listing change: the bot then re-judges every stored listing
 # once at start, so an update never leaves old listings with stale or missing scores.
-RULES_VERSION = 2
+RULES_VERSION = 3
 
 # Reasons a listing is not worth anyone's time, from the tier's own reason text.
 _DEAD = ("someone buying", "repair shop", "replica", "over budget", "fashion brand", "part/accessory", "locked to",
@@ -58,8 +58,19 @@ def rule_score(tier: str | None, flags: list[str] | set[str], reason: str | None
     return max(1, min(RULE_MAX, base)), ", ".join(why)
 
 
-def claude_score(result: dict[str, Any] | None) -> tuple[int, str] | None:
-    """The full check's verdict as a score. None if it didn't run or failed."""
+def claude_profit(result: dict[str, Any] | None, price: int | None) -> int | None:
+    """What Claude's own numbers leave you: the low end of its resale range, minus price and repair."""
+    if not result or "error" in result or not result.get("resale_ron_low") or price is None:
+        return None
+    try:
+        return int(result["resale_ron_low"]) - int(price) - int(result.get("repair_cost_ron") or 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def claude_score(result: dict[str, Any] | None, price: int | None = None, good_profit: int = 150) -> tuple[int, str] | None:
+    """The full check's verdict as a score, held down by Claude's own math: a "buy" that loses money
+    or leaves less than a good deal's profit is not an 8+. None if it didn't run or failed."""
     if not result or "error" in result:
         return None
     if result.get("authenticity") == "likely_fake":
@@ -74,9 +85,18 @@ def claude_score(result: dict[str, Any] | None) -> tuple[int, str] | None:
         score = 9 if conf >= 75 else 8 if conf >= 50 else 6
     else:
         score = 5
+    why = f"Claude: {verdict}, {int(conf)}% sure"
     if result.get("authenticity") == "unsure":
         score = min(score, 7)
-    return score, f"Claude: {verdict}, {int(conf)}% sure"
+    profit = claude_profit(result, price)
+    if profit is not None and profit <= 0:
+        score, why = min(score, 2), f"{why}, but its own numbers lose money ({profit} lei)"
+    elif profit is not None and profit < good_profit:
+        score, why = min(score, 6), f"{why}, but only ~{profit} lei profit"
+    return score, why
+
+
+QUICK_MAX = 7  # the quick read can send a listing to the full check, but only the full check gives an 8+
 
 
 def quick_score(quick: dict[str, Any] | None) -> tuple[int, str] | None:
@@ -85,16 +105,19 @@ def quick_score(quick: dict[str, Any] | None) -> tuple[int, str] | None:
     s = max(0, min(10, int(quick["score"])))
     if quick.get("fake_risk") == "high":
         s = min(s, 2)
-    return s, "quick AI: " + str(quick.get("note") or "")[:80]
+    note = str(quick.get("note") or "")[:80]
+    if s > QUICK_MAX:
+        return QUICK_MAX, f"quick AI says {s}/10, waiting for Claude's full check: {note}"
+    return s, "quick AI: " + note
 
 
-def final_score(row: Any) -> tuple[int, str]:
+def final_score(row: Any, good_profit: int = 150) -> tuple[int, str]:
     """Full Claude check > quick AI read > free rules."""
     try:
         full = json.loads(row["ai"]) if row["ai"] else None
     except (TypeError, ValueError):
         full = None
-    got = claude_score(full)
+    got = claude_score(full, row["price_ron"], good_profit)
     if got:
         return got
     try:

@@ -182,7 +182,7 @@ def _check(s: Settings, key: str) -> None:
         return
     bot.claude_value(db, row, result, s)
     row = db.get(key)
-    ok, _ = bot.confirmed(result, s, row["segment"])
+    ok, _ = bot.confirmed(result, s, row["segment"], row["price_ron"])
     if ok and row["tier"] == "real_good":  # you sent it: the verdict goes to your phone too
         notify.send(s, notify.deal_text(row, result), (json.loads(row["photos"] or "[]") or [None])[0])
         db.mark_notified(key, "real_good")
@@ -564,7 +564,8 @@ function card(l) {
         h("div", { class: "row" },
           h("span", { class: "score s" + (l.score == null ? "x" : l.score >= 8 ? "hi" : l.score >= 5 ? "mid" : l.score >= 1 ? "lo" : "zero") },
             l.score == null ? "–" : `${l.score}/10`),
-          h("span", { class: "pill t-" + l.tier }, LABEL[l.tier] || l.tier)),
+          // the rules' first guess; once an AI has read the listing, its score is what counts
+          /^(Claude|quick AI)/.test(l.score_why || "") ? null : h("span", { class: "pill t-" + l.tier }, LABEL[l.tier] || l.tier)),
         l.score_why ? h("div", { class: "why" }, l.score_why) : null,
         priceBox(l),
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),

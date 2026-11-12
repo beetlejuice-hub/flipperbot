@@ -9,6 +9,7 @@ seller details, since the repo is public.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 from pathlib import Path
 
@@ -35,15 +36,26 @@ def export(db: DB, path: Path = SEED) -> int:
 
 
 def load_if_empty(db: DB, path: Path = SEED) -> int:
-    """Fill an empty database from the seed. Seeded listings count as already alerted and
-    summarised, so the first run doesn't send a flood of old finds (`flipperbot show` lists them)."""
-    if not path.exists() or db.conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]:
+    """Fill an empty database from the seed, or add a newer seed's listings to one that already has
+    data (what you already have wins). Seeded listings count as already alerted and summarised, so
+    they never send a flood of old finds (`flipperbot show` lists them). Returns how many were added."""
+    if not path.exists():
+        return 0
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    empty = not db.conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
+    if not empty and db.kv_get("seed_hash") == digest:
         return 0
     with gzip.open(path, "rt", encoding="utf-8") as f:
         rows = json.load(f)
+    before = db.conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
     cols = FIELDS + ["notified_tier", "in_digest", "params", "description"]
     q = f"INSERT OR IGNORE INTO listings ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})"
     db.conn.executemany(q, [[r.get(f) for f in FIELDS] + [r.get("tier"), 1, "{}", ""] for r in rows])
     db.conn.commit()
-    db.kv_set("seeded_at", now())
-    return len(rows)
+    added = db.conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] - before
+    db.kv_set("seed_hash", digest)
+    if empty:
+        db.kv_set("seeded_at", now())
+    if added:
+        db.kv_set("rules_version", 0)  # more prices to compare against: judge everything again
+    return added

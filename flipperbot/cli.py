@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> None:
     db = DB(s.db_path)
     n = seed.load_if_empty(db)
     if n:
-        print(f"Loaded the starter price book: {n} listings already priced.")
+        print(f"Added {n} listings from the starter price book.")
 
     if args.cmd == "setup":
         _setup(s)

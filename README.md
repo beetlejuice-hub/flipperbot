@@ -89,6 +89,19 @@ goes through every one: photos at full size, each cut into four zoomed quarters,
 text, logos, movements), naming and valuing each and checking with web search. If its total makes the
 lot a real good deal and it's confident, you get it on Telegram with the watches that make it worth it.
 
+**Fakes.** Most cheap luxury watches online in Romania are replicas, so the bot is suspicious first:
+- replica words and factory names (AAA, 1:1, clone, noob, VSF, clean factory...) → skipped;
+- a Japanese/Chinese movement in a Swiss/luxury watch, or replica-shop talk on a luxury brand ("many
+  models", "gift box", "last pieces") → *likely fake*;
+- one seller with a row of cheap modern luxury/Swiss watches → *likely fake* (vintage shops excepted);
+- every real good deal is Claude-checked with a brand-by-brand checklist, the seller's other listings,
+  and a stricter bar for luxury/Swiss (60% sure). Its Telegram message says what to ask the seller.
+
+**Old watches and people who don't know what they sell.** Most searches go to lots, old, inherited and
+broken watches ("ceasul bunicului", "mostenire", "din pod", "vechituri", pocket watches...). Old watches
+where the model isn't clear, and sellers who write "nu stiu ce marca", "de la bunicul", "nu ma pricep", go
+to Claude (after lots), which identifies them from dial, case and movement and values them.
+
 ## How it decides
 
 See `flipperbot/tiers.py`. In short: once 4+ listings of the same model are in the

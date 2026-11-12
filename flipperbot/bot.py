@@ -75,10 +75,12 @@ def evaluate(db: DB, l: Listing, s: Settings) -> Any:
     ident = identify(l.title, f"{l.description} {brand_field}")
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key) if ident.model_key else []
     verdict = judge(l, ident, comps, s)
-    if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and l.seller_id:
-        # One seller with a row of luxury watches all far under market: a replica dealer.
+    if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and "vintage" not in ident.flags and l.seller_id:
+        # One seller with a row of modern luxury/Swiss watches all far under market: a replica dealer.
+        # (Not vintage: a vintage shop selling several old Swiss watches is normal.)
         n = db.conn.execute(
             """SELECT COUNT(*) FROM listings WHERE seller_id=? AND key!=? AND segment IN ('luxury','swiss')
+               AND flags NOT LIKE '%"vintage"%'
                AND (tier IN ('good','real_good','suspect') OR reason LIKE '%likely fake%')""",
             (l.seller_id, l.key),
         ).fetchone()[0]
@@ -109,7 +111,10 @@ def process(db: DB, listings: list[Listing], s: Settings, *, alert: bool = True)
 
 def pick_searches(db: DB, s: Settings) -> list[tuple[str | None, str | None]]:
     feeds: list[tuple[str | None, str | None]] = [(None, c) for c in watch_categories(db)]
-    terms = random.sample(s.search_pool, min(s.searches_per_poll, len(s.search_pool)))
+    n_focus = round(s.searches_per_poll * s.focus_share)
+    terms = random.sample(s.focus_pool, min(n_focus, len(s.focus_pool)))
+    rest = [t for t in s.search_pool if t not in terms]
+    terms += random.sample(rest, min(s.searches_per_poll - len(terms), len(rest)))
     return feeds + [(t, None) for t in terms]
 
 
@@ -188,9 +193,12 @@ def pending_ai(db: DB, s: Settings) -> list[Any]:
     as a real good deal gets promoted and, if confirmed, sent."""
     tiers = [t for t in s.ai_tiers if t not in s.alert_tiers]
     q = f"""SELECT * FROM listings WHERE ai IS NULL AND hidden = 0
-            AND (tier IN ({','.join('?' * len(tiers)) or "''"}) OR (flags LIKE '%"lot"%' AND tier IN ('mid', 'good')))
+            AND (tier IN ({','.join('?' * len(tiers)) or "''"})
+                 OR ((flags LIKE '%"lot"%' OR flags LIKE '%"naive"%' OR reason LIKE '%Claude will look%')
+                     AND tier IN ('mid', 'good')))
             AND first_seen >= ? AND last_seen >= datetime('now', '-2 days')
-            ORDER BY (flags LIKE '%"lot"%') DESC, COALESCE(profit_ron, 0) DESC"""
+            ORDER BY CASE WHEN flags LIKE '%"lot"%' THEN 3 WHEN flags LIKE '%"naive"%' THEN 2
+                          WHEN flags LIKE '%"vintage"%' THEN 1 ELSE 0 END DESC, COALESCE(profit_ron, 0) DESC"""
     return db.conn.execute(q, [*tiers, _fresh(db)]).fetchall()
 
 
@@ -237,8 +245,8 @@ def confidence(result: dict[str, Any]) -> int:
     return {"likely_genuine": 60, "unsure": 40}.get(result.get("authenticity"), 0)  # older checks had no number
 
 
-def confirmed(result: dict[str, Any] | None, s: Settings) -> tuple[bool, str]:
-    """Is Claude sure enough about this deal to message you?"""
+def confirmed(result: dict[str, Any] | None, s: Settings, segment: str | None = None) -> tuple[bool, str]:
+    """Is Claude sure enough about this deal to message you? Luxury/Swiss needs more."""
     if not result:
         return False, "not checked by Claude"
     if "error" in result:
@@ -247,8 +255,9 @@ def confirmed(result: dict[str, Any] | None, s: Settings) -> tuple[bool, str]:
         return False, "Claude thinks it's fake"
     if (result.get("verdict") or "").lower() not in ("buy", "negotiate"):
         return False, f"Claude says {result.get('verdict') or 'skip'}"
-    if confidence(result) < s.alert_min_confidence:
-        return False, f"Claude only {confidence(result)}% sure"
+    need = s.alert_min_confidence_luxury if segment in ("luxury", "swiss") else s.alert_min_confidence
+    if confidence(result) < need:
+        return False, f"Claude only {confidence(result)}% sure (needs {need})"
     return True, ""
 
 
@@ -271,7 +280,7 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
             if result is None:
                 continue
         row = db.get(r["key"])
-        ok, why = confirmed(result, s)
+        ok, why = confirmed(result, s, row["segment"])
         if ok:
             notify.send(s, notify.deal_text(row, result), (json.loads(row["photos"] or "[]") or [None])[0])
             log(f"  sent to Telegram ({confidence(result)}% sure): {row['title']}")
@@ -285,7 +294,7 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
         result = ai.check(db, r, s)
         if result and claude_value(db, r, result, s) == "real_good":
             row = db.get(r["key"])
-            ok, why = confirmed(result, s)
+            ok, why = confirmed(result, s, row["segment"])
             if ok:
                 notify.send(s, notify.deal_text(row, result), (json.loads(row["photos"] or "[]") or [None])[0])
                 log(f"  Claude found a real good deal, sent ({confidence(result)}% sure): {row['title']}")

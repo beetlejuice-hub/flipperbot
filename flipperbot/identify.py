@@ -120,6 +120,27 @@ BATTERY = [
 REPLICA = [
     "replica", "copie", "clona", "clone", "aaa", "aaa+", "imitatie", "nu este original", "nu e original",
     "inspired", "homage", "fake", "super clone", "superclone", "clone", "1:1", "mirror",
+    # replica factories and how replica sellers write
+    "noob", "noob factory", "vsf", "vs factory", "clean factory", "zf factory", "apf factory", "ar factory",
+    "bt factory", "gm factory", "3k factory", "eta clone", "swiss clone", "calitate 1:1", "high quality",
+    "aaa quality", "mirror quality", "first copy", "master copy", "class a", "replica premium", "calitate replica",
+]
+# Weaker signs. A Japanese/Chinese movement in a luxury or Swiss watch is a fake ("fake_signs");
+# shop talk ("many models", "gift box", "last pieces") is damning only on luxury brands ("shop_talk").
+FAKE_SIGNS = ["mecanism japonez", "miyota", "seagull", "sea-gull", "mecanism chinezesc", "calitate premium"]
+SHOP_TALK = [
+    "cutie cadou", "stoc limitat", "ultimele bucati", "diverse modele", "mai multe modele", "toate modelele",
+    "avem si alte modele", "alte modele disponibile",
+]
+# Sellers who don't know what they have: inherited, found, "no idea". Where underpriced old watches are.
+# (Checked against real listings: "nu cunosc istoric service" and "cum se vede in poze" are everyday
+# phrasing, not cluelessness, so they're not here.)
+NAIVE = [
+    "nu stiu nimic", "nu stiu multe", "nu stiu ce marca", "nu stiu marca", "nu stiu ce model", "nu stiu ce valoare",
+    "nu stiu daca merge", "nu stiu daca functioneaza", "nu stiu daca e original", "nu ma pricep", "nu am idee",
+    "habar n-am", "de la bunic", "bunicului", "bunicul", "bunica", "mostenire", "mostenit", "gasit in pod",
+    "din pod", "de la tata", "de la parinti", "vechi de tot", "vechituri", "obiecte vechi", "golesc casa",
+    "eliberez casa", "din casa batraneasca",
 ]
 WANTED = ["cumpar", "cumparam", "caut ceas", "caut ceasuri", "achizitionez", "achizitionam"]
 SERVICE = ["reparatii ceasuri", "service ceasuri", "reparam ceasuri", "schimb baterii", "atelier"]
@@ -199,6 +220,12 @@ def identify(title: str, description: str = "") -> Identity:
         flags.add("battery")  # usually a 20-lei fix: the best kind of "broken"
     if _any(full_n, REPLICA):
         flags.add("replica")
+    if _any(full_n, FAKE_SIGNS):
+        flags.add("fake_signs")
+    if _any(full_n, SHOP_TALK):
+        flags.add("shop_talk")
+    if _any(full_n, NAIVE):
+        flags.add("naive")
     if _any(title_n, WANTED):
         flags.add("wanted")
     if _any(title_n, SERVICE):

@@ -368,7 +368,8 @@ function aiBox(a, l) {
       typeof a.confidence === "number" ? ` · ${a.confidence}% sure` : "", a.offer_ron ? ` · offer ${lei(a.offer_ron)}` : ""),
     names && h("div", {}, names),
     h("div", {}, `authenticity: ${a.authenticity || "?"} · resale ${lei(a.resale_ron_low)}–${lei(a.resale_ron_high)}` + (a.repair_cost_ron ? ` · repair ~${lei(a.repair_cost_ron)}` : "")),
-    a.summary && h("div", { class: "reason" }, a.summary));
+    a.summary && h("div", { class: "reason" }, a.summary),
+    (a.questions_for_seller || []).length ? h("div", { class: "reason" }, "Ask the seller: " + a.questions_for_seller.slice(0, 3).join(" · ")) : null);
 }
 
 // Asking price next to what it's worth: the bot's market estimate, else Claude's resale range.

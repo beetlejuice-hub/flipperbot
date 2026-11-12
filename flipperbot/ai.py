@@ -47,16 +47,28 @@ Read every photo. Zoom in on dials, logos, casebacks, crowns, movements and any 
 
 Then:
 1. Identify the watch: brand, model, reference and movement if you can. If this is a lot, go through the watches one by one.
-2. Authenticity: real or fake? Check the photos (wrong fonts, logo, date window, caseback, cheap movement) and read the
-   description for red flags (words like replica/AAA/copie/1:1, "nu stiu daca e original", no box or papers for an
-   expensive model, stock photos, a price far too low for the model, a seller with many similar luxury watches).
+2. Authenticity: real or fake? In Romania most cheap luxury and Swiss watches online are replicas, so for those
+   start from "fake" and let the photos prove otherwise. Check:
+   - Photos: dial printing (font, spacing, alignment, crispness), logo and applied markers, hands, date window and
+     magnifier, bezel insert, crown logo, bracelet/clasp engravings, lug finishing, caseback. Brand tells, e.g.
+     Rolex: no display caseback, rehaut engraving, 2.5x cyclops, crown at 6; Omega: text alignment, Seamaster wave
+     pattern, caseback medallion; AP/Hublot/Patek/Richard Mille under a few thousand lei are fakes.
+   - Movement, if shown: does the calibre match the model? A Miyota/Seagull/generic movement in a Swiss brand = fake.
+   - Photos that are stock/catalogue images or the same photos used by other sellers (search the web for them).
+   - Description: replica words (AAA, 1:1, clone, factory names like noob/VSF/clean), shop talk (gift box, many
+     models, last pieces), vagueness about origin, no box/papers on an expensive model.
+   - The seller's other listings (below): a row of cheap luxury watches means a replica dealer.
+   - Price: far too low for the model and condition.
+   If it's a vintage or inherited watch, also watch for redials (repainted dials) and franken watches (mixed parts).
 3. Condition: what's visibly wrong, and what a repair would need and roughly cost in Romania.
 4. Value: use web search to find what this model actually sells for, used, in Romania (OLX, Okazii, Publi24) and in Europe (Chrono24, eBay, Vinted). Prefer sold prices over asking prices. Give lei (1 EUR = {eur} lei).
 5. Decide: buy, negotiate (and to what price), or skip.
 6. confidence: 0-100, how sure you are that this is a genuine watch AND a profitable flip at the asking or
    offer price. Be honest: with blurry photos, no caseback/movement photos or a vague description, stay low.
 
-{lot_block}Answer with ONLY one JSON object, no other text:
+Other listings by the same seller that the bot has seen: {seller_listings}
+
+{lot_block}{old_block}Answer with ONLY one JSON object, no other text:
 {{
   "watches": [{{"brand": "", "model": "", "reference": "", "movement": "", "confidence": "high|medium|low", "photo": "", "value_ron": 0, "notable": false}}],
   "authenticity": "likely_genuine|unsure|likely_fake",
@@ -70,6 +82,7 @@ Then:
   "verdict": "buy|negotiate|skip",
   "offer_ron": 0,
   "confidence": 0,
+  "questions_for_seller": ["what to ask the seller to prove it's genuine / works, short, in Romanian"],
   "summary": "two sentences, in Romanian-English mix is fine, for a phone notification"
 }}"""
 
@@ -86,6 +99,15 @@ hide in these. Go through it carefully:
   Put which photo it's in, in "photo".
 - resale_ron_low/high = the whole lot if you sold the good ones separately and the rest as a batch.
 - Say in summary which watches make the lot worth it.
+
+"""
+
+
+OLD_BLOCK = """THE SELLER MAY NOT KNOW WHAT THIS IS: an old, inherited or found watch, maybe unnamed. Identify it yourself
+from the dial text, logo, case, crown and any movement or caseback markings (maker, calibre, hallmarks such as
+silver 800/925 or gold 14k/585, 18k/750 on pocket watches). Search the web on the text you can read. Old Swiss
+makers (Omega, Longines, Zenith, Tissot, Doxa, Cyma, Eterna, Universal...), early Seiko/Citizen automatics,
+Soviet rarities and gold cases are what make these worth it.
 
 """
 
@@ -154,6 +176,18 @@ def download_photos(urls: list[str], folder: Path, max_photos: int = 8) -> list[
     return out
 
 
+def seller_listings(db: DB, row: Any, limit: int = 10) -> str:
+    if not row["seller_id"]:
+        return "unknown"
+    rows = db.conn.execute(
+        "SELECT title, price_ron FROM listings WHERE seller_id=? AND key!=? ORDER BY last_seen DESC LIMIT ?",
+        (row["seller_id"], row["key"], limit),
+    ).fetchall()
+    if not rows:
+        return "none seen"
+    return "; ".join(f"{r['title'][:60]} ({r['price_ron']} lei)" for r in rows)
+
+
 def extract_json(text: str) -> dict[str, Any] | None:
     m = re.search(r"\{.*\}", text or "", re.S)
     if not m:
@@ -169,7 +203,8 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
     if not available(s) or used_today(db) >= s.ai_daily_limit:
         return None
     folder = s.photos_dir / row["key"].replace(":", "_")
-    is_lot = "lot" in json.loads(row["flags"] or "[]")
+    flags = set(json.loads(row["flags"] or "[]"))
+    is_lot = "lot" in flags
     urls = json.loads(row["photos"] or "[]")
     photos = download_photos([big(u) for u in urls] if is_lot else urls, folder, max_photos=10 if is_lot else 8)
     if is_lot:
@@ -180,6 +215,8 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         reason=row["reason"], description=(row["description"] or "")[:3000],
         photos=", ".join(p.name for p in photos) or "(no photos)", eur=s.eur_to_ron,
         lot_block=LOT_BLOCK if is_lot else "",
+        old_block=OLD_BLOCK if flags & {"naive", "vintage", "pocket"} and not is_lot else "",
+        seller_listings=seller_listings(db, row),
     )
     db.kv_set(f"ai_used:{date.today().isoformat()}", used_today(db) + 1)
     try:

@@ -105,6 +105,9 @@ def deal_text(row: Any, ai: dict[str, Any] | None, note: str | None = None) -> s
         lines.append(f"resale {ai.get('resale_ron_low', '?')}–{ai.get('resale_ron_high', '?')} lei" + (f" · repair ~{ai['repair_cost_ron']} lei" if ai.get("repair_cost_ron") else ""))
         if ai.get("summary"):
             lines.append(e(str(ai["summary"])[:400]))
+        qs = [q for q in ai.get("questions_for_seller") or [] if isinstance(q, str)][:3]
+        if qs:
+            lines.append("Ask the seller: " + e(" · ".join(qs))[:300])
     elif ai:
         lines.append(f"🤖 Claude couldn't check it: {e(str(ai['error'])[:200])}")
     else:

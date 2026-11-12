@@ -75,6 +75,13 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
             return Verdict("mid", f"{ident.brand.name} part/accessory")
         return Verdict("bad", "part/accessory, not a watch")
 
+    # --- replica seller talk on a luxury/Swiss brand ------------------------------
+    if ident.brand_in_title and "naive" not in f and (
+        ("fake_signs" in f and seg in ("luxury", "swiss")) or ("shop_talk" in f and seg == "luxury")
+    ):
+        why = "Japanese/Chinese movement or 'premium quality'" if "fake_signs" in f else "shop talk: many models, gift box"
+        return Verdict("suspect", f"{ident.brand.name} sold the way replicas are ({why})")
+
     # --- too cheap to be real ---------------------------------------------------
     if ident.brand and ident.brand.fake_floor_ron and price < ident.brand.fake_floor_ron:
         why = {"broken", "lot", "vintage", "pocket"} & f
@@ -96,6 +103,18 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings) -> Verdict
             return Verdict("mid", f"{n} at {round(price / ident.lot_count)} lei each ({names})")
         # Unnamed old lots are where good watches hide: always a look, and Claude goes through the photos.
         return Verdict("mid", f"{n}, {names}: Claude will go through the photos")
+
+    # --- old, unclear watches: Claude, not the brand's average --------------------------
+    # A 1940s Doxa or an inherited watch isn't priced by the average of all Doxas. If only the brand
+    # (or nothing) is known and it's old, inherited, a pocket watch, or old and broken, Claude looks.
+    model_known = "|" in (ident.model_key or "")
+    old_unclear = not model_known and (
+        "naive" in f or "pocket" in f or ("vintage" in f and ("broken" in f or seg in VALUABLE_SEGMENTS))
+    )
+    if old_unclear and (ident.brand is None or seg in VALUABLE_SEGMENTS | {"soviet", "japan"}) and price <= 2000:
+        who = ident.brand.name if ident.brand else "unnamed"
+        why = "seller doesn't seem to know what it is" if "naive" in f else "old watch, model unclear"
+        return Verdict("good" if seg in VALUABLE_SEGMENTS else "mid", f"{who}: {why}: Claude will look at the photos")
 
     # --- priced against the market -------------------------------------------------
     market = market_price(comps) if len(comps) >= s.min_comps else None

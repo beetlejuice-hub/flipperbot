@@ -29,6 +29,16 @@ SEARCH_POOL = [
     "ceas aur",
 ]
 
+# Where sellers often don't know what they have: lots, old and inherited watches. Most polls
+# include some of these (`focus_share`).
+FOCUS_POOL = [
+    "lot ceasuri", "lot ceasuri vechi", "ceasuri vechi", "ceas vechi", "ceas de mana vechi", "ceas antic",
+    "ceasul bunicului", "ceas bunic", "ceas mostenire", "ceasuri din pod", "vechituri", "obiecte vechi ceas",
+    "ceas mecanic vechi", "ceasuri mecanice vechi", "ceas de buzunar", "ceas de buzunar argint", "ceas aur vechi",
+    "ceasuri defecte", "lot ceasuri defecte", "ceasuri pentru piese", "ceas sovietic", "ceasuri sovietice lot",
+    "ceas militar", "ceas elvetian vechi", "ceasuri de colectie", "colectie ceasuri vechi",
+]
+
 # Repair cost to assume for a "broken" watch, by segment (lei). A dead battery
 # is its own, much cheaper case (`battery_fix_ron`).
 REPAIR_RON = {"japan": 250, "soviet": 200, "swiss": 600, "vintage": 500, "luxury": 1500}
@@ -42,6 +52,8 @@ class Settings:
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
     search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))
+    focus_pool: list[str] = field(default_factory=lambda: list(FOCUS_POOL))
+    focus_share: float = 0.67  # of each poll's searches, how many come from focus_pool
     eur_to_ron: float = 5.0
 
     # Facebook Marketplace (needs `flipperbot facebook-login` once, with a second account)
@@ -85,6 +97,7 @@ class Settings:
     # Telegram only gets a real_good deal once Claude has confirmed it: not likely fake, verdict buy or
     # negotiate, and at least this sure (0-100). Unchecked or unconfirmed deals stay on the dashboard.
     alert_min_confidence: int = 50
+    alert_min_confidence_luxury: int = 60  # luxury/Swiss: most cheap ones in Romania are replicas
     digest_telegram: bool = False  # the 20:00 summary of mids on Telegram (they're on the dashboard anyway)
 
     @property

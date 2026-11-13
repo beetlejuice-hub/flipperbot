@@ -153,3 +153,8 @@ def test_half_price_working_electronics_is_suspicious_and_broken_is_priced_as_br
     assert c["tier"] == "mid" and c["reason"].startswith("suspiciously cheap") and c["score"] <= 5
     b = db.get("olx:2")
     assert b["est_value_ron"] is None and b["score"] <= 4  # no other broken PS5s to compare with: no estimate
+
+
+def test_damage_in_the_description():
+    i = identify("Macbook pro m1 pro 2021 16 CITITI ANUNTUL", "A suferit o cazatura, cu ecranul indoit asa", "electronics")
+    assert "broken" in i.flags

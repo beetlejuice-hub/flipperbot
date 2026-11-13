@@ -10,6 +10,7 @@ from flipperbot.identify import identify
     ("phones", "Samsung Galaxy Z Flip 5", "samsung|galaxy z flip 5", None),
     ("phones", "Google Pixel 8 Pro", "google|pixel 8 pro", None),
     ("phones", "iPhone 14 blocat icloud", "apple|iphone 14", "locked"),
+    ("phones", "IPhone 16 Pro Max 256 gb neverlock sticla fisurata", "apple|iphone 16 pro max 256gb", "broken"),
     ("phones", "Husa iPhone 15 Pro silicon", "apple|iphone 15 pro", "part"),
     ("tools", "Masina de gaurit si insurubat Makita DHP485 doar corp", "makita|dhp485 solo", None),
     ("tools", "Milwaukee M18 FUEL FPD2 percutie", "milwaukee|m18 fpd2", None),

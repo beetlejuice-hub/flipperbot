@@ -59,7 +59,9 @@ def match(title: str, full: str) -> TechMatch | None:
     return None
 
 
-BROKEN = ["display spart", "ecran spart", "sticla sparta", "spart", "nu porneste", "nu se aprinde", "face id nu", "faceid nu",
+DAMAGE = ["fisurat", "fisurata", "fisura", "crapat", "crapata", "crapatura", "indoit", "indoita", "cazatura", "a cazut",
+          "ciobit", "ciobita", "pixeli morti", "dead pixel", "linii pe ecran", "pata pe ecran", "burn in", "ecran ars"]  # cracked, bent, dropped: priced as damaged
+BROKEN = DAMAGE + ["display spart", "ecran spart", "sticla sparta", "spart", "nu porneste", "nu se aprinde", "face id nu", "faceid nu",
           "bootloop", "placa de baza", "nu are semnal", "fara semnal", "defect", "defecta", "pentru piese", "nefunctional"]
 # "neverlock(at)" means unlocked, so it's not here. Network-locked, iCloud/Google-locked, blacklisted: not resellable as is.
 LOCKED = ["icloud", "blocat icloud", "cont icloud", "codat", "codat in retea", "blocat in retea", "blocat retea", "doar retea",

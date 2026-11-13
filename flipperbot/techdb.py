@@ -287,7 +287,9 @@ def match(title: str, full: str) -> TechMatch | None:
 
 # --- flags particular to electronics ----------------------------------------------------------------
 
-BROKEN = ["nu porneste", "nu mai porneste", "nu se aprinde", "nu afiseaza", "nu da imagine", "fara imagine", "ecran spart",
+DAMAGE = ["fisurat", "fisurata", "fisura", "crapat", "crapata", "crapatura", "indoit", "indoita", "cazatura", "a cazut",
+          "ciobit", "ciobita", "pixeli morti", "dead pixel", "linii pe ecran", "pata pe ecran", "burn in", "ecran ars"]  # cracked, bent, dropped: priced as damaged
+BROKEN = DAMAGE + ["nu porneste", "nu mai porneste", "nu se aprinde", "nu afiseaza", "nu da imagine", "fara imagine", "ecran spart",
           "display spart", "afisaj spart", "placa de baza arsa", "placa arsa", "defect", "defecta", "defecte", "pentru piese",
           "nefunctional", "nefunctionala", "blue light of death", "ylod", "rrod", "artefacte", "artifacts",
           "se supraincalzeste", "se opreste singur", "se opreste singura", "nu citeste discuri"]
@@ -296,7 +298,7 @@ LOCKED = ["icloud", "activation lock", "blocat icloud", "blocat pe cont", "cont 
 MODDED = ["modat", "modata", "chipat", "chipata", "jailbreak", "jailbreakuit", "decodat", "decodata", "piratat", "piratata",
           "custom firmware", "cfw", "hackuit"]
 # What's sold is an accessory or a game, not the device: the title starts with it, or says "for PS5".
-PART_START = ["controller", "controler", "maneta", "manete", "joc", "jocuri", "panouri", "panou", "capac", "capace",
+PART_START = ["ssd", "hdd", "card", "memorie", "stick", "controller", "controler", "maneta", "manete", "joc", "jocuri", "panouri", "panou", "capac", "capace",
               "covers", "cover", "carcase", "geanta", "rucsac", "trackpad", "touchpad", "palmrest", "boxa", "difuzor", "abonament", "cont", "voucher", "pedale", "cockpit", "scaun", "husa", "huse", "cablu", "stand", "suport",
               "incarcator", "dock", "docking", "skin", "folie", "ventilator", "cooler", "carcasa", "pad", "joystick",
               "volan", "casti", "headset", "card", "figurina", "figurine", "telecomanda", "baterie", "display", "ecran",

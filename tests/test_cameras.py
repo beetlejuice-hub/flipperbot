@@ -129,3 +129,25 @@ def test_cheap_genuine_cameras_arent_called_fake():
     for title, price in (("Aparat foto Rolleiflex SL35", 250), ("SLR Contax 137 MD Quartz", 400)):
         l = Listing("olx", "1", "u", title, price_ron=price, niche="cameras")
         assert judge(l, identify(title, "", "cameras"), [], S).tier != "suspect"
+
+
+def test_camera_marks_are_different_cameras():
+    from flipperbot.identify import identify
+
+    assert identify("Sony A7 II (Body) Mirrorless Full Frame + 3 Acumulatori", "", "cameras").model_key == "sony|A7 II"
+    assert identify("Sony A7 III body", "", "cameras").model_key == "sony|A7 III"
+    assert identify("Canon PowerShot G7X Mark III ca nou", "", "cameras").model_key == "canon|G7X III"
+
+
+def test_far_under_a_generic_lens_or_watch_family_is_a_version_check():
+    s = Settings()
+    from flipperbot.db import DB
+
+    db = DB(":memory:")
+    lenses = [olx.parse_offer(offer(100 + i, "Obiectiv Sony E 16-50", p, cat=2344)) for i, p in enumerate([1800, 1900, 1850, 1750, 1900])]
+    kit = olx.parse_offer(offer(200, "Obiectiv Sony E 16-50 OSS kit", 290, cat=2344))
+    for l in [*lenses, kit]:
+        l.niche = "cameras"
+    bot.process(db, [*lenses, kit], s, alert=False)
+    row = db.get("olx:200")
+    assert row["tier"] == "mid" and row["reason"].startswith("far under similar listings") and row["score"] <= 5

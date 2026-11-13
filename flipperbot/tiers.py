@@ -239,6 +239,14 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             v.reason += " (brand only named in the description)"
         if v.tier in ("good", "real_good") and seg in ("luxury", "swiss") and discount >= 0.5:
             v.reason += " · this cheap for the brand: make sure it's real"
+        if ident.niche in ("watches", "cameras") and discount >= 0.6 and v.tier in ("good", "real_good") \
+                and "broken" not in f and seg not in ("luxury", "swiss") \
+                and not (exact or (ident.lens and ident.family != "lens")):  # exact reference / named lens: like for like
+            # (luxury/Swiss have their own guards: the replica-dealer pattern, the fake check)
+            # 60%+ under similar listings is more often a cheaper version than the ones compared (a Seamaster Polaris
+            # against all Seamasters, a kit lens against pro ones) than a steal: Claude looks before it's a deal.
+            v.tier = "mid"
+            v.reason = "far under similar listings: check it's the same version, let Claude look · " + v.reason
         if ident.niche in ("electronics", "phones") and discount >= 0.45 and v.tier in ("good", "real_good") \
                 and "broken" not in f:
             # A working PS5 or iPhone at half price is nearly always a scam, locked, faulty or not what the title says.

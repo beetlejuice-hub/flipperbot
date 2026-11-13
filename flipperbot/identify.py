@@ -381,8 +381,13 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
         if eos and not is_lens_listing:  # "Canon EOS 100 montura EF": the body, not the mount
             family, lens, refs = None, False, ["EOS " + re.sub(r"[\s-]", "", eos.group(1)).upper()]
         elif not lens and brand:
-            cam_refs = [r.group(1) for r in CAM_REF.finditer(title_n) if not _NOT_CAM_REF.match(r.group(1))]
-            refs = [r.upper() for r in cam_refs[:1]] or refs
+            cam = [r for r in CAM_REF.finditer(title_n) if not _NOT_CAM_REF.match(r.group(1))]
+            if cam:
+                # "A7 II", "A7 Mark III", "G7X Mark III": the mark is a different camera at a different price
+                mk = re.match(r"\s?(?:mark\s?|mk\s?|m)?(iv|iii|ii|v|[2-5])(?![a-z0-9])", title_n[cam[0].end():])
+                roman = {"2": "II", "3": "III", "4": "IV", "5": "V"}
+                suffix = f" {roman.get(mk.group(1), mk.group(1).upper())}" if mk else ""
+                refs = [cam[0].group(1).upper() + suffix]
 
     flags: set[str] = set()
     cam = niche == "cameras"

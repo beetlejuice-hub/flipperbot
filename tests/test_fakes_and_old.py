@@ -157,3 +157,10 @@ def test_a_too_cheap_seiko_gets_a_skeptical_second_check_that_finds_the_fake(mon
     assert claude_score(ai.apply_fake_hunt(first, {**hunt, "verdict": "unsure"}), 300)[0] <= 7
     assert claude_score(first, 300)[0] <= 7
     assert claude_score({**first, "verified": True}, 300)[0] == 10
+
+
+def test_prompts_and_models():
+    from flipperbot import ai
+
+    assert "several watches" in ai.LOT_BLOCK and "cameras" in ai.CAMERA_LOT_BLOCK
+    assert Settings().ai_model == "haiku" and Settings().fake_hunt_model == "sonnet"

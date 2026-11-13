@@ -115,15 +115,21 @@ class Settings:
     # of the day's budget (those only show on the dashboard).
     ai_tiers: list[str] = field(default_factory=lambda: ["real_good", "good"])
     ai_timeout_s: int = 420
-    # Sonnet is far lighter on a Claude plan's usage limit than Opus and plenty for this.
-    ai_model: str = "sonnet"
+    # The full check runs on Haiku: about 20x lighter on your plan than Sonnet, and it reads photos well.
+    # Only the skeptical fake check, on the few watches the first check wants to buy, uses Sonnet:
+    # that's where a sharper eye pays for itself. Set ai_model = "sonnet" for every check on Sonnet.
+    ai_model: str = "haiku"
+    fake_hunt_model: str = "sonnet"
+    # Photos are shrunk to this many pixels on the long side before Claude reads them (fewer tokens);
+    # zoomed quarters for reading engravings are cut from the full-size photo first.
+    ai_photo_px: int = 1200
     # Trend radar (radar.py): watchlist searches on OLX, Google Trends Romania, Wikipedia attention, and a
     # weekly Claude look at what's rising (one call a week on your plan; 0 turns that off).
     radar: bool = True
     radar_every_min: int = 60
     radar_per_poll: int = 3
     radar_ai_refresh_days: int = 7
-    ai_max_photos: int = 5  # per single watch; lots get 8 plus zoomed quarters of the first 3
+    ai_max_photos: int = 4  # per single watch; lots and too-cheap/often-faked ones get 8 plus zoomed quarters
     claude_bin: str = "claude"
 
     # Dashboard (http://localhost:8789; if another app has that port, the next free one:

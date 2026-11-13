@@ -70,7 +70,7 @@ subscription: no Claude window or session needed, just Claude Code installed and
 Mac (`flipperbot claude-test` checks). It looks at the photos and description: fake or not, and what it
 realistically sells for. If it's confident (not fake, buy/negotiate, at least 50% sure; 60% for
 luxury/Swiss), you get a short Telegram message. Everything else waits for you: **Send to Claude** on any
-card (or *Let Claude check* in Interesting). Checks run on Sonnet, lean, and pause by themselves if your
+card (or *Let Claude check* in Interesting). Checks run on Haiku (the skeptical fake check on Sonnet), lean, and pause by themselves if your
 plan's limit is hit. Max 15 automatic checks a day (`ai_daily_limit`); `ai_auto_real_good = false` turns
 the automatic ones off, `ai_auto = true` also sends lots and old watches by themselves.
 

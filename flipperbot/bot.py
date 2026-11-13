@@ -94,7 +94,8 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     # Electronics: a sealed new console asks far more than a used one; compare used with used.
     used_only = l.niche == "electronics" and "new" not in ident.flags
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=used_only) if ident.model_key else []
-    verdict = judge(l, ident, comps, s, db.model_price(ident.model_key))
+    sold = db.sold(ident.model_key, used_only=used_only)
+    verdict = judge(l, ident, comps, s, db.model_price(ident.model_key), sold=[p for p, _ in sold])
     if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and "vintage" not in ident.flags and l.seller_id:
         # One seller with a row of modern luxury/Swiss watches all far under market: a replica dealer.
         # (Not vintage: a vintage shop selling several old Swiss watches is normal.)
@@ -112,7 +113,7 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     if "|" in (ident.model_key or ""):  # only a precisely named model says anything about how it sells
         from .tiers import liquidity
 
-        liq = liquidity(db.comparable_ages(ident.model_key, exclude_key=l.key))
+        liq = liquidity(db.comparable_ages(ident.model_key, exclude_key=l.key), [d for _, d in sold])
     if liq and verdict.tier in ("good", "real_good") and liq["label"] in ("slow", "very slow"):
         # A cheap buy you can't sell isn't a deal: similar ones sit for months.
         verdict.tier = "mid" if liq["label"] == "very slow" or verdict.tier == "good" else "good"
@@ -460,6 +461,55 @@ def reprice_model(db: DB, s: Settings, model_key: str | None, skip: str | None =
     return len(rows)
 
 
+def check_sold(db: DB, s: Settings, seller_listings: Callable[..., Any] = olx.seller_listings,
+               log: Callable[[str], None] = print) -> dict[str, int]:
+    """Which listings are really gone, and why. For a few private sellers whose priced listings the searches
+    haven't shown for a day, ask OLX for the seller's listings still up: one missing is gone, and
+      expired   if it was up ~4 weeks since its last refresh (OLX ends ads after 30 days unless renewed),
+      reposted  if the seller has a new listing of the same item,
+      sold      otherwise.
+    The sold ones are the price book's best prices: what similar ones really went for, and how fast."""
+    from .db import _days_between, _title_words, now as db_now
+
+    sellers = [r["seller_id"] for r in db.conn.execute(
+        """SELECT seller_id FROM listings WHERE source='olx' AND COALESCE(seller_id, '') != '' AND gone_at IS NULL
+           AND model_key LIKE '%|%' AND COALESCE(business, 0) = 0
+           AND last_seen < datetime('now', '-1 day') AND last_seen >= datetime('now', '-30 days')
+           AND COALESCE(alive_checked_at, '') < datetime('now', '-1 day')
+           GROUP BY seller_id ORDER BY MAX(last_seen) DESC LIMIT ?""", (s.sold_checks_per_poll,))]
+    counts = {"sold": 0, "expired": 0, "reposted": 0, "up": 0}
+    for i, seller in enumerate(sellers):
+        if i:
+            time.sleep(random.uniform(*s.pause_between_requests_s))
+        up, complete = seller_listings(seller, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s)
+        ids = {l.source_id for l in up}
+        t = db_now()
+        for r in db.conn.execute("""SELECT * FROM listings WHERE source='olx' AND seller_id=? AND gone_at IS NULL
+                                    AND last_seen >= datetime('now', '-30 days')""", (seller,)).fetchall():
+            if r["source_id"] in ids:
+                db.conn.execute("UPDATE listings SET last_seen=?, alive_checked_at=? WHERE key=?", (t, t, r["key"]))
+                counts["up"] += 1
+                continue
+            if not complete:
+                db.conn.execute("UPDATE listings SET alive_checked_at=? WHERE key=?", (t, r["key"]))
+                continue  # a big seller: missing from the first pages proves nothing
+            words = _title_words(r["title"])
+            again = any(len(words & (w := _title_words(l.title))) / max(1, len(words | w)) >= 0.7 for l in up)
+            if again:
+                reason = "reposted"
+            elif _days_between(r["refreshed_at"] or r["created_at"], t) >= 28:
+                reason = "expired"
+            else:
+                reason = "sold"
+            db.conn.execute("UPDATE listings SET gone_at=?, gone_reason=?, alive_checked_at=? WHERE key=?", (t, reason, t, r["key"]))
+            counts[reason] += 1
+        db.conn.commit()
+    if sellers:
+        log(f"  still up? {len(sellers)} sellers: {counts['sold']} sold, {counts['expired']} expired, "
+            f"{counts['reposted']} reposted, {counts['up']} still up")
+    return counts
+
+
 def rescore_all(db: DB, s: Settings, log: Callable[[str], None] = print) -> dict[str, int]:
     """Judge and score every stored listing again with today's rules. Returns how many per tier."""
     from .scoring import RULES_VERSION
@@ -511,6 +561,12 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
             if facebook_due(db, s):
                 poll_facebook(db, s)
             deliver(db, s)
+            try:
+                check_sold(db, s)
+            except olx.Blocked:
+                raise
+            except Exception as e:  # never stops the main bot
+                print(f"  sold check error: {e!r}")
             try:
                 from . import radar
 

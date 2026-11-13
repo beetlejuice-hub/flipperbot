@@ -170,6 +170,7 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "bands": dict(c.execute(f"""SELECT CASE WHEN score >= 8 THEN 'top' WHEN score >= 5 THEN 'mid' WHEN score >= 1 THEN 'low'
                                      WHEN score = 0 THEN 'removed' ELSE 'unscored' END b, COUNT(*) FROM listings WHERE hidden=0 {nf} GROUP BY b""", na).fetchall()),
         "starred": c.execute(f"SELECT COUNT(*) FROM listings WHERE starred=1 {nf}", na).fetchone()[0],
+        "sold_tracked": c.execute(f"SELECT COUNT(*) FROM listings WHERE gone_reason='sold' {nf}", na).fetchone()[0],
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
         "priced_models": c.execute(
@@ -653,7 +654,9 @@ function card(l) {
         l.price_links && l.price_links.length ? h("div", { class: "checks" }, "Check prices: ",
           l.price_links.flatMap(([name, href], i) => [i ? " · " : "", h("a", { href, target: "_blank", rel: "noopener noreferrer" }, name)])) : null,
         l.liquidity ? h("div", { class: "liq liq-" + l.liquidity.label.replace(" ", "-") },
-          `⏱ sells ${l.liquidity.label}`, h("span", {}, ` · similar ones up ~${l.liquidity.median_days} days, ${l.liquidity.for_sale} for sale`)) : null,
+          `⏱ sells ${l.liquidity.label}`, h("span", {}, l.liquidity.sold
+            ? ` · ${l.liquidity.sold} sold lately, in ~${l.liquidity.sold_days} days; ${l.liquidity.for_sale} for sale`
+            : ` · similar ones up ~${l.liquidity.median_days} days, ${l.liquidity.for_sale} for sale`)) : null,
         l.ebay && !(l.reason || "").startsWith("eBay:") ? h("div", { class: "checks" },
           `eBay (${l.ebay.n} listed, used): realistic ~${l.ebay.low.toLocaleString("ro-RO")}–${lei(l.ebay.high)}`) : null,
         h("div", { class: "meta" }, [l.icon + " " + (l.source === "facebook" ? "Facebook" : "OLX"),
@@ -699,6 +702,7 @@ async function refreshStats() {
     h("span", { class: "dot" + (fresh ? " on" : "") }),
     p ? `${fresh ? "running" : "not running"} · last check ${ago(p.at)}` : "waiting for the first check",
     ` · ${stats.total.toLocaleString("ro-RO")} listings tracked · ${stats.priced_models} models priced`,
+    stats.sold_tracked ? ` · ${stats.sold_tracked.toLocaleString("ro-RO")} sales seen` : "",
     !stats.ai_available ? " · Claude not installed"
       : stats.ai_paused_until ? ` · Claude hit your plan's usage limit: ${stats.ai_queue} waiting, resumes ~${stats.ai_paused_until}`
       : ` · Claude ${stats.ai_used} checks today` + (stats.ai_queue ? `, ${stats.ai_queue} in queue` : ""),

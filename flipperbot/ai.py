@@ -376,6 +376,9 @@ def liquidity_line(row: Any) -> str:
         q = None
     if not q:
         return ""
+    if q.get("sold"):
+        return (f"How fast this model sells on OLX (measured): {q['label']}; the bot saw {q['sold']} sell lately, after "
+                f"~{q['sold_days']} days up; {q['for_sale']} for sale now. Factor in how long reselling would take.\n")
     return (f"How fast this model sells on OLX (bot's estimate): {q['label']}; similar listings have been up "
             f"~{q['median_days']} days, {q['for_sale']} for sale. Factor in how long reselling would take.\n")
 

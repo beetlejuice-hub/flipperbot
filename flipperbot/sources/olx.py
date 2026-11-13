@@ -109,6 +109,23 @@ def search_params(
     return [{"key": k, "value": str(v)} for k, v in p.items()]
 
 
+def seller_listings(seller_id: str, *, pages: int = 2, eur_to_ron: float = 5.0, pause: tuple[float, float] = (3.0, 8.0),
+                    fetch=_post) -> tuple[list[Listing], bool]:
+    """A seller's listings still up on OLX (the gateway's user_id filter). Returns (listings, complete): complete is
+    False when the seller has more than `pages` pages, so a listing missing from them may still be up."""
+    out: list[Listing] = []
+    for page in range(pages):
+        if page:
+            time.sleep(random.uniform(*pause))
+        data = fetch([{"key": "user_id", "value": str(seller_id)}, {"key": "offset", "value": str(page * PAGE_SIZE)},
+                      {"key": "limit", "value": str(PAGE_SIZE)}])
+        offers = data.get("data") or []
+        out += [l for o in offers if (l := parse_offer(o, eur_to_ron=eur_to_ron))]
+        if len(offers) < PAGE_SIZE or not (data.get("links") or {}).get("next"):
+            return out, True
+    return out, False
+
+
 def search(
     query: str | None = None,
     *,

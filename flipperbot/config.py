@@ -66,6 +66,9 @@ class Settings:
     # OLX's "newest" order is by last paid refresh, so most of page 1 is old listings bumped back up;
     # 3 pages per watch category catch everything newly posted between two polls.
     feed_pages: int = 3
+    # Each poll asks OLX which listings of this many private sellers are still up, to learn what sold
+    # (and for how much, how fast). One request per seller.
+    sold_checks_per_poll: int = 6
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
     niches: list[str] = field(default_factory=lambda: ["watches", "cameras", "electronics"])  # what to hunt (see niches.py)

@@ -91,7 +91,7 @@ def repair_cost(ident: Identity, s: Settings) -> int:
 
 
 def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
-          checked: tuple[int, int] | None = None) -> Verdict:
+          checked: tuple[int, int] | None = None, sold: list[int] | None = None) -> Verdict:
     """checked: what Claude found an ordinary one of this exact model sells for (sold prices), if it has
     checked one; it beats the estimate from asking prices."""
     price = l.price_ron
@@ -195,7 +195,12 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             v.tier = "mid"
             v.reason += " (brand only named in the description)"
         return v
-    market = market_price(comps) if len(comps) >= s.min_comps else None
+    # Listings of this model that sold (disappeared, not expired) beat asking prices: what people really paid,
+    # near enough. With 3 or more, they set the market; else the asking prices do.
+    use_sold = bool(sold) and len(sold) >= 3 and model_known
+    if use_sold:
+        comps = list(sold)
+    market = market_price(comps) if (use_sold or len(comps) >= s.min_comps) else None
     if market and ident.niche == "electronics" and price < 0.35 * market and "broken" not in f and model_known:
         # A console or card at a third of the usual price is almost never the device itself working: a
         # controller, a game, a cover, a box, or bait. (Broken ones are priced as broken instead.)
@@ -208,7 +213,9 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         profit = low - price - repair  # counted from the cautious end
         discount = 1 - price / market
         what = " ".join(dict.fromkeys((ident.model_key or "?").replace("|", " ").split()))  # "seiko seiko 5" -> "seiko 5"
-        detail = (f"{what}: {price} lei, {round(discount * 100)}% under what similar ones ask (~{market}, "
+        detail = (f"{what}: {price} lei, {round(discount * 100)}% under what similar ones sold for (~{market}, "
+                  f"{len(comps)} sold lately); realistic sale ~{low}–{high}" if use_sold else
+                  f"{what}: {price} lei, {round(discount * 100)}% under what similar ones ask (~{market}, "
                   f"{len(comps)} listings); realistic sale ~{low}–{high}")
         if repair:
             detail += f", repair ~{repair}"
@@ -263,10 +270,14 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
     return Verdict("bad", f"{name}: nothing stands out")
 
 
-def liquidity(ages: list[int]) -> dict | None:
-    """How fast this model sells, estimated from its listings still for sale: how long they've been up
-    (models that sell fast don't sit) and how many there are (competition). None with fewer than 3.
-    A proxy, not measured sales: it gets better as the bot's history grows."""
+def liquidity(ages: list[int], sold_days: list[float] | None = None) -> dict | None:
+    """How fast this model sells. Measured when the bot has seen 3+ of them sell (days from posting to gone);
+    else estimated from its listings still for sale: how long they've been up (models that sell fast don't
+    sit) and how many there are (competition). None with too little to go on."""
+    if sold_days and len(sold_days) >= 3:
+        d = round(statistics.median(sold_days))
+        label = "fast" if d <= 7 else "normal" if d <= 21 else "slow" if d <= 45 else "very slow"
+        return {"label": label, "median_days": d, "for_sale": len(ages), "sold": len(sold_days), "sold_days": d}
     if len(ages) < 3:
         return None
     a = sorted(ages)

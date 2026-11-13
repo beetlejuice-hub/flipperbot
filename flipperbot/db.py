@@ -76,7 +76,9 @@ class DB:
                     "rule_score INTEGER", "rule_why TEXT", "quick TEXT", "quick_at TEXT", "score INTEGER", "score_why TEXT",
                     # OLX bumps ("reactualizare") and reposts: how often it was pushed back to the top, and the
                     # first time this item was posted if the seller deleted and posted it again
-                    "bumps INTEGER DEFAULT 0", "orig_created_at TEXT", "repost_of TEXT"):  # your call on an Interesting listing: claude / skip / fake
+                    "bumps INTEGER DEFAULT 0", "orig_created_at TEXT", "repost_of TEXT",
+                    # gone from OLX: when we found out, and why (sold / expired / reposted)
+                    "gone_at TEXT", "gone_reason TEXT", "alive_checked_at TEXT"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -236,6 +238,19 @@ class DB:
         self.conn.commit()
 
     # -- price book ------------------------------------------------------------
+
+    def sold(self, model_key: str | None, days: int = 120, used_only: bool = False) -> list[tuple[int, float]]:
+        """Listings of this model that disappeared as sold (not expired, not reposted) lately: (last price, days it was up)."""
+        if not model_key or "|" not in model_key:
+            return []
+        rows = self.conn.execute(
+            f"""SELECT price_ron, gone_at, COALESCE(orig_created_at, NULLIF(created_at, ''), first_seen) AS since, flags
+               FROM listings WHERE model_key=? AND gone_reason='sold' AND price_ron > 0 AND gone_at >= datetime('now', ?)
+               {"AND COALESCE(business, 0) = 0" if used_only else ""}""",
+            (model_key, f"-{days} days")).fetchall()
+        bad = {"broken", "lot", "replica", "part", "wanted", "service", "battery"} | ({"new"} if used_only else set())
+        return [(r["price_ron"], max(0.0, _days_between(r["since"], r["gone_at"]))) for r in rows
+                if not bad & set(json.loads(r["flags"] or "[]"))]
 
     def comparable_ages(self, model_key: str, exclude_key: str | None = None) -> list[int]:
         """How many days each comparable listing still for sale (seen in the last 14 days) has been up."""

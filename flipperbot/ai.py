@@ -617,6 +617,22 @@ Other listings by the same seller that the bot has seen: {seller_listings}
 }}"""
 
 
+LOTS_BLOCK = """THIS IS A LOT OR A CLEAR-OUT: mixed second-hand things sold together, often by someone who priced the box,
+not what's in it. That's where the value hides. Work through it carefully:
+- Every photo, then its zoomed quarters (files like 3_q1.jpg ... 3_q4.jpg are the quarters of 3.jpg, for small text).
+- For EACH thing that could sell on its own: what it is (maker, model, hallmarks such as 925/585/750 on silver or gold,
+  dial text on watches, lens names, console or phone models, LEGO set numbers), which photo, and value_ron as is.
+  Set notable=true for anything worth more than about 150 lei or collectible. Ignore ordinary junk.
+- Use web search on the most valuable-looking items only.
+- resale_ron_low/high = the notable items sold one by one plus the rest as a bulk lot, minus fees; think of the time it
+  takes to sell many small items, and say in the summary which items make the lot worth it.
+- Some things are hidden, far away or blurry. Add a field "ask_seller": ONE short, friendly message in Romanian
+  asking the seller for close-ups of exactly those things (say which photo and where), and whether the lot can be
+  bought as is. Empty if nothing is unclear.
+
+"""
+
+
 def seller_listings(db: DB, row: Any, limit: int = 10) -> str:
     if not row["seller_id"]:
         return "unknown"
@@ -707,7 +723,7 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
     from .niches import get as niche_of
 
     if niche not in ("watches", "cameras", "electronics"):
-        template, lot_text = GENERIC_PROMPT, ELECTRONICS_LOT_BLOCK
+        template, lot_text = GENERIC_PROMPT, (LOTS_BLOCK if niche == "lots" else ELECTRONICS_LOT_BLOCK)
         old_text = ""
     elif niche in ("cameras", "electronics"):
         template, lot_text = (CAMERA_PROMPT, CAMERA_LOT_BLOCK) if niche == "cameras" else (ELECTRONICS_PROMPT, ELECTRONICS_LOT_BLOCK)

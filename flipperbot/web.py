@@ -113,6 +113,8 @@ VIEWS = {
     "removed": ("score = 0 AND hidden=0", "posted"),
     "starred": ("starred=1", "rank"),
     "checked": ("ai IS NOT NULL", "ai"),
+    # lots and clear-outs worth a look, newest first by score: the photo look and Claude's item lists live here
+    "lots": ("niche = 'lots' AND hidden = 0 AND COALESCE(score, 0) >= 3 AND last_seen >= datetime('now', '-7 days')", "rank"),
     "hidden": ("hidden=1", "new"),
     # older links
     "deals": ("COALESCE(score, 0) >= 6 AND hidden=0", "rank"),
@@ -172,6 +174,7 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "starred": c.execute(f"SELECT COUNT(*) FROM listings WHERE starred=1 {nf}", na).fetchone()[0],
         "sold_tracked": c.execute(f"SELECT COUNT(*) FROM listings WHERE gone_reason='sold' {nf}", na).fetchone()[0],
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
+        "lots": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['lots'][0]}").fetchone()[0],
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
         "priced_models": c.execute(
             "SELECT COUNT(*) FROM (SELECT model_key FROM listings WHERE model_key LIKE '%|%' GROUP BY model_key HAVING COUNT(*) >= ?)",
@@ -448,6 +451,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; background: var(--card); }
 .chip.hit { border-color: var(--accent); font-weight: 700; }
+button.copy { font: inherit; font-size: 12px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--line); background: none; color: var(--ink); cursor: pointer; }
 .multi { position: relative; } .multi summary { list-style: none; cursor: pointer; padding: 7px 10px; border: 1px solid var(--line);
   border-radius: 8px; background: var(--card); white-space: nowrap; } .multi summary::after { content: " ▾"; color: var(--muted); }
 .multi > div { position: absolute; z-index: 3; margin-top: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 8px;
@@ -479,11 +483,13 @@ const TABS = [
   ["starred", "Starred", s => s.starred],
   ["checked", "Claude checked", null],
   ["hidden", "Hidden", null],
+  ["lots", "📦 Lots", s => s.lots],
   ["radar", "📈 Trends", null],
 ];
 const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "likely fake", bad: "bad" };
 const EMPTY = {
   interesting: "Nothing scored 5+ that you haven't decided on. The bot checks every 5–10 minutes; good finds land here.",
+  lots: "No lots worth a look yet. The bot searches lots and clear-outs in turn with the other categories; the best get a quick look at their photos.",
   top: "Nothing at 8–10 yet: those need an AI to agree.", mid: "Nothing at 5–7.", low: "Nothing at 1–4.",
   removed: "Nothing removed.",
   deals: "No deals yet. The bot checks OLX every 5–10 minutes; good finds land here and on Telegram.",
@@ -565,7 +571,19 @@ function aiBox(a, l) {
     a.fake_hunt ? h("div", { class: a.fake_hunt.verdict === "fake" ? "err" : "reason" },
       "🔍 Second check: " + ({ fake: "FAKE", unsure: "couldn't confirm it's real", genuine: "confirmed real" }[a.fake_hunt.verdict] || a.fake_hunt.verdict)
       + ((a.fake_hunt.evidence || []).length ? ": " + a.fake_hunt.evidence.slice(0, 4).join(" · ") : "")) : null,
+    a.ask_seller ? h("div", { class: "reason" }, "Ask the seller: ", h("i", {}, a.ask_seller), " ",
+      h("button", { class: "copy", onclick: e => { navigator.clipboard.writeText(a.ask_seller); e.target.textContent = "Copied"; } }, "Copy")) : null,
     (a.questions_for_seller || []).length ? h("div", { class: "reason" }, "Ask the seller: " + a.questions_for_seller.slice(0, 3).join(" · ")) : null);
+}
+
+// What the cheap look at a lot's photos spotted, and what it couldn't make out.
+function lookBox(q) {
+  const items = (q.items || []).filter(i => i && i.what);
+  return h("div", { class: "ai" },
+    h("div", {}, `👀 Photo look: ${q.score}/10`, q.value_high ? ` · notable things ~${lei(q.value_low)}–${lei(q.value_high)}` : ""),
+    items.length ? h("div", { class: "lot" }, items.slice(0, 6).map(i =>
+      h("div", {}, "• " + i.what + (i.photo ? ` (${i.photo})` : "") + (i.value_ron ? ` ~${lei(i.value_ron)}` : "")))) : null,
+    q.unclear ? h("div", { class: "reason" }, "Unclear: " + q.unclear) : null);
 }
 
 // Asking price next to what it's worth: the bot's market estimate, else Claude's resale range.
@@ -652,6 +670,7 @@ function card(l) {
         priceBox(l),
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
+        l.quick && l.quick.looked ? lookBox(l.quick) : null,
         l.ai ? aiBox(l.ai, l) : null,
         l.price_links && l.price_links.length ? h("div", { class: "checks" }, "Check prices: ",
           l.price_links.flatMap(([name, href], i) => [i ? " · " : "", h("a", { href, target: "_blank", rel: "noopener noreferrer" }, name)])) : null,

@@ -17,7 +17,7 @@ RULE_MAX = 7  # free rules alone never go above 7: an 8+ needs an AI to agree
 
 # Bump when the rules that judge or score a listing change: the bot then re-judges every stored listing
 # once at start, so an update never leaves old listings with stale or missing scores.
-RULES_VERSION = 6
+RULES_VERSION = 7
 
 # Reasons a listing is not worth anyone's time, from the tier's own reason text.
 _DEAD = ("someone buying", "repair shop", "replica", "over budget", "fashion brand", "part/accessory", "locked to",
@@ -149,4 +149,8 @@ def final_score(row: Any, good_profit: int = 150) -> tuple[int, str]:
     got = quick_score(quick, row["price_ron"], good_profit)
     if got:
         return got
-    return row["rule_score"] if row["rule_score"] is not None else 1, row["rule_why"] or ""
+    rule = row["rule_score"] if row["rule_score"] is not None else 1
+    if "niche" in row.keys() and row["niche"] == "lots" and rule > 4:
+        # The free lot score ranks lots for a look at their photos; with no estimate yet it's not a 5+.
+        return 4, f"lot, waiting for a look at the photos: {row['rule_why'] or ''}"
+    return rule, row["rule_why"] or ""

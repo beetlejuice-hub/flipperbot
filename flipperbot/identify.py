@@ -328,6 +328,13 @@ def _identify_catalog(title: str, description: str, niche: str) -> Identity:
 def identify(title: str, description: str = "", niche: str = "watches") -> Identity:
     if niche in CATALOGS:
         return _identify_catalog(title, description, niche)
+    if niche == "lots":  # a box of mixed things: no one model; lots.prefilter() judges it
+        from . import lots
+
+        _s, _w, info = lots.prefilter(title, description, None, 0)
+        flags = {"lot"} | ({"naive"} if info.get("naive") else set())
+        return Identity(brand=None, brands=[], refs=[], family=None, flags=flags, niche="lots",
+                        collectible=list(info.get("groups") or []))
     title = _smart_words(_SWAP.sub("", normalize(title)).strip() or title)
     title_n = normalize(title)
     full_n = _smart_words(normalize(f"{title} . {description}"))

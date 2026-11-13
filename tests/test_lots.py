@@ -1,89 +1,74 @@
-from flipperbot import ai, bot
+import json
+import subprocess
+
+from flipperbot import bot, lots
 from flipperbot.config import Settings
 from flipperbot.db import DB
-from flipperbot.identify import identify
-from flipperbot.models import Listing
 from flipperbot.sources import olx
-from flipperbot.tiers import judge
 
 from test_olx_and_bot import offer
 
-LOT_RESULT = {
-    "watches": [
-        {"brand": "Omega", "model": "Seamaster", "reference": "2846", "photo": "3_q2.jpg", "value_ron": 2500, "notable": True},
-        {"brand": "Poljot", "model": "", "photo": "1.jpg", "value_ron": 150, "notable": False},
-        {"brand": "", "model": "", "photo": "2.jpg", "value_ron": 0, "notable": False},
-    ],
-    "authenticity": "likely_genuine", "verdict": "buy", "confidence": 65,
-    "resale_ron_low": 2600, "resale_ron_high": 3200, "repair_cost_ron": 300, "summary": "The Omega makes it.",
-}
+S = Settings()
 
 
-def test_unnamed_expensive_lot_is_still_worth_a_look():
-    l = Listing("olx", "1", "u", "Lot 30 ceasuri vechi", price_ron=1500)
-    v = judge(l, identify(l.title), [], Settings())
-    assert v.tier == "mid" and "Claude" in v.reason
+def lot(i, title, price, desc="", photos=6):
+    o = offer(i, title, price)
+    o["description"] = desc
+    o["photos"] = [{"link": f"https://x/{i}-{n}.jpg;s={{width}}x{{height}}"} for n in range(photos)]
+    l = olx.parse_offer(o)
+    l.niche = "lots"
+    return l
 
 
-def test_big_photos_for_lots():
-    assert ai.big("https://cdn/v1/files/x/image;s=1000x1000") == "https://cdn/v1/files/x/image;s=2000x2000"
-    assert ai.tiles.__doc__ and ai.LOT_BLOCK.count("value_ron") >= 1
+def test_free_lot_score():
+    good, why, info = lots.prefilter("Lot obiecte vechi din pod", "De la bunicul: ceasuri vechi, aparat foto Zenit, monede, "
+                                     "nu stiu ce valoare au. 40 buc", 300, 8)
+    assert good >= 6 and "seller may not know" in why and {"watches", "cameras", "collect"} <= set(info["groups"])
+    assert lots.prefilter("Lot haine copii 2-3 ani", "tricouri, pantaloni", 50, 3)[0] == 0  # a lot of junk
+    assert lots.prefilter("Ceas Seiko 5", "functional", 300, 3)[0] == 0  # not a lot
+    plain, _, _ = lots.prefilter("Lot diverse", "", 200, 2)
+    assert 1 <= plain < 4  # a lot, but nothing says it's worth a look
 
 
-def make_db(s):
+def test_lots_are_kept_judged_and_wait_for_a_look():
     db = DB(":memory:")
-    lot = olx.parse_offer(offer(500, "Lot ceasuri vechi diverse", 600))
-    good_market = [olx.parse_offer(offer(100 + i, "Ceas Seiko SKX007", p)) for i, p in enumerate([1000, 1100, 950, 1050, 1000])]
-    good = olx.parse_offer(offer(150, "Ceas Seiko SKX007", 650))
-    bot.process(db, [*good_market, good, lot], s)
-    return db
+    bot.process(db, [lot(1, "Lot obiecte vechi mostenire", 250, "ceasuri, argint, aparat foto, de la bunici"),
+                     lot(2, "Lot haine dama", 40, "bluze, rochii")], S, alert=False)
+    r = db.get("olx:1")
+    assert r["niche"] == "lots" and r["tier"] == "mid" and r["rule_score"] >= 5
+    assert r["score"] == 4 and "waiting for a look" in r["score_why"]  # no estimate yet: not a 5+
+    assert db.get("olx:2") is None  # junk lots aren't kept
 
 
-def test_lots_go_first_and_claude_values_them_into_a_sent_deal(monkeypatch):
+def test_the_photo_look_and_the_full_check_after_it(monkeypatch, tmp_path):
+    monkeypatch.setattr(Settings, "photos_dir", property(lambda self: tmp_path))
+    monkeypatch.setattr(lots.ai, "available", lambda s: True)
+    monkeypatch.setattr(lots.ai, "log_call", lambda *a: None)
+    monkeypatch.setattr(lots.ai, "download_photos", lambda urls, folder, max_photos=8: [folder / f"{i}.jpg" for i in range(1, 4)])
+    db = DB(":memory:")
+    bot.process(db, [lot(1, "Lot obiecte vechi din pod", 300, "ceasuri vechi, argint, de la bunicul, nu stiu ce valoare au")], S)
+    answer = {"score": 9, "value_low": 1500, "value_high": 2200, "note": "an Omega and silver",
+              "items": [{"what": "Omega Seamaster, gold-plated", "photo": "2.jpg", "value_ron": 1200}], "unclear": "the watch in 3.jpg"}
+    seen = []
+
+    def run(args, input, **kw):
+        seen.append((args, input))
+        return subprocess.CompletedProcess(args, 0, json.dumps({"result": json.dumps(answer)}), "")
+
+    assert lots.look(db, S, log=lambda m: None, run=run) == 1
+    args, prompt = seen[0]
+    assert "--model" in args and args[args.index("--model") + 1] == S.quick_model
+    assert "Read" in args and "WebSearch" in args[args.index("--disallowedTools"):]  # photos only, no web
+    assert "Lot obiecte vechi din pod" in prompt and "1.jpg" in prompt
+    r = db.get("olx:1")
+    assert r["score"] == 7 and "waiting for Claude" in r["score_why"]  # the look alone never shows 8+
+    assert [x["key"] for x in bot.pending_alerts(db, S)] == ["olx:1"]  # but it sends the lot to the full check
+    assert lots.look(db, S, log=lambda m: None, run=run) == 0  # looked at once
+
+
+def test_the_daily_cap(monkeypatch):
+    monkeypatch.setattr(lots.ai, "available", lambda s: True)
+    db = DB(":memory:")
     s = Settings()
-    s.ai_auto = True  # these test the automatic mode
-    s.ai_quick = False  # the full check by tier, as before the 0-10 score
-    db = make_db(s)
-    assert db.get("olx:500")["tier"] == "mid"
-    assert [r["key"] for r in bot.pending_ai(db, s)][:2] == ["olx:500", "olx:150"]  # the lot first
-
-    sent = []
-
-    def fake_check(db_, row, s_):
-        result = LOT_RESULT if row["key"] == "olx:500" else {"error": "x"}
-        db_.set_ai(row["key"], result)
-        return result
-
-    monkeypatch.setattr(bot.ai, "available", lambda s_: True)
-    monkeypatch.setattr(bot.ai, "check", fake_check)
-    monkeypatch.setattr(bot.notify, "send", lambda s_, text, photo=None: sent.append(text))
-    bot.deliver(db, s, extra_ai=1, log=lambda m: None)
-
-    row = db.get("olx:500")
-    assert row["tier"] == "real_good"  # worth ~2900, 600 asked, profit 2600-600-300 = 1700
-    assert row["profit_ron"] == 1700 and "1 notable watches inside" in row["reason"]
-    assert len(sent) == 1
-    assert "LOT" in sent[0] and "⭐ Omega Seamaster" in sent[0] and "65% sure" in sent[0]
-    assert "600 lei</b> → sells for 2.600–3.200 lei (+1.700)" in sent[0]  # Claude's range, profit from its low end
-    assert len(sent[0].splitlines()) <= 6  # short
-
-
-def test_claude_value_never_downgrades_or_sends_unconfirmed(monkeypatch):
-    s = Settings()
-    s.ai_auto = True  # these test the automatic mode
-    s.ai_quick = False  # the full check by tier, as before the 0-10 score
-    db = make_db(s)
-    sent = []
-    result = {**LOT_RESULT, "confidence": 30}
-
-    def fake_check(db_, row, s_):
-        db_.set_ai(row["key"], result)
-        return result
-
-    monkeypatch.setattr(bot.ai, "available", lambda s_: True)
-    monkeypatch.setattr(bot.ai, "check", fake_check)
-    monkeypatch.setattr(bot.notify, "send", lambda s_, text, photo=None: sent.append(text))
-    bot.deliver(db, s, extra_ai=1, log=lambda m: None)
-    assert db.get("olx:500")["tier"] == "real_good"  # on the dashboard as real good...
-    assert sent == []  # ...but Claude was only 30% sure: no message
-    assert bot.claude_value(db, db.get("olx:500"), {**LOT_RESULT, "resale_ron_low": 100, "resale_ron_high": 200}, s) is None
+    db.kv_set(f"lots_looked:{__import__('datetime').date.today().isoformat()}", s.lots_look_daily)
+    assert lots.look(db, s, log=lambda m: None, run=lambda *a, **k: 1 / 0) == 0

@@ -41,6 +41,10 @@ def is_relevant(l: Listing, niche: str | None = None) -> bool:
     wall clock. In the niche's OLX categories everything counts; elsewhere the title needs a
     niche word (Facebook) or a brand plus a niche word."""
     n = niches.get(niche or l.niche)
+    if n.key == "lots":
+        from .lots import prefilter
+
+        return prefilter(l.title, l.description, l.price_ron, len(l.photos))[0] > 0
     t = normalize(l.title)
     if any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", t) for w in n.not_words):
         return False
@@ -143,6 +147,10 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     from .scoring import rule_score
 
     rs, rwhy = rule_score(verdict.tier, ident.flags, verdict.reason, verdict.profit_ron, liq, age, s.good_profit_ron)
+    if l.niche == "lots" and verdict.tier != "bad":
+        from .lots import prefilter
+
+        rs, rwhy, _info = prefilter(l.title, l.description, l.price_ron, len(l.photos))  # the photo look decides more
     db.conn.execute("UPDATE listings SET ebay=?, liquidity=?, rule_score=?, rule_why=? WHERE key=?",
                     (json.dumps(ebay_summary) if ebay_summary else None, json.dumps(liq) if liq else None, rs, rwhy, l.key))
     db.conn.commit()
@@ -443,6 +451,9 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
 
     if s.ai_auto or s.ai_auto_real_good:
         quick.run(db, s, log)  # the cheap read first: it decides what's worth the full check
+        from . import lots
+
+        lots.look(db, s, log)  # the best new lots: a cheap look at their photos
     if not (s.ai_auto or s.ai_auto_real_good):
         return
     for r in pending_alerts(db, s):

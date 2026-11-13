@@ -240,7 +240,29 @@ SNEAKERS = Niche(
 )
 
 
-ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS, PHONES, TOOLS, LEGO, SNEAKERS)}
+LOTS = Niche(
+    key="lots", label="Lots & clear-outs", icon="📦", noun="lot of mixed second-hand items",
+    brands=[],
+    valuable_segments=frozenset(),
+    categories=(),  # lots are everywhere: a listing counts when lots.prefilter() says it's a lot worth a look
+    feeds=(),
+    words=(), not_words=(),
+    search_pool=("lot diverse", "obiecte vechi", "vechituri", "lot obiecte vechi", "tot ce se vede in poza", "de toate",
+                 "lot electronice", "lot telefoane", "lot telefoane defecte", "lot scule", "lot console", "lot jocuri",
+                 "lot ceasuri", "lot aparate foto", "lot lego", "lego la kg", "lot bijuterii", "lot argint", "lot monede",
+                 "lot vinyl", "lot jucarii vechi", "colectie diverse"),
+    focus_pool=("debarasare", "debarasez", "mostenire", "obiecte de la bunici", "din pod", "golire casa", "lichidare stoc",
+                "vechituri pod", "lot mostenire", "obiecte vechi de colectie", "la kg", "cutie cu obiecte"),
+    facebook_queries=("lot diverse", "obiecte vechi", "vechituri", "debarasare", "mostenire"),
+    strong_words=("lot", "vechituri", "obiecte vechi", "debarasare", "mostenire", "diverse"),
+    repair_ron={},
+    claude_checks="""- Lots: go item by item through every photo and zoomed quarter; name each thing worth selling on its own
+     (brand/maker, model, hallmarks on silver or gold, dial text on watches, lens names, console models, set numbers);
+     what's junk; and what's hidden or blurry that deserves a closer photo. Fakes and costume jewellery are common.""",
+)
+
+
+ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS, PHONES, TOOLS, LEGO, SNEAKERS, LOTS)}
 
 
 def get(key: str | None) -> Niche:

@@ -103,6 +103,11 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
     # --- not for us ---------------------------------------------------------
     if not price or price < 10:
         return Verdict("bad", "no price")
+    if ident.niche == "lots":  # no one model to price: the free lot score decides who gets a look at the photos
+        from .lots import prefilter
+
+        score, why, _info = prefilter(l.title, l.description, price, len(l.photos))
+        return Verdict("mid" if score >= s.lots_min_score else "bad", f"lot: {why}")
     if "wanted" in f:
         return Verdict("bad", "someone buying, not selling")
     if "service" in f:

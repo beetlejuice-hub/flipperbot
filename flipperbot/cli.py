@@ -13,6 +13,7 @@
   ai <url|key>     run the Claude check on one stored listing now
   telegram-setup   find your Telegram chat id after you've messaged your bot
   stats            what's in the database
+  lots [--look N]  search lots and clear-outs now, show the best by free score; --look N: Claude looks at N lots' photos
   radar            the trend radar now: hot items cheap on OLX, the watchlist, what's rising (also on the dashboard)
   radar-refresh    ask Claude now what's rising in value (it also does this by itself once a week)
   ebay-setup       add your free eBay developer keys, so estimates also use eBay listings
@@ -52,6 +53,8 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("target")
     sub.add_parser("telegram-setup")
     sub.add_parser("stats")
+    lp = sub.add_parser("lots")
+    lp.add_argument("--look", type=int, default=0)
     sub.add_parser("radar")
     sub.add_parser("radar-refresh")
     sub.add_parser("app")
@@ -279,6 +282,36 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit("No messages yet. Send your bot any message on Telegram, then run this again.")
         for cid, name in chats.items():
             print(f"chat id {cid} ({name}): put  telegram_chat_id = \"{cid}\"  in config.toml")
+
+    elif args.cmd == "lots":
+        from . import lots
+        from .niches import get as niche_get
+
+        n = niche_get("lots")
+        terms = list(dict.fromkeys(n.search_pool + n.focus_pool))
+        print(f"Searching {len(terms)} lot searches on OLX (and Publi24)...")
+        found = bot.fetch_all([(q, None, "lots") for q in terms], s, log=lambda m: None)
+        try:
+            from .sources import publi24
+
+            for q in terms[:8]:
+                for l in publi24.search(q, eur_to_ron=s.eur_to_ron):
+                    l.niche, l.params["query"] = "lots", q
+                    found.append(l)
+        except Exception as e:
+            print(f"  publi24: {e!r}")
+        bot.process(db, found, s, alert=False)
+        if args.look:
+            s.lots_look_per_run = args.look
+            print(f"Claude looks at the photos of the best {args.look}...")
+            lots.look(db, s)
+        rows = db.conn.execute("""SELECT * FROM listings WHERE niche='lots' AND last_seen >= datetime('now', '-1 day')
+                                  ORDER BY COALESCE(json_extract(quick, '$.score'), -1) DESC, rule_score DESC LIMIT 20""").fetchall()
+        print(f"\n{len(found)} found; best lots:")
+        for r in rows:
+            q = json.loads(r["quick"]) if r["quick"] else None
+            look = f" | 👀 {q['score']}/10 {q.get('note') or ''}" if q else ""
+            print(f"  {r['rule_score']}/7 {r['price_ron'] or '?':>6} lei  {r['title'][:55]}\n        {r['rule_why'] or ''}{look}\n        {r['url']}")
 
     elif args.cmd in ("radar", "radar-refresh"):
         from . import radar

@@ -47,6 +47,7 @@ def candidates(db: DB, s: Settings, limit: int = 20) -> list[Any]:
     fresh = db.kv_get("seeded_at") or "0"
     return db.conn.execute(
         """SELECT * FROM listings WHERE rule_score BETWEEN 4 AND 7 AND quick IS NULL AND ai IS NULL
+           AND COALESCE(niche, '') != 'lots' 
            AND hidden = 0 AND triage IS NULL AND first_seen >= ? AND last_seen >= datetime('now', '-2 days')
            ORDER BY COALESCE(NULLIF(created_at, ''), first_seen) DESC LIMIT ?""",
         (fresh, limit),

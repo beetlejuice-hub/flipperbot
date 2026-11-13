@@ -212,3 +212,26 @@ def test_price_check_links_and_negotiation_info(server, tmp_path):
     db.conn.commit()
     card = get(server + "/api/listing?key=olx:200")
     assert card["first_price"] == 600 and card["listed_at"][:10] == datetime.now().astimezone().isoformat()[:10]
+
+
+def post_json(url, body):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
+                                 headers={"X-Flipperbot": "1", "Content-Type": "application/json"})
+    return json.loads(urllib.request.urlopen(req).read())
+
+
+def test_tracking_a_flip(server, tmp_path):
+    with pytest.raises(urllib.error.HTTPError):  # sold before bought
+        post_json(server + "/api/resold/olx:200", {"price": 900})
+    l = post_json(server + "/api/bought/olx:200", {"price": 380})
+    assert l["deal"]["bought_price"] == 380 and l["starred"]
+    l = post_json(server + "/api/resold/olx:200", {"price": 950, "costs": 50})
+    assert l["deal"]["sold_price"] == 950
+    f = get(server + "/api/flips")
+    assert f["total"] == {"bought": 1, "sold": 1, "profit": 520, "in_stock": 0}
+    assert f["by_category"]["watches"]["profit"] == 520 and f["items"][0]["days"] == 0
+    with pytest.raises(urllib.error.HTTPError):
+        post_json(server + "/api/bought/olx:100", {"price": "a lot"})
+    # your resale counts as a sold price for the model (twice: it weighs more than a guess)
+    db = DB(tmp_path / "f.db")
+    assert sorted(p for p, _ in db.sold("seiko|SKX007")) == [950, 950]

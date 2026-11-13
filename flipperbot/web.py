@@ -89,6 +89,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "ebay": json.loads(r["ebay"]) if r["ebay"] else None,
         "quick": json.loads(r["quick"]) if r["quick"] else None,
         "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
+        "deal": dict(d) if db is not None and (d := db.deal(r["key"])) else None,
         "listed_at": r["created_at"] or None, "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
         "repost_of": r["repost_of"], "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
@@ -290,6 +291,8 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                 self._json(listing_json(row, db) if row else {"error": "unknown listing"}, 200 if row else 404)
             elif u.path == "/api/stats":
                 self._json(stats(db, s, qs.get("niche", "")))
+            elif u.path == "/api/flips":
+                self._json(db.flips())
             elif u.path == "/api/radar":
                 from . import radar
 
@@ -304,14 +307,34 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
             if not self._host_ok() or self.headers.get("X-Flipperbot") != "1":
                 return self._send(403, b"forbidden", "text/plain")
             # Browsers send the listing key URL-encoded ("olx%3A123"): decode before matching.
-            m = re.fullmatch(r"/api/(star|unstar|hide|unhide|ai|skip|fake)/([\w:.-]+)", unquote(urlparse(self.path).path))
+            m = re.fullmatch(r"/api/(star|unstar|hide|unhide|ai|skip|fake|bought|resold|unbought)/([\w:.-]+)",
+                             unquote(urlparse(self.path).path))
             if not m:
                 return self._send(404, b"not found", "text/plain")
             action, key = m.groups()
             db = DB(s.db_path)
             if not db.get(key):
                 return self._json({"error": "unknown listing"}, 404)
-            if action in ("star", "unstar"):
+            body: dict[str, Any] = {}
+            if action in ("bought", "resold"):
+                try:
+                    body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 10_000)) or b"{}")
+                    price = int(float(body.get("price")))
+                    costs = int(float(body.get("costs") or 0))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    return self._json({"error": "a price in lei, please"}, 400)
+                if price < 0 or costs < 0:
+                    return self._json({"error": "a price in lei, please"}, 400)
+            if action == "bought":
+                db.set_bought(key, price, str(body.get("note") or "")[:200])
+                db.set_flag(key, "starred", True)
+            elif action == "resold":
+                if not db.deal(key):
+                    return self._json({"error": "mark it bought first"}, 400)
+                db.set_resold(key, price, costs)
+            elif action == "unbought":
+                db.forget_deal(key)
+            elif action in ("star", "unstar"):
                 db.set_flag(key, "starred", action == "star")
             elif action in ("hide", "unhide"):
                 db.set_flag(key, "hidden", action == "hide")
@@ -484,6 +507,7 @@ const TABS = [
   ["checked", "Claude checked", null],
   ["hidden", "Hidden", null],
   ["lots", "📦 Lots", s => s.lots],
+  ["flips", "💰 My flips", null],
   ["radar", "📈 Trends", null],
 ];
 const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "likely fake", bad: "bad" };
@@ -689,6 +713,7 @@ function card(l) {
           h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${siteName(l.source)} ↗`),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),
           h("button", { onclick: async () => { await act(l.hidden ? "unhide" : "hide", l.key); el.remove(); refreshStats(); } }, l.hidden ? "Unhide" : "Hide"),
+          dealButton(l, draw),
           aiBtn)));
   };
   draw(); el.redraw = draw; el.listing = l;
@@ -736,6 +761,42 @@ async function refreshStats() {
 }
 
 let loading = 0;
+// Bought it? Sold it? Each asks the price; the bot learns real prices and what makes money from these.
+function dealButton(l, redraw) {
+  const post = (action, body) => api(`/api/${action}/${encodeURIComponent(l.key)}`,
+    { method: "POST", headers: { "X-Flipperbot": "1", "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const ask = (msg, def) => { const v = prompt(msg, def); return v == null ? null : Number(String(v).replace(/[^0-9.]/g, "")); };
+  if (!l.deal) return h("button", { title: "You bought it: track the flip", onclick: async () => {
+    const p = ask("You bought it for how many lei?", l.price); if (p == null) return;
+    Object.assign(l, await post("bought", { price: p })); redraw(); } }, "💰 Bought");
+  if (l.deal.sold_price == null) return h("button", { title: "You sold it", onclick: async () => {
+    const p = ask("Sold for how many lei?", l.value || ""); if (p == null) return;
+    const c = ask("Costs (repair, shipping, fees) in lei?", 0); if (c == null) return;
+    Object.assign(l, await post("resold", { price: p, costs: c })); redraw(); } }, `✅ Sold (bought ${lei(l.deal.bought_price)})`);
+  const profit = l.deal.sold_price - l.deal.bought_price - (l.deal.costs || 0);
+  return h("span", { class: "reason" }, `Flipped: ${lei(l.deal.bought_price)} → ${lei(l.deal.sold_price)} (${profit < 0 ? "−" : "+"}${lei(Math.abs(profit))})`);
+}
+
+// Your flips: what you made, by category, how fast, what's still in stock.
+function flipsView(f) {
+  const sec = (title, sub, ...kids) => h("div", { class: "section" }, h("h2", {}, title), sub ? h("p", { class: "reason" }, sub) : null, ...kids);
+  const t = f.total;
+  if (!t.bought) return [sec("My flips", "Nothing tracked yet. Tap 💰 Bought on a listing you buy, then ✅ Sold when it's gone: the bot learns real prices from your flips and shows what makes money.")];
+  const cats = Object.entries(f.by_category).sort((a, b) => b[1].profit - a[1].profit).map(([k, c]) => h("div", { class: "rowx" },
+    h("b", {}, k), ` · ${c.bought} bought, ${c.sold} sold · profit ${c.profit < 0 ? "−" : "+"}${lei(Math.abs(c.profit))}`,
+    c.median_days != null ? ` · sells in ~${c.median_days} days` : "", c.bought > c.sold ? ` · ${lei(c.spent - c.got)} still in stock` : ""));
+  const items = f.items.map(i => h("div", { class: "rowx" },
+    h("a", { href: i.url, target: "_blank", rel: "noopener noreferrer" }, i.title || i.key),
+    h("div", { class: "reason" }, `bought ${lei(i.bought_price)}` + (i.sold_price != null
+      ? ` → sold ${lei(i.sold_price)}${i.costs ? `, costs ${lei(i.costs)}` : ""} = ${i.profit < 0 ? "−" : "+"}${lei(Math.abs(i.profit))} in ${i.days} days`
+      : (i.est_value_ron ? ` · the bot thinks it sells for ${lei(i.est_value_ron)}–${lei(i.est_high_ron || i.est_value_ron)}` : " · not sold yet")))));
+  return [
+    sec("My flips", `${t.bought} bought, ${t.sold} sold · profit ${t.profit < 0 ? "−" : "+"}${lei(Math.abs(t.profit))}` + (t.in_stock ? ` · ${lei(t.in_stock)} in stock` : "")),
+    sec("By category", "What actually makes money, and how fast it sells.", h("div", { class: "rows" }, ...cats)),
+    sec("Each flip", "", h("div", { class: "rows" }, ...items)),
+  ];
+}
+
 // The trend radar: hot items cheap on OLX, the watchlist, what's rising in our own data, Google Trends.
 function radarView(r) {
   const sec = (title, sub, ...kids) => h("div", { class: "section" }, h("h2", {}, title), sub ? h("p", { class: "reason" }, sub) : null, ...kids);
@@ -774,6 +835,13 @@ function radarView(r) {
 
 async function load() {
   const mine = ++loading;
+  if (view === "flips") {
+    const f = await api("/api/flips");
+    if (mine !== loading) return;
+    document.getElementById("grid").replaceChildren(...flipsView(f));
+    document.getElementById("hint").hidden = true; document.getElementById("empty").hidden = true;
+    return;
+  }
   if (view === "radar") {
     const r = await api("/api/radar");
     if (mine !== loading) return;

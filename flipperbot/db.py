@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS prices (key TEXT, price_ron INTEGER, seen_at TEXT);
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 -- What Claude found an ordinary used, working one of a model sells for (sold prices): it overrides the
 -- estimate from asking prices for every listing of that model.
+-- What you bought and sold: the bot learns real prices and which categories make money from it.
+CREATE TABLE IF NOT EXISTS deals (key TEXT PRIMARY KEY, bought_price INTEGER, bought_at TEXT, sold_price INTEGER,
+                                  sold_at TEXT, costs INTEGER DEFAULT 0, note TEXT);
 CREATE TABLE IF NOT EXISTS model_prices (model_key TEXT PRIMARY KEY, low INTEGER, high INTEGER, at TEXT,
                                          from_key TEXT, note TEXT);
 """
@@ -239,6 +242,50 @@ class DB:
 
     # -- price book ------------------------------------------------------------
 
+    # -- your own flips ------------------------------------------------------------
+    def set_bought(self, key: str, price: int, note: str = "") -> None:
+        self.conn.execute("""INSERT INTO deals (key, bought_price, bought_at, note) VALUES (?, ?, ?, ?)
+                             ON CONFLICT(key) DO UPDATE SET bought_price=excluded.bought_price, note=excluded.note""",
+                          (key, price, now(), note))
+        self.conn.commit()
+
+    def set_resold(self, key: str, price: int, costs: int = 0) -> None:
+        self.conn.execute("UPDATE deals SET sold_price=?, sold_at=?, costs=? WHERE key=?", (price, now(), costs, key))
+        self.conn.commit()
+
+    def forget_deal(self, key: str) -> None:
+        self.conn.execute("DELETE FROM deals WHERE key=?", (key,))
+        self.conn.commit()
+
+    def deal(self, key: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM deals WHERE key=?", (key,)).fetchone()
+
+    def flips(self) -> dict[str, Any]:
+        """What you bought and sold: totals, by category, and each flip."""
+        rows = self.conn.execute(
+            """SELECT d.*, l.title, l.url, l.niche, l.model_key, l.est_value_ron, l.est_high_ron, l.price_ron AS asked
+               FROM deals d LEFT JOIN listings l ON l.key = d.key ORDER BY d.bought_at DESC""").fetchall()
+        items, cats = [], {}
+        for r in rows:
+            profit = (r["sold_price"] - r["bought_price"] - (r["costs"] or 0)) if r["sold_price"] is not None else None
+            days = round(_days_between(r["bought_at"], r["sold_at"])) if r["sold_at"] else None
+            items.append({**dict(r), "profit": profit, "days": days})
+            c = cats.setdefault(r["niche"] or "?", {"bought": 0, "sold": 0, "spent": 0, "got": 0, "profit": 0, "days": []})
+            c["bought"] += 1
+            c["spent"] += r["bought_price"] or 0
+            if profit is not None:
+                c["sold"] += 1
+                c["got"] += r["sold_price"]
+                c["profit"] += profit
+                c["days"].append(days or 0)
+        for c in cats.values():
+            d = sorted(c.pop("days"))
+            c["median_days"] = d[len(d) // 2] if d else None
+        sold = [i for i in items if i["profit"] is not None]
+        return {"items": items, "by_category": cats,
+                "total": {"bought": len(items), "sold": len(sold), "profit": sum(i["profit"] for i in sold),
+                          "in_stock": sum(i["bought_price"] or 0 for i in items if i["profit"] is None)}}
+
     def sold(self, model_key: str | None, days: int = 120, used_only: bool = False) -> list[tuple[int, float]]:
         """Listings of this model that disappeared as sold (not expired, not reposted) lately: (last price, days it was up)."""
         if not model_key or "|" not in model_key:
@@ -249,8 +296,14 @@ class DB:
                {"AND COALESCE(business, 0) = 0" if used_only else ""}""",
             (model_key, f"-{days} days")).fetchall()
         bad = {"broken", "lot", "replica", "part", "wanted", "service", "battery"} | ({"new"} if used_only else set())
-        return [(r["price_ron"], max(0.0, _days_between(r["since"], r["gone_at"]))) for r in rows
-                if not bad & set(json.loads(r["flags"] or "[]"))]
+        out = [(r["price_ron"], max(0.0, _days_between(r["since"], r["gone_at"]))) for r in rows
+               if not bad & set(json.loads(r["flags"] or "[]"))]
+        # Your own resales of this model: the truest price there is (twice, to weigh more than a guess).
+        for r in self.conn.execute("""SELECT d.sold_price, d.bought_at, d.sold_at FROM deals d JOIN listings l ON l.key = d.key
+                                      WHERE l.model_key = ? AND d.sold_price > 0 AND d.sold_at >= datetime('now', ?)""",
+                                   (model_key, f"-{days} days")):
+            out += [(r["sold_price"], max(0.0, _days_between(r["bought_at"], r["sold_at"])))] * 2
+        return out
 
     def comparable_ages(self, model_key: str, exclude_key: str | None = None) -> list[int]:
         """How many days each comparable listing still for sale (seen in the last 14 days) has been up."""

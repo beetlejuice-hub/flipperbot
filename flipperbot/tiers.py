@@ -82,6 +82,8 @@ def realistic_range(prices: list[int], exact: bool, sell_cost: float = 0.05) -> 
 
 
 def repair_cost(ident: Identity, s: Settings) -> int:
+    if "broken" in ident.flags and ident.niche in ("electronics", "phones", "tools"):
+        return 0  # compared with other broken ones already: no repair guess on top
     if "broken" in ident.flags:
         costs = s.repair_ron if ident.niche == "watches" else niche_of(ident.niche).repair_ron
         return costs.get(ident.segment or "", 300)
@@ -237,6 +239,11 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             v.reason += " (brand only named in the description)"
         if v.tier in ("good", "real_good") and seg in ("luxury", "swiss") and discount >= 0.5:
             v.reason += " · this cheap for the brand: make sure it's real"
+        if ident.niche in ("electronics", "phones") and discount >= 0.45 and v.tier in ("good", "real_good") \
+                and "broken" not in f:
+            # A working PS5 or iPhone at half price is nearly always a scam, locked, faulty or not what the title says.
+            v.tier = "mid"
+            v.reason = "suspiciously cheap: often a scam, locked or faulty, let Claude check first · " + v.reason
         if high > 2.5 * max(low, 1):
             # Similar listings range from cheap to dear ("Seamaster": a 90s quartz Polaris and a modern 300M):
             # no honest single price. No number, no alert: Claude or the price-check links say what it's worth.

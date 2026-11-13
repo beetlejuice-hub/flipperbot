@@ -275,7 +275,7 @@ class DB:
         return out
 
     def comparable_prices(self, model_key: str, exclude_key: str | None = None, days: int = 365,
-                          used_only: bool = False) -> list[int]:
+                          used_only: bool = False, broken: bool = False) -> list[int]:
         """Asking prices of working, single, real items of this model (used_only: private sellers' used ones,
         not shops and not sealed/new ones)."""
         rows = self.conn.execute(
@@ -284,12 +284,14 @@ class DB:
                AND last_seen >= datetime('now', ?) {"AND COALESCE(business, 0) = 0" if used_only else ""}""",
             (model_key, f"-{days} days"),
         ).fetchall()
-        bad = {"broken", "lot", "replica", "part", "wanted", "service", "battery"} | ({"new"} if used_only else set())
+        bad = {"lot", "replica", "part", "wanted", "service", "battery"} | ({"new"} if used_only else set())
         out = []
         for r in rows:
             if r["key"] == exclude_key:
                 continue
-            if bad & set(json.loads(r["flags"] or "[]")):
+            flags = set(json.loads(r["flags"] or "[]"))
+            # broken=True: other broken ones of the model (a parts phone is priced like parts phones)
+            if bad & flags or (("broken" in flags) != broken):
                 continue
             out.append(r["price_ron"])
         return out

@@ -125,3 +125,31 @@ def test_variants_anywhere_in_the_title():
 ])
 def test_pc_parts_and_laptops_without_the_obvious_words(title, key):
     assert identify(title, "", "electronics").model_key == key
+
+
+@pytest.mark.parametrize("title, key, flag", [
+    ("sony ps5 portal NOU, luat de la Altex", "sony|ps portal", None),
+    ("Vr2 playstation5", "sony|ps vr2", None),
+    ("Xbox Series X/S - Seagate storage Expansion 1 TB", None, "part"),
+    ("Placa de baza Macbook PRO m1 si Senzor Touch ID", None, "part"),
+])
+def test_found_while_verifying(title, key, flag):
+    i = identify(title, "", "electronics")
+    if key:
+        assert i.model_key == key
+    if flag:
+        assert flag in i.flags
+
+
+def test_half_price_working_electronics_is_suspicious_and_broken_is_priced_as_broken():
+    db = DB(":memory:")
+    working = [olx.parse_offer({**offer(100 + i, "PlayStation 5 Slim disc", p), "category": {"id": 1878}}) for i, p in enumerate([3000, 3100, 3200, 3150, 3050])]
+    cheap = olx.parse_offer({**offer(1, "Vand PlayStation 5 + maneta", 1500), "category": {"id": 1878}})
+    broken = olx.parse_offer({**offer(2, "PlayStation 5 slim defect nu porneste", 900), "category": {"id": 1878}})
+    for l in [*working, cheap, broken]:
+        l.niche = "electronics"
+    bot.process(db, [*working, cheap, broken], S, alert=False)
+    c = db.get("olx:1")
+    assert c["tier"] == "mid" and c["reason"].startswith("suspiciously cheap") and c["score"] <= 5
+    b = db.get("olx:2")
+    assert b["est_value_ron"] is None and b["score"] <= 4  # no other broken PS5s to compare with: no estimate

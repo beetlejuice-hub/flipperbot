@@ -101,7 +101,11 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     # Electronics: a sealed new console asks far more than a used one; compare used with used.
     # (LEGO prices sealed sets as their own model instead; the rest compare a used one with used private listings.)
     used_only = l.niche in ("electronics", "phones", "tools", "sneakers") and "new" not in ident.flags
-    comps = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=used_only) if ident.model_key else []
+    # Catalog categories: a broken one is compared with other broken ones of the model, not with working ones minus
+    # a repair guess (a "pentru piese" iPhone isn't a working iPhone minus 400 lei).
+    broken_comps = l.niche in ("electronics", "phones", "tools") and "broken" in ident.flags
+    comps = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=used_only, broken=broken_comps) \
+        if ident.model_key else []
     sold = db.sold(ident.model_key, used_only=used_only)
     verdict = judge(l, ident, comps, s, db.model_price(ident.model_key), sold=[p for p, _ in sold])
     if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and "vintage" not in ident.flags and l.seller_id:

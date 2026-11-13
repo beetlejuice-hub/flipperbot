@@ -55,10 +55,11 @@ def _w(pattern: str) -> re.Pattern[str]:
 
 # --- consoles and handhelds: (pattern, brand, model, segment), first match wins: specific before general ---
 CONSOLES: list[tuple[re.Pattern[str], str, str, str]] = [
+    (_w(r"(?:ps5?|playstation(?:\s*5)?)\s*portal|portal\s*(?:ps5?|playstation)"), "sony", "ps portal", "handheld"),
+    (_w(r"(?:ps ?vr ?2|playstation vr ?2|vr ?2(?= .*(?:ps|playstation)))"), "sony", "ps vr2", "console"),
     (_w(r"(?:ps ?5|playstation ?5)\s*pro"), "sony", "ps5 pro", "console"),
     (_w(r"(?:ps ?5|playstation ?5)(?:\s*slim)?\s*(?:digital|digitala|digitală|fara (?:unitate|disc)|without disc)"), "sony", "ps5 digital", "console"),
     (_w(r"(?:ps ?5|playstation ?5)"), "sony", "ps5", "console"),
-    (_w(r"(?:ps ?vr ?2|playstation vr ?2)"), "sony", "ps vr2", "console"),
     (_w(r"(?:ps ?4|playstation ?4)\s*pro"), "sony", "ps4 pro", "console"),
     (_w(r"(?:ps ?4|playstation ?4)"), "sony", "ps4", "console"),
     (_w(r"(?:ps ?vita|playstation vita)"), "sony", "ps vita", "handheld"),
@@ -66,7 +67,6 @@ CONSOLES: list[tuple[re.Pattern[str], str, str, str]] = [
     (_w(r"(?:ps ?2|playstation ?2)"), "sony", "ps2", "retro"),
     (_w(r"(?:ps ?one|psone|ps ?1|playstation ?1)"), "sony", "ps1", "retro"),
     (_w(r"psp"), "sony", "psp", "retro"),
-    (_w(r"(?:ps|playstation)\s*portal"), "sony", "ps portal", "handheld"),
     (_w(r"xbox\s*series\s*x"), "microsoft", "xbox series x", "console"),
     (_w(r"xbox\s*series\s*s"), "microsoft", "xbox series s", "console"),
     (_w(r"xbox\s*one\s*x"), "microsoft", "xbox one x", "console"),
@@ -301,7 +301,9 @@ PART_START = ["controller", "controler", "maneta", "manete", "joc", "jocuri", "p
               "incarcator", "dock", "docking", "skin", "folie", "ventilator", "cooler", "carcasa", "pad", "joystick",
               "volan", "casti", "headset", "card", "figurina", "figurine", "telecomanda", "baterie", "display", "ecran",
               "tastatura", "topcase", "balamale", "placa de baza", "mufa", "sursa", "radiator", "pasta"]
-ACCESSORY_ANYWHERE = ["pentru ps5", "pentru ps4", "pentru xbox", "pentru switch", "pentru steam deck", "compatibil ps5",
+ACCESSORY_ANYWHERE = ["placa de baza", "storage expansion", "expansion card", "card de extensie", "seagate", "hard disk",
+                      "hdd extern", "ssd extern", "carcasa", "baterie pentru", "display pentru", "ecran pentru", "tastatura pentru",
+                      "pentru ps5", "pentru ps4", "pentru xbox", "pentru switch", "pentru steam deck", "compatibil ps5",
                       "compatibil cu ps5", "compatibila ps5", "for ps5", "for switch", "pentru nintendo"]
 # Cheap clone consoles ("Consola Magica 10000 jocuri", game sticks): not the real thing.
 CLONES = ["consola magica", "magica", "game stick", "gamestick", "retro game stick", "jocuri incluse", "10000 jocuri", "20000 jocuri",

@@ -69,6 +69,11 @@ class Settings:
     # Each poll asks OLX which listings of this many private sellers are still up, to learn what sold
     # (and for how much, how fast). One request per seller.
     sold_checks_per_poll: int = 6
+    # Other marketplaces read like OLX (plain requests only): a few searches per category every so often.
+    # Okazii, Vinted and eMAG refuse plain requests, so they're not here.
+    more_sources: list[str] = field(default_factory=lambda: ["publi24", "lajumate"])
+    more_sources_every_min: int = 15
+    more_sources_terms: int = 2  # searches per category per round, on each site
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
     niches: list[str] = field(default_factory=lambda: ["watches", "cameras", "electronics"])  # what to hunt (see niches.py)

@@ -76,7 +76,9 @@ random searches.
 2. **Facebook Marketplace** with danyk20's scraper, on a **second** Facebook account, every 30–60 min.
    Needs: a Romania entry in its `COUNTRY_ANCHORS` (it ships Switzerland only), and its browser is
    hard-coded to `de-CH`, so login button texts need Romanian/English.
-3. Okazii.ro (auctions ending cheap), Publi24, Lajumate, Vinted.
+3. Other marketplaces: Publi24 and Lajumate are read (plain requests). Okazii (403), Vinted (its search API 403s
+   without a browser session) and eMAG (511) refuse plain requests: not read, by the no-browser-imitation rule.
+   Vinted would need an official route (an API key/partner program) or the person's own browser.
 4. Mids: second price source; listings that sit unsold for weeks (negotiation targets).
 5. Learn from outcomes: mark what you bought and what it sold for, and tune the tiers from that.
 6. **More categories, picked with the dashboard's category boxes**: consoles and PC parts (now only on the

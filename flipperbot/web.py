@@ -523,6 +523,8 @@ function h(tag, attrs = {}, ...kids) {
   for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
   return el;
 }
+const SITES = { olx: "OLX", facebook: "Facebook", publi24: "Publi24", lajumate: "Lajumate" };
+const siteName = s => SITES[s] || s || "OLX";
 const lei = n => n == null ? "?" : n.toLocaleString("ro-RO") + " lei";
 function ago(iso) {
   if (!iso) return "";
@@ -659,13 +661,13 @@ function card(l) {
             : ` · similar ones up ~${l.liquidity.median_days} days, ${l.liquidity.for_sale} for sale`)) : null,
         l.ebay && !(l.reason || "").startsWith("eBay:") ? h("div", { class: "checks" },
           `eBay (${l.ebay.n} listed, used): realistic ~${l.ebay.low.toLocaleString("ro-RO")}–${lei(l.ebay.high)}`) : null,
-        h("div", { class: "meta" }, [l.icon + " " + (l.source === "facebook" ? "Facebook" : "OLX"),
+        h("div", { class: "meta" }, [l.icon + " " + siteName(l.source),
           l.first_price ? `price cut from ${lei(l.first_price)}` : "",
           l.listed_at ? `listed ${ago(l.listed_at)}` : "",
           l.first_posted ? `reposted: first posted ${ago(l.first_posted)}` : "",
           l.bumps ? `bumped${l.bumps > 1 ? " " + l.bumps + "×" : ""} (reactualizat)` : "", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         view === "interesting" ? triageActions(l, el) : h("div", { class: "actions" },
-          h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.source === "facebook" ? "Open on Facebook ↗" : "Open on OLX ↗"),
+          h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${siteName(l.source)} ↗`),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),
           h("button", { onclick: async () => { await act(l.hidden ? "unhide" : "hide", l.key); el.remove(); refreshStats(); } }, l.hidden ? "Unhide" : "Hide"),
           aiBtn)));

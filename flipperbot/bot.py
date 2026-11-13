@@ -48,6 +48,9 @@ def is_relevant(l: Listing, niche: str | None = None) -> bool:
         return True
     if l.source != "olx" and any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", t) for w in n.strong_words):
         return True  # no categories elsewhere: the word will do
+    q = normalize(str(l.params.get("query") or "")) if isinstance(l.params, dict) else ""
+    if l.source != "olx" and q and find_brands(l.title, n.key) and all(w in t for w in q.split() if len(w) > 2):
+        return True  # found by a search for exactly this ("omega seamaster" -> "Omega Seamaster 300m")
     return bool(find_brands(l.title, n.key)) and any(w in t for w in n.words)
 
 
@@ -275,6 +278,44 @@ def poll_facebook(db: DB, s: Settings, log: Callable[[str], None] = print) -> in
     process(db, listings, s)
     db.kv_set("facebook", {"state": "ok", "next_at": next_at, "at": datetime.now().isoformat(timespec="seconds"), "listings": len(listings)})
     return len(listings)
+
+
+MORE_SOURCES = ("publi24", "lajumate")
+
+
+def poll_more(db: DB, s: Settings, log: Callable[[str], None] = print, sources: dict[str, Callable[..., Any]] | None = None) -> int:
+    """Publi24 and Lajumate: a couple of searches per category on each, every `more_sources_every_min`,
+    judged like OLX. Each site that fails is skipped this round; the rest go on."""
+    if not s.more_sources or time.time() < db.kv_get("more_sources_next_at", 0):
+        return 0
+    db.kv_set("more_sources_next_at", time.time() + s.more_sources_every_min * 60)
+    if sources is None:
+        from .sources import lajumate, publi24
+
+        sources = {"publi24": lambda q: publi24.search(q, eur_to_ron=s.eur_to_ron),
+                   "lajumate": lambda q: lajumate.search(q, eur_to_ron=s.eur_to_ron)}
+    seen = 0
+    for key in s.niches:
+        n = niches.get(key)
+        pool = list(s.search_pool + s.focus_pool) if key == "watches" else list(n.search_pool + n.focus_pool)
+        for term in random.sample(pool, min(s.more_sources_terms, len(pool))):
+            for name in s.more_sources:
+                fetch = sources.get(name)
+                if not fetch:
+                    continue
+                try:
+                    got = fetch(term)
+                except Exception as e:  # a site down or refusing: skip it this round
+                    log(f"  {name} {term!r}: {e!r}"[:160])
+                    continue
+                for l in got:
+                    l.niche = key
+                    l.params["query"] = term  # what was searched: lets "Omega Seamaster 300m" count as a watch
+                process(db, got, s)
+                seen += len(got)
+                time.sleep(random.uniform(*s.pause_between_requests_s))
+    log(f"  more sources: {seen} listings")
+    return seen
 
 
 def _fresh(db: DB) -> str:
@@ -561,6 +602,10 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
             if facebook_due(db, s):
                 poll_facebook(db, s)
             deliver(db, s)
+            try:
+                poll_more(db, s)
+            except Exception as e:  # never stops the main bot
+                print(f"  more sources error: {e!r}")
             try:
                 check_sold(db, s)
             except olx.Blocked:

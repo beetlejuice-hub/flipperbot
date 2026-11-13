@@ -89,7 +89,8 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "ebay": json.loads(r["ebay"]) if r["ebay"] else None,
         "quick": json.loads(r["quick"]) if r["quick"] else None,
         "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
-        "listed_at": r["created_at"] or None, "first_price": _first_price(r, db), "price_links": price_links(r),
+        "listed_at": r["created_at"] or None, "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
+        "repost_of": r["repost_of"], "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
         "score": r["score"], "score_why": r["score_why"],
         "ai_running": bool(_queue) and _queue[0] == r["key"],
@@ -101,7 +102,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
 # isn't clear, sellers who don't know what they have. Only recently seen ones (still for sale).
 # Interesting: score 5+ that you haven't decided on, still for sale and freshly posted.
 INTERESTING = f"""triage IS NULL AND hidden = 0 AND COALESCE(score, 0) >= 5 AND last_seen >= datetime('now', '-3 days')
-    AND (COALESCE(created_at, '') = '' OR substr(created_at, 1, 10) >= date('now', '-{MAX_LISTING_AGE_DAYS} days')
+    AND (COALESCE(orig_created_at, created_at, '') = '' OR substr(COALESCE(orig_created_at, created_at), 1, 10) >= date('now', '-{MAX_LISTING_AGE_DAYS} days')
          OR reason LIKE '%price was just cut%')"""
 
 VIEWS = {
@@ -657,7 +658,9 @@ function card(l) {
           `eBay (${l.ebay.n} listed, used): realistic ~${l.ebay.low.toLocaleString("ro-RO")}–${lei(l.ebay.high)}`) : null,
         h("div", { class: "meta" }, [l.icon + " " + (l.source === "facebook" ? "Facebook" : "OLX"),
           l.first_price ? `price cut from ${lei(l.first_price)}` : "",
-          l.listed_at ? `listed ${ago(l.listed_at)}` : "", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
+          l.listed_at ? `listed ${ago(l.listed_at)}` : "",
+          l.first_posted ? `reposted: first posted ${ago(l.first_posted)}` : "",
+          l.bumps ? `bumped${l.bumps > 1 ? " " + l.bumps + "×" : ""} (reactualizat)` : "", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         view === "interesting" ? triageActions(l, el) : h("div", { class: "actions" },
           h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.source === "facebook" ? "Open on Facebook ↗" : "Open on OLX ↗"),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),

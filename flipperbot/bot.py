@@ -118,11 +118,15 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         verdict.tier = "mid" if liq["label"] == "very slow" or verdict.tier == "good" else "good"
         verdict.reason = (f"sells {liq['label']}: similar ones have been up ~{liq['median_days']} days, "
                           f"{liq['for_sale']} for sale · " + verdict.reason)
-    age = listing_age_days(l.created_at)
+    stored = db.get(l.key)
+    origin = stored["orig_created_at"] if stored is not None and stored["orig_created_at"] else None
+    # A delete-and-post-again keeps its real age: the first time this seller posted the item.
+    age = listing_age_days(origin or l.created_at)
     if age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good") and not recent_price_cut(db, l):
         # Up for months and still "cheap"? A real deal would be gone: overpriced, fake, or bait.
         verdict.tier = "mid"
-        verdict.reason = f"listed {age} days ago: a real deal wouldn't last that long · " + verdict.reason
+        how = "first posted" if origin else "listed"
+        verdict.reason = f"{how} {age} days ago: a real deal wouldn't last that long · " + verdict.reason
     elif age is not None and age > s.max_listing_age_days and verdict.tier in ("good", "real_good"):
         verdict.reason = f"old listing ({age} days), but the price was just cut · " + verdict.reason
     if verdict.tier in ("good", "real_good") and not verdict.est_value_ron:

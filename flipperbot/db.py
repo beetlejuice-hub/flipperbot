@@ -5,6 +5,7 @@ book: market value of a model = what the same model is listed for."""
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,6 +40,23 @@ CREATE TABLE IF NOT EXISTS model_prices (model_key TEXT PRIMARY KEY, low INTEGER
 TIER_RANK = {"bad": 0, "suspect": 1, "mid": 2, "good": 3, "real_good": 4}
 
 
+def _days_between(a: str | None, b: str | None) -> float:
+    try:
+        x = datetime.fromisoformat((a or "").replace("Z", "+00:00"))
+        y = datetime.fromisoformat((b or "").replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+    if (x.tzinfo is None) != (y.tzinfo is None):
+        return 0.0
+    return (y - x).total_seconds() / 86400
+
+
+def _title_words(title: str | None) -> set[str]:
+    from .identify import normalize
+
+    return {w for w in re.split(r"[^a-z0-9]+", normalize(title or "")) if len(w) > 2 and w not in ("vand", "vind", "urgent")}
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -55,7 +73,10 @@ class DB:
         for col in ("starred INTEGER DEFAULT 0", "hidden INTEGER DEFAULT 0", "niche TEXT DEFAULT 'watches'",
                     "triage TEXT", "est_high_ron INTEGER", "ebay TEXT", "liquidity TEXT",
                     # the 0-10 score: free rules, the quick AI read, and the final one
-                    "rule_score INTEGER", "rule_why TEXT", "quick TEXT", "quick_at TEXT", "score INTEGER", "score_why TEXT"):  # your call on an Interesting listing: claude / skip / fake
+                    "rule_score INTEGER", "rule_why TEXT", "quick TEXT", "quick_at TEXT", "score INTEGER", "score_why TEXT",
+                    # OLX bumps ("reactualizare") and reposts: how often it was pushed back to the top, and the
+                    # first time this item was posted if the seller deleted and posted it again
+                    "bumps INTEGER DEFAULT 0", "orig_created_at TEXT", "repost_of TEXT"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -78,7 +99,12 @@ class DB:
             category_id=l.category_id, params=json.dumps(l.params, ensure_ascii=False), last_seen=t, niche=l.niche,
         )
         if prev is None:
-            cols.update(key=l.key, first_seen=t)
+            # Seen for the first time but refreshed well after it was posted: it was bumped before we saw it.
+            cols.update(key=l.key, first_seen=t, bumps=int(_days_between(l.created_at, l.refreshed_at) >= 1))
+            origin = self.find_repost(l)
+            if origin is not None:
+                cols.update(repost_of=origin["key"],
+                            orig_created_at=min(x for x in (origin["orig_created_at"], origin["created_at"], l.created_at) if x))
             names = ", ".join(cols)
             self.conn.execute(f"INSERT INTO listings ({names}) VALUES ({', '.join('?' * len(cols))})", list(cols.values()))
             self.conn.execute("INSERT INTO prices VALUES (?,?,?)", (l.key, l.price_ron, t))
@@ -87,11 +113,36 @@ class DB:
             sets = ", ".join(f"{k}=?" for k in cols)
             self.conn.execute(f"UPDATE listings SET {sets} WHERE key=?", [*cols.values(), l.key])
             change = "seen"
+            if l.refreshed_at and prev["refreshed_at"] and l.refreshed_at > prev["refreshed_at"]:
+                # OLX "reactualizare": the same listing pushed back to the top, not a new one
+                self.conn.execute("UPDATE listings SET bumps = COALESCE(bumps, 0) + 1 WHERE key=?", (l.key,))
+                change = "bumped"
             if l.price_ron and prev["price_ron"] and l.price_ron != prev["price_ron"]:
                 self.conn.execute("INSERT INTO prices VALUES (?,?,?)", (l.key, l.price_ron, t))
                 change = "price_drop" if l.price_ron < prev["price_ron"] else "price_up"
         self.conn.commit()
         return change, prev
+
+    def find_repost(self, l: Listing) -> sqlite3.Row | None:
+        """The same seller's earlier listing of the same item, now gone: a delete-and-post-again to look new.
+        Same seller, nearly the same title, a price within 25%, and the old one not seen for 2+ days (several
+        identical listings that are all still up are a shop's stock, not a repost)."""
+        if not l.seller_id or not l.title:
+            return None
+        words = _title_words(l.title)
+        if len(words) < 2:
+            return None
+        rows = self.conn.execute(
+            """SELECT * FROM listings WHERE source=? AND seller_id=? AND key!=? AND last_seen < datetime('now', '-2 days')
+               ORDER BY COALESCE(orig_created_at, created_at, first_seen) LIMIT 200""",
+            (l.source, l.seller_id, l.key)).fetchall()
+        for r in rows:
+            other = _title_words(r["title"])
+            same = len(words & other) / max(1, len(words | other))
+            close = not (l.price_ron and r["price_ron"]) or abs(l.price_ron - r["price_ron"]) <= 0.25 * max(l.price_ron, r["price_ron"])
+            if same >= 0.7 and close:
+                return r
+        return None
 
     def set_verdict(self, key: str, ident: Any, verdict: Any) -> None:
         self.conn.execute(

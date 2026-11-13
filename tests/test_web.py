@@ -235,3 +235,16 @@ def test_tracking_a_flip(server, tmp_path):
     # your resale counts as a sold price for the model (twice: it weighs more than a guess)
     db = DB(tmp_path / "f.db")
     assert sorted(p for p, _ in db.sold("seiko|SKX007")) == [950, 950]
+
+
+def test_sold_tab(server, tmp_path):
+    db = DB(tmp_path / "f.db")
+    db.conn.execute("INSERT INTO prices VALUES ('olx:101', 1200, '2026-11-01T10:00:00+00:00')")  # first asked more
+    db.conn.execute("""UPDATE listings SET gone_at=datetime('now'), gone_reason='sold',
+                       created_at=datetime('now', '-9 days') WHERE key='olx:101'""")
+    db.conn.execute("UPDATE listings SET gone_at=datetime('now'), gone_reason='expired' WHERE key='olx:102'")
+    db.conn.commit()
+    sold = get(server + "/api/listings?view=sold")
+    assert [x["key"] for x in sold] == ["olx:101"]  # expired ones aren't sales
+    assert sold[0]["gone_reason"] == "sold" and sold[0]["days_up"] == 9 and sold[0]["price"] == 1100
+    assert get(server + "/api/stats")["sold_tracked"] == 1

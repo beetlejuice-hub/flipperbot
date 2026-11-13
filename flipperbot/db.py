@@ -49,8 +49,11 @@ def _days_between(a: str | None, b: str | None) -> float:
         y = datetime.fromisoformat((b or "").replace("Z", "+00:00"))
     except ValueError:
         return 0.0
-    if (x.tzinfo is None) != (y.tzinfo is None):
-        return 0.0
+    # SQLite's datetime('now') has no zone and is UTC; OLX's times carry one: treat the zoneless as UTC
+    if x.tzinfo is None:
+        x = x.replace(tzinfo=timezone.utc)
+    if y.tzinfo is None:
+        y = y.replace(tzinfo=timezone.utc)
     return (y - x).total_seconds() / 86400
 
 

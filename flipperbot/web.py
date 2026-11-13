@@ -64,6 +64,16 @@ def _small_photo(u: str) -> str:
     return re.sub(r";s=\d+x\d+", ";s=400x400", u)
 
 
+def _days_up(r: Any) -> int | None:
+    """How long a gone listing was up: from its first posting to when it disappeared."""
+    from .db import _days_between
+
+    if not r["gone_at"]:
+        return None
+    since = r["orig_created_at"] or r["created_at"] or r["first_seen"]
+    return max(0, round(_days_between(since, r["gone_at"])))
+
+
 def _first_price(r: Any, db: DB | None) -> int | None:
     """The price it was first seen at, if it has dropped since: room to negotiate."""
     if db is None:
@@ -101,7 +111,8 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "deal": dict(d) if db is not None and (d := db.deal(r["key"])) else None,
         "message": _message(r),
         "listed_at": r["created_at"] or None, "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
-        "repost_of": r["repost_of"], "first_price": _first_price(r, db), "price_links": price_links(r),
+        "repost_of": r["repost_of"], "gone_at": r["gone_at"], "gone_reason": r["gone_reason"],
+        "days_up": _days_up(r), "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
         "score": r["score"], "score_why": r["score_why"],
         "ai_running": bool(_queue) and _queue[0] == r["key"],
@@ -124,6 +135,8 @@ VIEWS = {
     "removed": ("score = 0 AND hidden=0", "posted"),
     "starred": ("starred=1", "rank"),
     "checked": ("ai IS NOT NULL", "ai"),
+    # listings the bot saw sell on OLX (gone, not expired or reposted): what they went for, how fast
+    "sold": ("gone_reason = 'sold'", "gone"),
     # lots and clear-outs worth a look, newest first by score: the photo look and Claude's item lists live here
     "lots": ("niche = 'lots' AND hidden = 0 AND COALESCE(score, 0) >= 3 AND last_seen >= datetime('now', '-7 days')", "rank"),
     "hidden": ("hidden=1", "new"),
@@ -148,6 +161,7 @@ ORDER = {
     "new": "first_seen DESC",
     "posted": "COALESCE(NULLIF(created_at, ''), first_seen) DESC",
     "ai": "ai_at IS NULL, ai_at DESC",
+    "gone": "gone_at DESC",
     "cheap": "price_ron ASC",
 }
 
@@ -503,7 +517,7 @@ button.copy { font: inherit; font-size: 12px; padding: 1px 8px; border-radius: 6
     <details id="niches" class="multi"><summary>All categories</summary><div id="nicheList"></div></details>
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
-      <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option><option value="profit">Biggest profit (lei)</option><option value="profit_pct">Biggest profit (%)</option>
+      <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option><option value="gone">Recently sold</option><option value="profit">Biggest profit (lei)</option><option value="profit_pct">Biggest profit (%)</option>
     </select>
   </div>
 </div></header>
@@ -519,12 +533,14 @@ const TABS = [
   ["checked", "Claude checked", null],
   ["hidden", "Hidden", null],
   ["lots", "📦 Lots", s => s.lots],
+  ["sold", "🏷️ Sold", s => s.sold_tracked],
   ["flips", "💰 My flips", null],
   ["radar", "📈 Trends", null],
 ];
 const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "likely fake", bad: "bad" };
 const EMPTY = {
   interesting: "Nothing scored 5+ that you haven't decided on. The bot checks every 5–10 minutes; good finds land here.",
+  sold: "No sales seen yet. Every poll the bot asks OLX which listings of a few sellers are still up; the ones gone (not expired) land here with what they sold for. It starts after the bot has run a day.",
   lots: "No lots worth a look yet. The bot searches lots and clear-outs in turn with the other categories; the best get a quick look at their photos.",
   top: "Nothing at 8–10 yet: those need an AI to agree.", mid: "Nothing at 5–7.", low: "Nothing at 1–4.",
   removed: "Nothing removed.",
@@ -706,6 +722,9 @@ function card(l) {
         priceBox(l),
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
+        l.gone_reason === "sold" ? h("div", { class: "liq liq-fast" },
+          `🏷️ Sold ${ago(l.gone_at)} for ~${lei(l.price)}` + (l.days_up != null ? ` after ${l.days_up} days up` : "")
+          + (l.first_price && l.first_price !== l.price ? ` (first asked ${lei(l.first_price)})` : "")) : null,
         l.quick && l.quick.looked ? lookBox(l.quick) : null,
         l.message ? h("details", { class: "msg" }, h("summary", {}, "✉️ Message to the seller"),
           h("pre", {}, l.message), h("button", { class: "copy", onclick: e => {
@@ -728,8 +747,9 @@ function card(l) {
           h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${siteName(l.source)} ↗`),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),
           h("button", { onclick: async () => { await act(l.hidden ? "unhide" : "hide", l.key); el.remove(); refreshStats(); } }, l.hidden ? "Unhide" : "Hide"),
-          dealButton(l, draw),
-          aiBtn)));
+          // gone from OLX: nothing to buy or check any more (unless it's one of your own flips)
+          l.gone_at && !l.deal ? null : dealButton(l, draw),
+          l.gone_at ? null : aiBtn)));
   };
   draw(); el.redraw = draw; el.listing = l;
   return el;

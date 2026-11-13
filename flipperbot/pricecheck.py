@@ -36,6 +36,10 @@ def price_links(r: Any) -> list[list[str]]:
         "watches": ["Chrono24", f"https://www.chrono24.com/search/index.htm?query={quote_plus(q)}"],
         "cameras": ["Kamerastore", f"https://kamerastore.com/search?q={quote_plus(q)}"],
         "electronics": ["eMAG new", f"https://www.emag.ro/search/{quote_plus(q)}"],
+        "phones": ["eMAG new", f"https://www.emag.ro/search/{quote_plus(q)}"],
+        "tools": ["eMAG new", f"https://www.emag.ro/search/{quote_plus(q)}"],
+        "lego": ["BrickLink", f"https://www.bricklink.com/v2/search.page?q={quote_plus(q.replace('lego ', '').replace(' sealed', ''))}"],
+        "sneakers": ["StockX", f"https://stockx.com/search?s={quote_plus(q)}"],
     }.get(niche)
     return [
         ["eBay sold", f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(q)}&LH_Sold=1&LH_Complete=1"],

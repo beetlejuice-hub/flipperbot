@@ -91,7 +91,9 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     # OLX has its own "brand" field on watch listings; count it as part of the description.
     brand_field = l.params.get("brand") if isinstance(l.params.get("brand"), str) else ""
     ident = identify(l.title, f"{l.description} {brand_field}", l.niche)
-    comps = db.comparable_prices(ident.model_key, exclude_key=l.key) if ident.model_key else []
+    # Electronics: a sealed new console asks far more than a used one; compare used with used.
+    used_only = l.niche == "electronics" and "new" not in ident.flags
+    comps = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=used_only) if ident.model_key else []
     verdict = judge(l, ident, comps, s, db.model_price(ident.model_key))
     if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and "vintage" not in ident.flags and l.seller_id:
         # One seller with a row of modern luxury/Swiss watches all far under market: a replica dealer.

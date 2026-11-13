@@ -267,7 +267,51 @@ def _smart_words(t: str) -> str:
     return re.sub(r"(apple watch|iwatch) (\d{1,2})(?![0-9])", r"\1 series \2", t)
 
 
+def _identify_tech(title: str, description: str) -> Identity:
+    """Consoles, PCs, laptops and parts: the exact model from techdb, title first (descriptions list games
+    and other consoles); laptops and PCs may take their graphics card or processor from the description."""
+    from . import techdb
+
+    title_n = techdb.clean(normalize(_SWAP.sub("", normalize(title)).strip() or title))
+    full_n = techdb.clean(normalize(f"{title} . {_without_trade_talk(description)}"))
+    m = techdb.match(title_n, full_n)
+    flags: set[str] = set()
+    if _any(full_n, techdb.BROKEN) or _any(full_n, ["pentru piese", "defect", "defecta"]):
+        flags.add("broken")
+    if _any(full_n, techdb.LOCKED):
+        flags.add("locked")
+    if _any(full_n, techdb.MODDED):
+        flags.add("modded")
+    if _any(full_n, REPLICA):
+        flags.add("replica")
+    if _any(full_n, SHOP_TALK):
+        flags.add("shop_talk")
+    if _any(title_n, WANTED) or _any(title_n, techdb.WANTED):
+        flags.add("wanted")
+    if _any(title_n, techdb.SERVICE) or _any(title_n, SERVICE):
+        flags.add("service")
+    body = title_n
+    for _ in range(3):  # "Vand urgent: volan PS4" -> "volan ps4"
+        body = techdb.LEADING.sub("", body)
+    first = re.split(r"[^a-z0-9]+", body)[0] if body else ""
+    if first in techdb.PART_START or _any(title_n, techdb.ACCESSORY_ANYWHERE):
+        flags.add("part")
+    games, device = techdb.GAMES.search(title_n), techdb.device_pos(title_n)
+    if games and device is not None and games.start() < device:
+        flags.add("part")  # "Pachet de 5 jocuri Nintendo Switch 2", "Lot jocuri Xbox One": the games are for sale
+    if _any(title_n, techdb.CLONES):
+        flags.add("replica")
+    if _any(full_n, NEW_BOXED):
+        flags.add("new")
+    if m and m.segment == "retro":
+        flags.add("vintage")
+    return Identity(brand=m.brand if m else None, brands=[m.brand] if m else [], refs=[], family=(m.model or None) if m else None,
+                    flags=flags, brand_in_title=bool(m), niche="electronics")
+
+
 def identify(title: str, description: str = "", niche: str = "watches") -> Identity:
+    if niche == "electronics":
+        return _identify_tech(title, description)
     title = _smart_words(_SWAP.sub("", normalize(title)).strip() or title)
     title_n = normalize(title)
     full_n = _smart_words(normalize(f"{title} . {description}"))

@@ -48,7 +48,8 @@ def test_search_mix_old_modern_general():
     assert len(watch_terms) == len(cam_terms) == 50 * 3
     assert sum(q in niches.CAMERAS.focus_pool for q in cam_terms) >= 50
     feeds = {(c, n) for r in runs for q, c, n in r if c}
-    assert feeds == {("1677", "watches"), ("1676", "watches"), ("1943", "watches"), ("2344", "cameras"), ("1935", "cameras")}
+    assert feeds == {("1677", "watches"), ("1676", "watches"), ("1943", "watches"), ("2344", "cameras"), ("1935", "cameras"),
+                     ("1878", "electronics"), ("1876", "electronics"), ("2130", "electronics"), ("1882", "electronics")}
 
 
 def test_luxury_needs_a_surer_claude():

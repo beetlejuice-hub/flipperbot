@@ -196,6 +196,11 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             v.reason += " (brand only named in the description)"
         return v
     market = market_price(comps) if len(comps) >= s.min_comps else None
+    if market and ident.niche == "electronics" and price < 0.35 * market and "broken" not in f and model_known:
+        # A console or card at a third of the usual price is almost never the device itself working: a
+        # controller, a game, a cover, a box, or bait. (Broken ones are priced as broken instead.)
+        return Verdict("bad", f"{price} lei vs ~{market} usual: too cheap to be the item itself, probably a part/accessory, "
+                              "a game or bait")
     if market:
         exact = bool(ident.refs)  # a reference number ("SKX007") vs only a family ("seamaster")
         low, high = realistic_range(comps, exact)

@@ -97,7 +97,7 @@ def test_facebook_queries_carry_their_niche(monkeypatch):
     s = Settings()
     s.facebook_searches_per_run = 40
     bot.poll_facebook(db, s, log=lambda m: None)
-    assert {n for q, n in seen} == {"watches", "cameras"}
+    assert {n for q, n in seen} == {"watches", "cameras", "electronics"}
 
 
 @pytest.mark.parametrize("title, key", [

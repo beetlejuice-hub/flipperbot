@@ -208,15 +208,17 @@ class DB:
             out.append(max(0, (now - created).days))
         return out
 
-    def comparable_prices(self, model_key: str, exclude_key: str | None = None, days: int = 365) -> list[int]:
-        """Asking prices of working, single, real items of this model."""
+    def comparable_prices(self, model_key: str, exclude_key: str | None = None, days: int = 365,
+                          used_only: bool = False) -> list[int]:
+        """Asking prices of working, single, real items of this model (used_only: private sellers' used ones,
+        not shops and not sealed/new ones)."""
         rows = self.conn.execute(
-            """SELECT key, price_ron, flags FROM listings
+            f"""SELECT key, price_ron, flags FROM listings
                WHERE model_key=? AND price_ron IS NOT NULL AND price_ron > 0
-               AND last_seen >= datetime('now', ?)""",
+               AND last_seen >= datetime('now', ?) {"AND COALESCE(business, 0) = 0" if used_only else ""}""",
             (model_key, f"-{days} days"),
         ).fetchall()
-        bad = {"broken", "lot", "replica", "part", "wanted", "service", "battery"}
+        bad = {"broken", "lot", "replica", "part", "wanted", "service", "battery"} | ({"new"} if used_only else set())
         out = []
         for r in rows:
             if r["key"] == exclude_key:

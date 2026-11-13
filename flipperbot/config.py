@@ -68,7 +68,7 @@ class Settings:
     feed_pages: int = 3
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
-    niches: list[str] = field(default_factory=lambda: ["watches", "cameras"])  # what to hunt (see niches.py)
+    niches: list[str] = field(default_factory=lambda: ["watches", "cameras", "electronics"])  # what to hunt (see niches.py)
     search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))
     focus_pool: list[str] = field(default_factory=lambda: list(FOCUS_POOL))
     modern_pool: list[str] = field(default_factory=lambda: list(MODERN_POOL))

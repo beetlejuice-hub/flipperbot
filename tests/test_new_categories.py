@@ -33,6 +33,13 @@ from flipperbot.identify import identify
     ("sneakers", "Nike Dunk Low Panda 42", "nike|dunk low", None),
     ("sneakers", "Adidași New Balance 550 Albi, marimea 38", "new balance|550", None),
     ("sneakers", "adidas Samba OG", "adidas|samba", None),
+    ("sneakers", "Adidași Air Jordan Retro 12 Low GS Wolf Grey", "nike|jordan 12", None),
+    ("sneakers", "Adidasi Nike Jordan Air 1 Albi", "nike|jordan 1", None),
+    ("sneakers", "Nike Dunk SB Low Pigeon 43", "nike|dunk low", None),
+    ("sneakers", "Nike Dunk Safari Golden Moss - 45.5 EU", "nike|dunk low", None),
+    ("sneakers", "REDUCE DE SEZON Nike Tn Air Max negrii", "nike|air max plus", None),
+    ("tools", "Flex cu variator Bosch GWS 7-115 E", "bosch|gws7115", None),
+    ("tools", "Masina de gaurit si insurubat cu acumulatori, Makita 8434D", "makita|8434d", None),
     ("sneakers", "Jordan 4 calitate premium cutie+eticheta", "nike|jordan 4", "replica"),
 ])
 def test_new_categories(niche, title, key, flag):

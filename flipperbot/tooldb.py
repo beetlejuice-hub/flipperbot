@@ -25,7 +25,7 @@ BRAND_RE = _w(r"(makita|dewalt|de walt|milwaukee|hilti|festool|metabo|hikoki|hit
               r"einhell|parkside|black\s?\+?\s?(?:&\s?)?decker|worx|stanley)")
 # Model codes: Makita DHP485 / GA5040 / DTD153; DeWalt DCD796 / DCF887; Milwaukee M18 FPD2 / M12 FID; Hilti TE 30 / SF 6H-A22;
 # Bosch GSR 18V-60 / GBH 2-26; Stihl MS 261 / FS 55; Husqvarna 435; Metabo SB 18 LTX.
-CODE = re.compile(r"(?<![a-z0-9])(m1[28]\s?[a-z]{2,6}\d?|[a-z]{2,4}\s?\d{1,2}-\d{2}[a-z]?|[a-z]{1,4}\s?-?\d{2,4}[a-z0-9]{0,5}(?:\s?-\s?\d{1,3}v?)?(?:\s?-?a\d{2})?)(?![a-z0-9])")
+CODE = re.compile(r"(?<![a-z0-9])(m1[28]\s?[a-z]{2,6}\d?|[a-z]{2,4}\s?\d{1,2}-\d{2,3}[a-z]?|\d{4}[a-z]{1,2}|[a-z]{1,4}\s?-?\d{2,4}[a-z0-9]{0,5}(?:\s?-\s?\d{1,3}v?)?(?:\s?-?a\d{2})?)(?![a-z0-9])")
 NOT_CODE = re.compile(r"^(?:\d+\s?v|v\d+|\d+ah|ah\d*|\d+mm|mm\d+|\d+w|w\d+|nr\d*|lei\d*|ron\d*|\d+|x\d+|kg\d*|cm\d*|m\d|rpm\d*|"
                       r"lxt\d*|xr\d*|ip\d+|gen\d*|li-?ion\d*|set\d*|kit\d*|buc\d*)$")
 MILWAUKEE = _w(r"m(1[28])\s?(?:fuel\s?)?(?!fuel)([a-z]{2,6}\d?(?:-\d{1,2})?)")

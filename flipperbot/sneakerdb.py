@@ -19,13 +19,15 @@ BRANDS: list[Brand] = [
 
 # (pattern, brand, model, segment): specific first
 MODELS: list[tuple[re.Pattern[str], str, str, str]] = [
-    (_w(r"(?:air\s)?jordan\s?(1)\s?(?:retro\s?)?(high|mid|low)"), "nike", "jordan 1 {2}", "hype"),
-    (_w(r"(?:air\s)?jordan\s?(\d{1,2})(?:\s?retro)?"), "nike", "jordan {1}", "hype"),
-    (_w(r"(?:nike\s)?(?:sb\s)?dunk\s?(low|high)"), "nike", "dunk {1}", "hype"),
+    (_w(r"(?:air\s)?jordan\s?(?:air\s|retro\s)?(1)\s?(?:retro\s?)?(?:og\s?)?(high|mid|low)"), "nike", "jordan 1 {2}", "hype"),
+    (_w(r"(?:air\s)?jordan\s?(?:air\s|retro\s)?(\d{1,2})(?:\s?retro)?"), "nike", "jordan {1}", "hype"),
+    (_w(r"(?:nike\s)?(?:sb\s)?dunk\s?(?:sb\s)?(low|high)"), "nike", "dunk {1}", "hype"),
+    (_w(r"(?:nike\s)?(?:sb\s)?dunk(?:\s?sb)?"), "nike", "dunk low", "hype"),  # a Dunk without low/high is nearly always a low
     (_w(r"air\s?force\s?1|af1"), "nike", "air force 1", "basic"),
-    (_w(r"air\s?max\s?(1|90|95|97|plus|tn|270|720|dn)"), "nike", "air max {1}", "hype"),
+    (_w(r"air\s?max\s?(1|90|95|97|plus|270|720|dn|scorpion|200)"), "nike", "air max {1}", "hype"),
+    (_w(r"(?:nike\s)?(?:air\s?max\s)?tn|air\s?max\s?tn"), "nike", "air max plus", "hype"),  # TN = Air Max Plus
     (_w(r"(?:nike\s)?(?:vomero\s?5|p-?6000|cortez|blazer|v2k)"), "nike", "{0}", "basic"),
-    (_w(r"yeezy\s?(?:boost\s?)?(350|380|500|700|slide|foam\s?runner|foam)"), "adidas", "yeezy {1}", "hype"),
+    (_w(r"yeezy\s?(?:boost\s?)?(350|380|500|700|qntm|slide|foam\s?runner|foam)"), "adidas", "yeezy {1}", "hype"),
     (_w(r"(samba|gazelle|spezial|campus\s?00s|campus|superstar|stan smith|forum|sl 72|handball spezial)"), "adidas", "{1}", "hype"),
     (_w(r"(?:new balance|nb)\s?(550|530|574|990\s?v\d|990|991|992|993|2002r|9060|1906r|1906|327|480|740)"), "new balance", "{1}", "hype"),
     (_w(r"(?:asics\s)?gel[\s-]?(kayano\s?14|1130|nyc|lyte\s?iii|lyte\s?3|nimbus\s?\d{1,2}|quantum\s?\d+)"), "asics", "gel {1}", "hype"),

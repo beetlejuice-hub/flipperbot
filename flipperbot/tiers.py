@@ -204,6 +204,18 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         return v
     # Listings of this model that sold (disappeared, not expired) beat asking prices: what people really paid,
     # near enough. With 3 or more, they set the market; else the asking prices do.
+    if ident.niche == "sneakers" and ident.family:
+        from .sneakerdb import FLOORS
+
+        floor = FLOORS.get(ident.family)
+        if floor:
+            comps = [p for p in comps if p >= floor]  # replicas priced like replicas don't set the market
+            sold = [p for p in (sold or []) if p >= floor]
+            if price < floor and "broken" not in f:
+                if "new" in f:
+                    return Verdict("suspect", f"{ident.family} new at {price} lei: under {floor}, a genuine pair never "
+                                              "sells this cheap new: likely a replica")
+                return Verdict("mid", f"cheap for a {ident.family} ({price} lei, under {floor}): often a replica, check it")
     use_sold = bool(sold) and len(sold) >= 3 and model_known
     if use_sold:
         comps = list(sold)

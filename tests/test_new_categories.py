@@ -49,3 +49,27 @@ def test_new_categories(niche, title, key, flag):
         assert i.model_key == key
     if flag:
         assert flag in i.flags
+
+
+def test_sneaker_floors_keep_replicas_out():
+    from flipperbot import bot
+    from flipperbot.config import Settings
+    from flipperbot.db import DB
+    from flipperbot.sources import olx
+    from test_olx_and_bot import offer
+
+    s = Settings()
+    db = DB(":memory:")
+    pairs = [olx.parse_offer(offer(100 + i, "Nike Air Jordan 4 Retro marime 43", p)) for i, p in enumerate([800, 850, 900, 820, 880])]
+    fakes = [olx.parse_offer(offer(150 + i, "Jordan 4 Retro marime 42", 220)) for i in range(6)]
+    new_cheap = olx.parse_offer(offer(1, "Jordan 4 noi in cutie sigilat", 250))
+    worn_cheap = olx.parse_offer(offer(2, "Jordan 4 purtati marime 44", 300))
+    for l in [*pairs, *fakes, new_cheap, worn_cheap]:
+        l.niche = "sneakers"
+    bot.process(db, [*pairs, *fakes, new_cheap, worn_cheap], s, alert=False)
+    assert db.get("olx:1")["tier"] == "suspect" and db.get("olx:1")["score"] == 0
+    assert db.get("olx:2")["reason"].startswith("cheap for a jordan 4") and db.get("olx:2")["score"] <= 4
+    probe = olx.parse_offer(offer(3, "Nike Air Jordan 4 Retro Military Blue 44", 700))
+    probe.niche = "sneakers"
+    bot.process(db, [probe], s, alert=False)
+    assert db.get("olx:3")["est_value_ron"] >= 700  # the six 220-lei fakes don't drag the market down

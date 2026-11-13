@@ -227,6 +227,20 @@ def clean(title: str) -> str:
     return title
 
 
+def cpu_age(c: tuple[str, str, str]) -> str:
+    """' old cpu' (Ryzen 1000-2000, Intel up to 7th gen), '' (current), ' new cpu' (Ryzen 7000+, Intel 12th+, Core Ultra)."""
+    maker, _name, gen = c
+    if gen == "ultra":
+        return " new cpu"
+    try:
+        g = int(gen[0]) if maker == "amd" else int(gen)
+    except ValueError:
+        return ""
+    if maker == "amd":
+        return " old cpu" if g <= 2 else " new cpu" if g >= 7 else ""
+    return " old cpu" if g <= 7 else " new cpu" if g >= 12 else ""
+
+
 def match(title: str, full: str) -> TechMatch | None:
     """What this listing sells. title and full are normalize()d. The device named FIRST in the title is the one
     for sale ("PS4 Slim + PS VR compatibil PS5" is a PS4); devices named only to compare or fit don't count."""
@@ -258,7 +272,10 @@ def match(title: str, full: str) -> TechMatch | None:
         what = "laptop" if laptop else "pc"
         g = gpu(title) or gpu(full)
         if g:
-            return TechMatch(_brand(what, what), g[1], what)
+            # A PC with an RTX 4060 and a Ryzen 2600X isn't worth what one with a 7800X3D is: the processor's
+            # age splits the comparison in three (old / current / new). Laptops pair them already.
+            c = cpu(title) or cpu(full) if what == "pc" else None
+            return TechMatch(_brand(what, what), g[1] + (cpu_age(c) if c else ""), what)
         c = cpu(title) or cpu(full)
         if c:
             # "ryzen 5 gen 5000", "i7 gen 12", "core ultra 7 gen ultra": the tier and generation set the price

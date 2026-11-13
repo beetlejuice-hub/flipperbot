@@ -69,3 +69,12 @@ CLONES = ["replica", "copie", "calitate premium", "premium quality", "1:1", "1 l
           "top quality", "high quality", "first copy", "aaa", "fake", "imitatie", "bootleg", "noi in cutie cu eticheta en gros"]
 WANTED = ["caut", "cumpar", "cumparam", "achizitionez", "achizitionam"]
 SERVICE = ["curatare", "curatat", "restaurare", "reconditionare", "custom"]
+
+
+# Below these (lei), a pair of the model is almost never genuine: new ones are replicas, worn ones are suspect.
+# Deliberately low, so honest worn pairs aren't caught; Claude's check judges the rest.
+FLOORS = {"jordan 4": 350, "jordan 1 high": 300, "jordan 1 mid": 200, "jordan 1 low": 200, "jordan 3": 300, "jordan 11": 300,
+          "dunk low": 200, "dunk high": 220, "yeezy 350": 250, "yeezy 700": 250, "yeezy slide": 120, "yeezy foam runner": 150,
+          "air max 1": 150, "air max 90": 150, "air max 95": 200, "air max plus": 200, "samba": 150, "gazelle": 130,
+          "spezial": 150, "550": 150, "9060": 250, "2002r": 200, "1906r": 200, "990 v6": 300, "gel kayano 14": 200,
+          "gel 1130": 180, "xt 6": 300, "mexico 66": 150}

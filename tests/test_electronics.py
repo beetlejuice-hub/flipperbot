@@ -29,7 +29,9 @@ S = Settings()
     ("Laptop HP Probook i5-1235U 16GB", "laptop|i5 gen 12"),
     ("MacBook Pro 14 2021 M1 Pro 16 GB", "apple|macbook pro m1 pro"),
     ("Macbook Pro 13 2019 16GB 512GB SSD", "apple|macbook pro intel"),
-    ("Pc gaming lian li /ryzen 7 7800x3d/ rtx 5070", "pc|rtx 5070"),
+    ("Pc gaming lian li /ryzen 7 7800x3d/ rtx 5070", "pc|rtx 5070 new cpu"),
+    ("Gaming Pc RTX 4060 + Ryzen 5 2600x Super Pret", "pc|rtx 4060 old cpu"),
+    ("PC gaming RTX 3070 i5 10400F 16GB", "pc|rtx 3070"),
     ("PC Gaming Ryzen 9 5900X, 32GB DDR4", "pc|ryzen 9 gen 5000"),
     ("DDR5 Kit 32GB 2x16GB 6000Mhz", "ram|ddr5 32gb"),
     ("Game Boy Color galben", "nintendo|game boy"),
@@ -120,6 +122,7 @@ def test_variants_anywhere_in_the_title():
     ("Nvidia geforce rtx 3060 12gb ram", "nvidia|rtx 3060 12gb"),
     ("ASUS TUF Gaming F15 RTX 2050 – 16GB RAM, 1TB", "laptop|rtx 2050"),
     ("Ryzen 9 5950X | RTX 4060 Ti 16GB | 64GB RAM", "pc|rtx 4060 ti 16gb"),
+    ("Vand PC gaming RTX 3080 10GB i7-10700KF 32GB DDR4", "pc|rtx 3080"),
     ("Placa video ASUS ROG Strix RTX 3080 10GB", "nvidia|rtx 3080"),
     ("Ultra GAMING Dell XPS 15 Intel Core i9 13900H 32GB", "laptop|i9 gen 13"),
 ])

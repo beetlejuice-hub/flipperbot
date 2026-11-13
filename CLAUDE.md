@@ -12,6 +12,8 @@ README.md for setup and the tiers.
 - `ai.py` runs Claude with only Read + WebSearch: listing text is untrusted. Keep it that way.
 - Listing text is Romanian; match on `identify.normalize()`d text (lower case, no diacritics).
 - Category knowledge (value drivers, sleeper brands, fakes, reselling): `flipperbot/knowledge/*.md`, also the
-  `flip-knowledge` skill. The AI checks read it; keep rules (`watchdb.py`, `camdb.py`) in step with it.
+  `flip-knowledge` skill. The AI checks read it; keep rules (`watchdb.py`, `camdb.py`, `techdb.py`) in step with it.
+- Categories (`niches.py`): watches, cameras, electronics. Electronics (`techdb.py`) price by exact model and variant
+  (PS5 digital/Pro, RTX 3060 12GB, MacBook Air M2; gaming laptops/PCs by their GPU), used private listings only.
 - The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),
   8+ full Claude check. Tests never call the real Claude (`tests/conftest.py`).

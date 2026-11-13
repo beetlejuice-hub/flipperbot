@@ -111,3 +111,17 @@ def test_variants_anywhere_in_the_title():
     assert identify("Consolă PlayStation 5 (PS5) Digital Edition + 2 Controllere", "", "electronics").model_key == "sony|ps5 digital"
     assert identify("Nintendo Switch 2 manete + incarcator", "", "electronics").model_key == "nintendo|switch"
     assert identify("Nintendo Switch model OLED alb", "", "electronics").model_key == "nintendo|switch oled"
+
+
+@pytest.mark.parametrize("title, key", [
+    ("Placa video ASUS Dual GeForce® RTX™ 3060 OC V2 12GB", "nvidia|rtx 3060 12gb"),
+    ("Nvidia Geforce GTX750 TI OC", "nvidia|gtx 750 ti"),
+    ("Vand/schimb rtx 3060 oc v2 Asus", "nvidia|rtx 3060"),
+    ("Nvidia geforce rtx 3060 12gb ram", "nvidia|rtx 3060 12gb"),
+    ("ASUS TUF Gaming F15 RTX 2050 – 16GB RAM, 1TB", "laptop|rtx 2050"),
+    ("Ryzen 9 5950X | RTX 4060 Ti 16GB | 64GB RAM", "pc|rtx 4060 ti 16gb"),
+    ("Placa video ASUS ROG Strix RTX 3080 10GB", "nvidia|rtx 3080"),
+    ("Ultra GAMING Dell XPS 15 Intel Core i9 13900H 32GB", "laptop|i9 gen 13"),
+])
+def test_pc_parts_and_laptops_without_the_obvious_words(title, key):
+    assert identify(title, "", "electronics").model_key == key

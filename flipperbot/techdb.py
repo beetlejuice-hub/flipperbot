@@ -102,12 +102,16 @@ CONSOLES: list[tuple[re.Pattern[str], str, str, str]] = [
 
 LAPTOP_WORDS = ("laptop", "notebook", "ultrabook", "macbook", "chromebook")
 PC_WORDS = ("pc", "calculator", "sistem", "desktop", "unitate", "workstation", "computer", "gaming pc", "pc gaming",
-            "mini pc", "imac", "mac mini", "mac studio")
+            "mini pc", "imac", "mac mini", "mac studio", "tower", "optiplex", "elitedesk", "prodesk", "thinkcentre")
+# Laptop lines named without the word "laptop" ("ASUS TUF Gaming F15 RTX 2050", "Lenovo Legion 7 16IRX9").
+LAPTOP_RE = _w(r"(?:tuf(?: gaming)? [af]1[57]|legion (?:5|7|pro|slim)|loq|nitro (?:5|v|an\d*)|predator helios|omen (?:1[5-7]|transcend)|"
+               r"victus|thinkpad|ideapad|zenbook|vivobook|xps 1[3-7]|latitude|elitebook|probook|inspiron|aspire|katana|"
+               r"alienware [mx]\d*|rog zephyrus|rog flow|rog strix (?:g|scar)|matebook|galaxy book|surface laptop|yoga \d)")
 GPU_WORDS = ("placa video", "placa grafica", "graphics card", "gpu", "videocard")
 CPU_WORDS = ("procesor", "cpu", "processor")
 RAM_WORDS = ("memorie ram", "memorii ram", "ram ddr", "kit ram", "memorie ddr", "ram")
 
-NVIDIA = _w(r"(?:rtx|gtx)\s?(\d{4})\s?(ti\s?super|super|ti)?")
+NVIDIA = _w(r"(?:rtx|gtx)\s?(\d{3,4})\s?(ti\s?super|super|ti)?")
 AMD_GPU = _w(r"(?:rx|radeon)\s?(\d{3,4})\s?(xtx|xt|gre)?")
 VRAM = _w(r"(\d{1,2})\s?gb")
 RYZEN = _w(r"ryzen\s?([3579])\s?(\d{4}x3d|\d{4}[a-z]{0,2})")
@@ -215,6 +219,9 @@ GAMES = re.compile(r"(?<![a-z])(?:jocuri|joc|games|game|cd|cd-uri|dvd|caseta|cas
 
 
 def clean(title: str) -> str:
+    title = re.sub(r"[®™©]", " ", title)
+    title = re.sub(r"(?<=rtx|gtx|ore|rce|eon|zen|tel)(?:tm|\(r\)|r)(?=\s)", "", title)  # "rtxtm 3060" (TM, R) after normalize
+    title = re.sub(r"^(?:vand|vind)\s*(?:/|sau|si)\s*schimb\w*\s*", "", title)  # "vand/schimb RTX 3060": selling it
     for pattern, repl in _SPELLING:
         title = pattern.sub(repl, title)
     return title
@@ -236,8 +243,11 @@ def match(title: str, full: str) -> TechMatch | None:
     where = {k: _pos(title, words) for k, words in
              (("laptop", LAPTOP_WORDS), ("pc", PC_WORDS), ("part", GPU_WORDS + CPU_WORDS + RAM_WORDS))}
     first = min((k for k in where if where[k] is not None), key=lambda k: where[k], default=None)
-    laptop = first == "laptop" or "macbook" in title
-    pc = first == "pc" and not laptop
+    line = LAPTOP_RE.search(title)
+    named_part = _has(title, GPU_WORDS + CPU_WORDS)  # "placa video", "procesor": a part, whatever else is listed
+    laptop = first == "laptop" or "macbook" in title or bool(line and (where["part"] is None or line.start() < where["part"]))
+    pc = (first == "pc" or (not named_part and bool(cpu(title)) and bool(gpu(title)))) and not laptop
+    # ("Ryzen 9 5950X | RTX 4060 Ti 16GB | 64GB RAM": a processor and a card in one title is a whole PC)
     if "macbook" in title or (pc and _has(title, ("imac", "mac mini", "mac studio"))):
         line = next((x for x in ("macbook air", "macbook pro", "imac", "mac mini", "mac studio") if x in title), "macbook")
         chip = APPLE_M.search(title) or APPLE_M.search(full)
@@ -256,7 +266,7 @@ def match(title: str, full: str) -> TechMatch | None:
             family = " ".join(words[:3]) if c[1].startswith("core ultra") else " ".join(words[:2]) if c[0] == "amd" else words[0]
             return TechMatch(_brand(what, what), f"{family} gen {c[2]}".replace(" gen ultra", ""), what)
         return TechMatch(_brand(what, what), "", what)  # brand-level only: too rough to price
-    if _has(title, GPU_WORDS) or (not _has(title, CPU_WORDS + RAM_WORDS) and gpu(title)):
+    if _has(title, GPU_WORDS) or (gpu(title) and not cpu(title) and not DDR.search(title) and not _has(title, CPU_WORDS)):
         g = gpu(title)
         if g:
             return TechMatch(_brand(g[0], "gpu"), g[1], "gpu")
@@ -287,7 +297,7 @@ MODDED = ["modat", "modata", "chipat", "chipata", "jailbreak", "jailbreakuit", "
           "custom firmware", "cfw", "hackuit"]
 # What's sold is an accessory or a game, not the device: the title starts with it, or says "for PS5".
 PART_START = ["controller", "controler", "maneta", "manete", "joc", "jocuri", "panouri", "panou", "capac", "capace",
-              "covers", "cover", "carcase", "geanta", "rucsac", "abonament", "cont", "voucher", "pedale", "cockpit", "scaun", "husa", "huse", "cablu", "stand", "suport",
+              "covers", "cover", "carcase", "geanta", "rucsac", "trackpad", "touchpad", "palmrest", "boxa", "difuzor", "abonament", "cont", "voucher", "pedale", "cockpit", "scaun", "husa", "huse", "cablu", "stand", "suport",
               "incarcator", "dock", "docking", "skin", "folie", "ventilator", "cooler", "carcasa", "pad", "joystick",
               "volan", "casti", "headset", "card", "figurina", "figurine", "telecomanda", "baterie", "display", "ecran",
               "tastatura", "topcase", "balamale", "placa de baza", "mufa", "sursa", "radiator", "pasta"]

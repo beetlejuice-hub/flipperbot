@@ -1,4 +1,4 @@
-"""How to look a watch's price up: the search words for it and one-click price-check links."""
+"""How to look an item's price up: the search words for it and one-click price-check links."""
 
 from __future__ import annotations
 
@@ -30,9 +30,16 @@ def price_links(r: Any) -> list[list[str]]:
     q = price_query(r)
     if not q:
         return []
+    niche = (r["niche"] if "niche" in r.keys() else None) or "watches"
+    # The specialist shop for each kind: Chrono24 for watches, Kamerastore for cameras, eMAG (new price) for electronics.
+    shop = {
+        "watches": ["Chrono24", f"https://www.chrono24.com/search/index.htm?query={quote_plus(q)}"],
+        "cameras": ["Kamerastore", f"https://kamerastore.com/search?q={quote_plus(q)}"],
+        "electronics": ["eMAG new", f"https://www.emag.ro/search/{quote_plus(q)}"],
+    }.get(niche)
     return [
         ["eBay sold", f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(q)}&LH_Sold=1&LH_Complete=1"],
-        ["Chrono24", f"https://www.chrono24.com/search/index.htm?query={quote_plus(q)}"],
+        *([shop] if shop else []),
         ["OLX", f"https://www.olx.ro/oferte/q-{quote_plus(q.replace(' ', '-'))}/"],
         ["Okazii", f"https://www.google.com/search?q={quote_plus('site:okazii.ro ' + q)}"],
     ]

@@ -272,7 +272,8 @@ def _identify_tech(title: str, description: str) -> Identity:
     and other consoles); laptops and PCs may take their graphics card or processor from the description."""
     from . import techdb
 
-    title_n = techdb.clean(normalize(_SWAP.sub("", normalize(title)).strip() or title))
+    cleaned = techdb.clean(normalize(title))
+    title_n = techdb.clean(normalize(_SWAP.sub("", cleaned).strip() or cleaned))
     full_n = techdb.clean(normalize(f"{title} . {_without_trade_talk(description)}"))
     m = techdb.match(title_n, full_n)
     flags: set[str] = set()

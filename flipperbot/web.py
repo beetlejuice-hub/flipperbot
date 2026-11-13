@@ -73,6 +73,15 @@ def _first_price(r: Any, db: DB | None) -> int | None:
     return row[0] if row and r["price_ron"] and row[0] > r["price_ron"] else None
 
 
+def _message(r: Any) -> str | None:
+    from .messages import for_row
+
+    try:
+        return for_row(r)
+    except Exception:  # a message is a nicety: never let it break the card
+        return None
+
+
 def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
     photos = json.loads(r["photos"] or "[]")
     a = json.loads(r["ai"]) if r["ai"] else None
@@ -90,6 +99,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "quick": json.loads(r["quick"]) if r["quick"] else None,
         "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
         "deal": dict(d) if db is not None and (d := db.deal(r["key"])) else None,
+        "message": _message(r),
         "listed_at": r["created_at"] or None, "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
         "repost_of": r["repost_of"], "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
@@ -474,6 +484,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; background: var(--card); }
 .chip.hit { border-color: var(--accent); font-weight: 700; }
+details.msg summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+details.msg pre { white-space: pre-wrap; font: inherit; font-size: 13px; margin: 6px 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
 button.copy { font: inherit; font-size: 12px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--line); background: none; color: var(--ink); cursor: pointer; }
 .multi { position: relative; } .multi summary { list-style: none; cursor: pointer; padding: 7px 10px; border: 1px solid var(--line);
   border-radius: 8px; background: var(--card); white-space: nowrap; } .multi summary::after { content: " ▾"; color: var(--muted); }
@@ -695,6 +707,9 @@ function card(l) {
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
         h("div", { class: "reason" }, l.reason || ""),
         l.quick && l.quick.looked ? lookBox(l.quick) : null,
+        l.message ? h("details", { class: "msg" }, h("summary", {}, "✉️ Message to the seller"),
+          h("pre", {}, l.message), h("button", { class: "copy", onclick: e => {
+            navigator.clipboard.writeText(l.message); e.target.textContent = "Copied"; } }, "Copy")) : null,
         l.ai ? aiBox(l.ai, l) : null,
         l.price_links && l.price_links.length ? h("div", { class: "checks" }, "Check prices: ",
           l.price_links.flatMap(([name, href], i) => [i ? " · " : "", h("a", { href, target: "_blank", rel: "noopener noreferrer" }, name)])) : null,

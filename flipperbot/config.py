@@ -76,7 +76,9 @@ class Settings:
     more_sources_terms: int = 2  # searches per category per round, on each site
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
-    niches: list[str] = field(default_factory=lambda: ["watches", "cameras", "electronics"])  # what to hunt (see niches.py)
+    niches: list[str] = field(default_factory=lambda: ["watches", "cameras", "electronics", "phones", "tools", "lego", "sneakers"])
+    # Each poll covers this many categories, taking turns (watches every time), so OLX isn't asked too much at once.
+    niches_per_poll: int = 3
     search_pool: list[str] = field(default_factory=lambda: list(SEARCH_POOL))
     focus_pool: list[str] = field(default_factory=lambda: list(FOCUS_POOL))
     modern_pool: list[str] = field(default_factory=lambda: list(MODERN_POOL))

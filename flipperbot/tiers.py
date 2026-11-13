@@ -201,9 +201,10 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
     if use_sold:
         comps = list(sold)
     market = market_price(comps) if (use_sold or len(comps) >= s.min_comps) else None
-    if market and ident.niche == "electronics" and price < 0.35 * market and "broken" not in f and model_known:
-        # A console or card at a third of the usual price is almost never the device itself working: a
-        # controller, a game, a cover, a box, or bait. (Broken ones are priced as broken instead.)
+    if market and ident.niche in ("electronics", "phones", "tools", "lego", "sneakers") and price < 0.35 * market \
+            and "broken" not in f and model_known:
+        # A console, phone, tool, set or pair at a third of the usual price is almost never the real thing working:
+        # an accessory, a game, a box, a clone, a fake, or bait. (Broken ones are priced as broken instead.)
         return Verdict("bad", f"{price} lei vs ~{market} usual: too cheap to be the item itself, probably a part/accessory, "
                               "a game or bait")
     if market:

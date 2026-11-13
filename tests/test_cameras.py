@@ -95,6 +95,7 @@ def test_facebook_queries_carry_their_niche(monkeypatch):
     monkeypatch.setattr(facebook, "installed", lambda: True)
     monkeypatch.setattr(facebook, "search", fake_search)
     s = Settings()
+    s.niches = ["watches", "cameras", "electronics"]
     s.facebook_searches_per_run = 40
     bot.poll_facebook(db, s, log=lambda m: None)
     assert {n for q, n in seen} == {"watches", "cameras", "electronics"}

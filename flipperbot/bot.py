@@ -95,7 +95,8 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     brand_field = l.params.get("brand") if isinstance(l.params.get("brand"), str) else ""
     ident = identify(l.title, f"{l.description} {brand_field}", l.niche)
     # Electronics: a sealed new console asks far more than a used one; compare used with used.
-    used_only = l.niche == "electronics" and "new" not in ident.flags
+    # (LEGO prices sealed sets as their own model instead; the rest compare a used one with used private listings.)
+    used_only = l.niche in ("electronics", "phones", "tools", "sneakers") and "new" not in ident.flags
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=used_only) if ident.model_key else []
     sold = db.sold(ident.model_key, used_only=used_only)
     verdict = judge(l, ident, comps, s, db.model_price(ident.model_key), sold=[p for p, _ in sold])
@@ -204,7 +205,16 @@ def pick_searches(db: DB, s: Settings) -> list[Search]:
     """For each niche: its category feeds (newest listings), then a few random searches, most of
     them from its focus pool (lots, old, inherited)."""
     out: list[Search] = []
-    for key in s.niches:
+    keys = list(s.niches)
+    if s.niches_per_poll and len(keys) > s.niches_per_poll:
+        # Watches every poll; the other categories take turns.
+        rest = [k for k in keys if k != "watches"]
+        start = db.kv_get("niche_cursor", 0) % len(rest)
+        take = s.niches_per_poll - (1 if "watches" in keys else 0)
+        picked = [rest[(start + i) % len(rest)] for i in range(min(take, len(rest)))]
+        db.kv_set("niche_cursor", start + len(picked))
+        keys = (["watches"] if "watches" in keys else []) + picked
+    for key in keys:
         n = niches.get(key)
         search_pool = s.search_pool if key == "watches" else list(n.search_pool)
         focus_pool = s.focus_pool if key == "watches" else list(n.focus_pool)

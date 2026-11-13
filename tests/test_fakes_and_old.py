@@ -39,6 +39,7 @@ def test_search_mix_old_modern_general():
     from flipperbot import niches
 
     s = Settings()
+    s.niches, s.niches_per_poll = ["watches", "cameras", "electronics"], 0  # all of them every poll
     db = DB(":memory:")
     runs = [bot.pick_searches(db, s) for _ in range(50)]
     watch_terms = [q for r in runs for q, c, n in r if q and n == "watches"]
@@ -165,3 +166,11 @@ def test_prompts_and_models():
 
     assert "several watches" in ai.LOT_BLOCK and "cameras" in ai.CAMERA_LOT_BLOCK
     assert Settings().ai_model == "haiku" and Settings().fake_hunt_model == "sonnet"
+
+
+def test_categories_take_turns_watches_every_poll():
+    s = Settings()
+    db = DB(":memory:")
+    runs = [{n for q, c, n in bot.pick_searches(db, s)} for _ in range(6)]
+    assert all("watches" in r and len(r) == s.niches_per_poll for r in runs)
+    assert set().union(*runs) == set(s.niches)  # every category gets its turn within a few polls

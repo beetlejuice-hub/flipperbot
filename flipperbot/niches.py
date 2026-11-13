@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import camdb, techdb, watchdb
+from . import camdb, legodb, phonedb, sneakerdb, techdb, tooldb, watchdb
 from .watchdb import Brand
 
 
@@ -153,7 +153,94 @@ model numbers on the back), laptop model sticker, graphics card name on the cool
 )
 
 
-ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS)}
+PHONES = Niche(
+    key="phones", label="Phones", icon="📱", noun="phone",
+    brands=phonedb.BRANDS,
+    valuable_segments=frozenset(),
+    # OLX (checked November 2026): 948 Apple, 956 Samsung, 1532 Google and other makers.
+    categories=("948", "956", "1532"),
+    feeds=("948", "956"),
+    words=("telefon", "iphone", "galaxy", "pixel", "smartphone", "mobil"),
+    not_words=("husa", "huse", "folie", "incarcator", "cablu", "watch", "airpods", "casti", "tableta", "ipad"),
+    search_pool=("iphone 13", "iphone 14", "iphone 14 pro", "iphone 15", "iphone 15 pro", "iphone 16 pro", "iphone 12",
+                 "iphone 13 pro max", "samsung galaxy s23", "samsung galaxy s24", "galaxy s23 ultra", "galaxy z flip",
+                 "galaxy z fold", "google pixel 8", "google pixel 9", "iphone neverlock"),
+    focus_pool=("iphone urgent", "telefon urgent", "iphone display spart", "iphone defect", "samsung display spart",
+                "iphone ieftin", "telefon ieftin", "vand iphone urgent"),
+    facebook_queries=("iphone", "iphone 15 pro", "samsung galaxy s24", "google pixel"),
+    strong_words=("iphone", "telefon", "galaxy s", "pixel"),
+    repair_ron={"apple": 400, "samsung": 400, "pixel": 350, "other": 150},
+    claude_checks="""- Phones: exact model, storage, colour; iCloud/Activation Lock or Google FRP (not resellable), network lock
+     (codat in retea), blacklisted IMEI, battery health (iPhones: Settings > Battery), replaced screen or battery
+     ("display neoriginal" lowers value), Face ID working, refurbished sold as new, clones of iPhones running Android.""",
+)
+
+TOOLS = Niche(
+    key="tools", label="Power tools", icon="🛠️", noun="power tool",
+    brands=tooldb.BRANDS,
+    valuable_segments=frozenset({"pro"}),
+    # OLX (checked November 2026): 3217 power tools, 3216 other tools.
+    categories=("3217", "3216"),
+    feeds=("3217",),
+    words=("masina", "flex", "polizor", "bormasina", "rotopercutor", "autofiletanta", "surubelnita", "fierastrau", "drujba",
+           "slefuitor", "acumulator", "pistol", "ciocan", "circular", "pendular", "freza", "motocoasa", "trimmer", "ferastrau"),
+    not_words=("auto", "masina de spalat", "masina de cusut", "aspirator", "frigider", "jucarie", "jucarii"),
+    search_pool=("makita", "dewalt", "milwaukee m18", "milwaukee m12", "hilti", "festool", "metabo", "bosch professional",
+                 "makita 18v", "dewalt 18v", "rotopercutor hilti", "autofiletanta makita", "flex makita", "stihl ms",
+                 "husqvarna drujba", "acumulator makita", "acumulator milwaukee", "makita dhp", "dewalt dcd"),
+    focus_pool=("scule electrice", "scule electrice urgent", "lot scule", "scule mostenire", "scule vechi", "set scule makita",
+                "atelier lichidare", "scule constructii", "makita defect", "hilti defect"),
+    facebook_queries=("makita", "dewalt", "milwaukee", "hilti", "scule electrice"),
+    strong_words=("makita", "dewalt", "milwaukee", "hilti", "festool", "scule", "rotopercutor", "autofiletanta", "flex"),
+    repair_ron={"pro": 200, "diy": 100, "garden": 250},
+    claude_checks="""- Power tools: exact model code; bare tool or kit (how many batteries, which Ah, charger, case); brushless or not;
+     working (a video?), worn carbon brushes, cracked casing, chuck play, battery health. Fakes: "Makita 48V/88V"
+     and similar voltages the brand doesn't make are Chinese clones; check logo, colour, battery shape.""",
+)
+
+LEGO = Niche(
+    key="lego", label="LEGO", icon="🧱", noun="LEGO set",
+    brands=legodb.BRANDS,
+    valuable_segments=frozenset({"lego"}),
+    categories=(),  # LEGO sits in the general toys category with its clones: the title must say LEGO
+    feeds=(),
+    words=("lego",),
+    not_words=("tip lego", "compatibil lego", "lepin"),
+    search_pool=("lego", "lego sigilat", "lego technic", "lego star wars", "lego creator expert", "lego icons", "lego ideas",
+                 "lego harry potter", "lego architecture", "lego modular", "lego ucs", "lego 75192", "lego speed champions"),
+    focus_pool=("lot lego", "lego vechi", "lego copilarie", "colectie lego", "lego kg", "lego vintage", "lego mostenire"),
+    facebook_queries=("lego", "lego sigilat", "lot lego"),
+    strong_words=("lego",),
+    repair_ron={"lego": 50},
+    claude_checks="""- LEGO: the set number on the box or instructions; sealed (intact seals, box condition) or built (complete?
+     instructions? box?); minifigures included; sun-yellowed bricks. Clones: Lepin, Mould King, "tip LEGO" and
+     compatible bricks: no LEGO logo on the studs. Retired sets are worth more; check BrickLink/BrickEconomy prices.""",
+)
+
+SNEAKERS = Niche(
+    key="sneakers", label="Sneakers", icon="👟", noun="pair of sneakers",
+    brands=sneakerdb.BRANDS,
+    valuable_segments=frozenset({"hype"}),
+    categories=(),  # OLX's shoe categories hold every shoe: the title must name a brand and say what it is
+    feeds=("2147", "2009"),
+    words=("adidasi", "sneakers", "incaltaminte", "pantofi sport", "ghete", "teniși", "tenisi", "jordan", "dunk", "yeezy",
+           "air max", "air force", "samba", "gazelle", "nb", "new balance", "gel"),
+    not_words=("tricou", "hanorac", "geaca", "pantaloni", "sapca", "ghiozdan", "rucsac", "sosete", "papuci de casa"),
+    search_pool=("jordan 4", "jordan 1 high", "jordan 1 low", "nike dunk low", "air max 1", "air max 90", "air max 95",
+                 "yeezy 350", "adidas samba", "adidas gazelle", "adidas spezial", "new balance 550", "new balance 2002r",
+                 "new balance 9060", "asics gel kayano 14", "asics gel 1130", "salomon xt-6", "onitsuka tiger mexico 66"),
+    focus_pool=("adidasi originali", "sneakers originali", "jordan originali", "adidasi purtati o data", "adidasi noi cu eticheta",
+                "sneakers urgent"),
+    facebook_queries=("jordan 4", "nike dunk", "new balance 550", "adidas samba", "yeezy"),
+    strong_words=("jordan", "dunk", "yeezy", "air max", "samba", "gazelle", "new balance", "sneakers", "adidasi"),
+    repair_ron={"hype": 100, "basic": 50},
+    claude_checks="""- Sneakers: exact model, colourway and size (EU 41-45 sells fastest); new with box and tags or worn (sole wear,
+     creasing, yellowing). Fakes are everywhere: check the size-tag style code against the colourway, stitching,
+     box label matching the shoe, the price against StockX/GOAT; "calitate premium", "1:1", "UA" mean replica.""",
+)
+
+
+ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS, PHONES, TOOLS, LEGO, SNEAKERS)}
 
 
 def get(key: str | None) -> Niche:

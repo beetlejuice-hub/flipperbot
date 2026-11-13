@@ -21,7 +21,7 @@ from .config import Settings
 from .db import DB
 
 PROMPT = """You triage second-hand marketplace listings in Romania for a reseller (watches, smartwatches, cameras and lenses,
-consoles, PCs, laptops and PC parts).
+consoles, PCs, laptops and PC parts, phones, power tools, LEGO, sneakers).
 For EACH listing, from the text only, judge how worth a closer look it is for a quick, profitable flip.
 
 score 0-10: 0 = fake/replica, junk, not the item, or overpriced; 3 = ordinary, nothing special; 5 = maybe;
@@ -56,7 +56,8 @@ def candidates(db: DB, s: Settings, limit: int = 20) -> list[Any]:
 def listing_line(i: int, r: Any) -> str:
     desc = re.sub(r"\s+", " ", r["description"] or "")[:300]
     niche = r["niche"] if "niche" in r.keys() else ""
-    kind = {"cameras": "camera/lens", "electronics": "console/PC/laptop/part"}.get(niche or "", "watch")
+    kind = {"cameras": "camera/lens", "electronics": "console/PC/laptop/part", "phones": "phone", "tools": "power tool",
+            "lego": "LEGO", "sneakers": "sneakers"}.get(niche or "", "watch")
     return f"[{i}] ({kind}) {r['title']} | {r['price_ron']} lei | {r['city'] or ''} | bot: {(r['reason'] or '')[:160]} | {desc}"
 
 

@@ -13,7 +13,10 @@ README.md for setup and the tiers.
 - Listing text is Romanian; match on `identify.normalize()`d text (lower case, no diacritics).
 - Category knowledge (value drivers, sleeper brands, fakes, reselling): `flipperbot/knowledge/*.md`, also the
   `flip-knowledge` skill. The AI checks read it; keep rules (`watchdb.py`, `camdb.py`, `techdb.py`) in step with it.
-- Categories (`niches.py`): watches, cameras, electronics. Electronics (`techdb.py`) price by exact model and variant
-  (PS5 digital/Pro, RTX 3060 12GB, MacBook Air M2; gaming laptops/PCs by their GPU), used private listings only.
+- Categories (`niches.py`): watches, cameras, electronics, phones, tools, lego, sneakers; each poll covers a few in turn
+  (`niches_per_poll`, watches always). Catalog categories (`techdb.py`, `phonedb.py`, `tooldb.py`, `legodb.py`,
+  `sneakerdb.py`, via `identify._identify_catalog`) price by exact model and variant, used private listings only.
+- Sources: OLX (also tells which listings are gone: `bot.check_sold`), Publi24, Lajumate (`sources/`), Facebook.
+  Okazii, Vinted and eMAG refuse plain requests: not read. OLX bumps and reposts are recognized (`db.upsert`).
 - The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),
   8+ full Claude check. Tests never call the real Claude (`tests/conftest.py`).

@@ -1,7 +1,8 @@
 # flipperbot
 
-Watches OLX.ro (and Facebook) for underpriced watches, smartwatches, cameras and lenses, consoles, handhelds, PCs,
-laptops and PC parts (single ones, lots, broken ones; tick which categories to list on the dashboard),
+Watches OLX.ro (plus Publi24, Lajumate and Facebook) for underpriced watches, smartwatches, cameras and lenses,
+consoles, handhelds, PCs, laptops and PC parts, phones, power tools, LEGO and sneakers (single ones, lots, broken ones;
+tick which categories to list on the dashboard),
 sorts every listing into **bad / suspect / mid / good / real good**, and shows them
 on a dashboard. Claude (on your Claude subscription) reads the real good ones'
 descriptions and photos and checks what the model really sells for; only the deals
@@ -56,7 +57,8 @@ so it's there whenever the bot runs. `flipperbot open` opens it.
   confirmed 8+ go to Telegram.
 Tabs: Interesting (5+, undecided, fresh) · 8-10 · 5-7 · 1-4 · Removed (0).
 
-**What the bot knows.** `flipperbot/knowledge/watches.md` (detailed), `cameras.md` and `electronics.md`: what moves prices,
+**What the bot knows.** `flipperbot/knowledge/watches.md` (detailed), `cameras.md`, `electronics.md`, `phones.md`,
+`tools.md`, `lego.md` and `sneakers.md`: what moves prices,
 sleeper brands and references, fake tells, reselling costs and where to sell. Claude's checks read them; the free
 rules (brand lists, collector references) follow them.
 

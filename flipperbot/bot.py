@@ -537,22 +537,31 @@ def check_sold(db: DB, s: Settings, seller_listings: Callable[..., Any] = olx.se
     The sold ones are the price book's best prices: what similar ones really went for, and how fast."""
     from .db import _days_between, _title_words, now as db_now
 
+    # Sellers of listings worth your attention (5+) every 6 hours, so their prices stay current; the rest of the
+    # priced private listings once a day, to learn what sold.
     sellers = [r["seller_id"] for r in db.conn.execute(
         """SELECT seller_id FROM listings WHERE source='olx' AND COALESCE(seller_id, '') != '' AND gone_at IS NULL
-           AND model_key LIKE '%|%' AND COALESCE(business, 0) = 0
-           AND last_seen < datetime('now', '-1 day') AND last_seen >= datetime('now', '-30 days')
-           AND COALESCE(alive_checked_at, '') < datetime('now', '-1 day')
-           GROUP BY seller_id ORDER BY MAX(last_seen) DESC LIMIT ?""", (s.sold_checks_per_poll,))]
+           AND model_key LIKE '%|%' AND COALESCE(business, 0) = 0 AND last_seen >= datetime('now', '-30 days')
+           AND ((COALESCE(score, 0) >= 5 AND last_seen < datetime('now', '-6 hours')
+                 AND COALESCE(alive_checked_at, '') < datetime('now', '-6 hours'))
+                OR (last_seen < datetime('now', '-1 day') AND COALESCE(alive_checked_at, '') < datetime('now', '-1 day')))
+           GROUP BY seller_id ORDER BY MAX(COALESCE(score, 0) >= 5) DESC, MAX(last_seen) DESC LIMIT ?""",
+        (s.sold_checks_per_poll,))]
     counts = {"sold": 0, "expired": 0, "reposted": 0, "up": 0}
     for i, seller in enumerate(sellers):
         if i:
             time.sleep(random.uniform(*s.pause_between_requests_s))
         up, complete = seller_listings(seller, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s)
         ids = {l.source_id for l in up}
+        current = {l.source_id: l for l in up}
         t = db_now()
         for r in db.conn.execute("""SELECT * FROM listings WHERE source='olx' AND seller_id=? AND gone_at IS NULL
                                     AND last_seen >= datetime('now', '-30 days')""", (seller,)).fetchall():
             if r["source_id"] in ids:
+                # still up: store what it says NOW (a new price is re-judged), not just that it's there
+                l = current[r["source_id"]]
+                l.niche = r["niche"] or "watches"
+                process(db, [l], s, alert=True)
                 db.conn.execute("UPDATE listings SET last_seen=?, alive_checked_at=? WHERE key=?", (t, t, r["key"]))
                 counts["up"] += 1
                 continue
@@ -574,6 +583,27 @@ def check_sold(db: DB, s: Settings, seller_listings: Callable[..., Any] = olx.se
         log(f"  still up? {len(sellers)} sellers: {counts['sold']} sold, {counts['expired']} expired, "
             f"{counts['reposted']} reposted, {counts['up']} still up")
     return counts
+
+
+def refresh_listing(db: DB, s: Settings, key: str, seller_listings: Callable[..., Any] = olx.seller_listings,
+                    search: Callable[..., Any] = olx.search) -> Any:
+    """The listing as it is on OLX now (price, title, photos), from its seller's listings: before Claude judges it,
+    so it never judges an old price. Unchanged if it can't be refreshed (not OLX, no seller, OLX not answering)."""
+    r = db.get(key)
+    if r is None or r["source"] != "olx":
+        return r
+    try:
+        if r["seller_id"]:
+            up, _complete = seller_listings(r["seller_id"], pages=1, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s)
+        else:  # from the starter price book (no seller kept): find it by its title
+            up = list(search(r["title"], pages=1, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s))
+    except Exception:
+        return r
+    l = next((x for x in up if x.source_id == r["source_id"]), None)
+    if l is not None:
+        l.niche = r["niche"] or "watches"
+        process(db, [l], s, alert=False)
+    return db.get(key)
 
 
 def rescore_all(db: DB, s: Settings, log: Callable[[str], None] = print) -> dict[str, int]:
@@ -600,6 +630,18 @@ def rescore_all(db: DB, s: Settings, log: Callable[[str], None] = print) -> dict
 def rescore_if_rules_changed(db: DB, s: Settings, log: Callable[[str], None] = print) -> bool:
     """After an update (or on a fresh install) the stored scores may be missing or out of date: redo them once."""
     from .scoring import RULES_VERSION
+
+    if not db.kv_get("publi24_prices_fixed"):
+        # Publi24 prices were misread before (the old price after a cut; '2,999' as 999): drop those listings once,
+        # the next polls read them again correctly.
+        n = db.conn.execute("SELECT COUNT(*) FROM listings WHERE source='publi24'").fetchone()[0]
+        db.conn.execute("DELETE FROM prices WHERE key LIKE 'publi24:%'")
+        db.conn.execute("DELETE FROM listings WHERE source='publi24'")
+        db.conn.commit()
+        db.kv_set("publi24_prices_fixed", True)
+        if n:
+            log(f"Removed {n} Publi24 listings with misread prices; they're read again on the next polls.")
+            db.kv_set("rules_version", 0)
 
     if db.kv_get("rules_version", 0) == RULES_VERSION:
         return False

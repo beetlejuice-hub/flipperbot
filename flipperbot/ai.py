@@ -703,6 +703,10 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
     Raises UsageLimit when Claude's plan limit is hit (nothing is saved, so it can be retried)."""
     if not available(s) or used_today(db) >= s.ai_daily_limit:
         return None
+    if row["source"] == "olx" and row["seller_id"]:
+        from . import bot  # judge the price it has NOW, not the one the bot saw hours ago
+
+        row = bot.refresh_listing(db, s, row["key"]) or row
     folder = s.photos_dir / row["key"].replace(":", "_")
     flags = set(json.loads(row["flags"] or "[]"))
     is_lot = "lot" in flags

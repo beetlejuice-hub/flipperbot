@@ -110,7 +110,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
         "deal": dict(d) if db is not None and (d := db.deal(r["key"])) else None,
         "message": _message(r),
-        "listed_at": r["created_at"] or None, "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
+        "listed_at": r["created_at"] or None, "currency": r["currency"], "price_orig": r["price_orig"], "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
         "repost_of": r["repost_of"], "gone_at": r["gone_at"], "gone_reason": r["gone_reason"],
         "days_up": _days_up(r), "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
@@ -127,12 +127,16 @@ INTERESTING = f"""triage IS NULL AND hidden = 0 AND COALESCE(score, 0) >= 5 AND 
     AND (COALESCE(orig_created_at, created_at, '') = '' OR substr(COALESCE(orig_created_at, created_at), 1, 10) >= date('now', '-{MAX_LISTING_AGE_DAYS} days')
          OR reason LIKE '%price was just cut%')"""
 
+RECENT = "last_seen >= datetime('now', '-3 days') AND gone_at IS NULL"
+
 VIEWS = {
     "interesting": (INTERESTING, "rank"),
-    "top": ("COALESCE(score, 0) >= 8 AND hidden=0", "rank"),
-    "mid": ("score BETWEEN 5 AND 7 AND hidden=0", "rank"),
-    "low": ("score BETWEEN 1 AND 4 AND hidden=0", "posted"),
-    "removed": ("score = 0 AND hidden=0", "posted"),
+    # the score tabs: listings seen on OLX lately (an old price isn't an offer; old ones still price the market,
+    # and search finds them)
+    "top": (f"COALESCE(score, 0) >= 8 AND hidden=0 AND {RECENT}", "rank"),
+    "mid": (f"score BETWEEN 5 AND 7 AND hidden=0 AND {RECENT}", "rank"),
+    "low": (f"score BETWEEN 1 AND 4 AND hidden=0 AND {RECENT}", "posted"),
+    "removed": (f"score = 0 AND hidden=0 AND {RECENT}", "posted"),
     "starred": ("starred=1", "rank"),
     "checked": ("ai IS NOT NULL", "ai"),
     # listings the bot saw sell on OLX (gone, not expired or reposted): what they went for, how fast
@@ -179,6 +183,7 @@ def query(db: DB, view: str, q: str = "", sort: str = "", limit: int = 120, nich
         where = f"({where}) AND COALESCE(niche, 'watches') IN ({','.join('?' * len(keys))})"
         args += keys
     if q:
+        where = where.replace(f" AND {RECENT}", "")  # searching: show older listings too
         where += " AND (title LIKE ? OR model_key LIKE ? OR city LIKE ?)"
         args += [f"%{q}%"] * 3
     order = ORDER.get(sort or default_sort, ORDER["rank"])
@@ -195,7 +200,8 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "total": c.execute(f"SELECT COUNT(*) FROM listings WHERE 1=1 {nf}", na).fetchone()[0],
         "counts": {t: counts.get(t, 0) for t in TIER_RANK},
         "bands": dict(c.execute(f"""SELECT CASE WHEN score >= 8 THEN 'top' WHEN score >= 5 THEN 'mid' WHEN score >= 1 THEN 'low'
-                                     WHEN score = 0 THEN 'removed' ELSE 'unscored' END b, COUNT(*) FROM listings WHERE hidden=0 {nf} GROUP BY b""", na).fetchall()),
+                                     WHEN score = 0 THEN 'removed' ELSE 'unscored' END b, COUNT(*) FROM listings
+                                     WHERE hidden=0 AND {RECENT} {nf} GROUP BY b""", na).fetchall()),
         "starred": c.execute(f"SELECT COUNT(*) FROM listings WHERE starred=1 {nf}", na).fetchone()[0],
         "sold_tracked": c.execute(f"SELECT COUNT(*) FROM listings WHERE gone_reason='sold' {nf}", na).fetchone()[0],
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
@@ -656,7 +662,12 @@ function priceBox(l) {
   const worth = !lo ? null : hi && hi !== lo ? `${lo.toLocaleString("ro-RO")}–${lei(hi)}` : "~" + lei(lo);
   return h("div", { class: "prices" },
     h("div", {}, h("div", { class: "k" }, "Price"), h("div", { class: "n" }, lei(l.price)),
-      h("div", { class: "src" }, l.negotiable ? "negotiable" : "asking")),
+      h("div", { class: "src" }, [
+        l.currency && l.currency !== "RON" && l.price_orig ? `${Math.round(l.price_orig).toLocaleString("ro-RO")} ${l.currency === "EUR" ? "€" : l.currency} on the listing` : "",
+        l.negotiable ? "negotiable" : "asking",
+        // the price as the bot last saw it: OLX may show a newer one
+        !l.gone_at && l.last_seen && Date.now() - new Date(l.last_seen) > 6 * 3600000 ? `price seen ${ago(l.last_seen)}` : "",
+      ].filter(Boolean).join(" · "))),
     h("div", {}, h("div", { class: "k" }, "Sells for"),
       worth ? h("div", { class: "n" + (worth.includes("–") ? " range" : "") }, worth) : h("div", { class: "n na" }, "not enough data yet"),
       worth ? h("div", { class: "src" }, src) : null),

@@ -84,7 +84,9 @@ class DB:
                     # first time this item was posted if the seller deleted and posted it again
                     "bumps INTEGER DEFAULT 0", "orig_created_at TEXT", "repost_of TEXT",
                     # gone from OLX: when we found out, and why (sold / expired / reposted)
-                    "gone_at TEXT", "gone_reason TEXT", "alive_checked_at TEXT"):  # your call on an Interesting listing: claude / skip / fake
+                    "gone_at TEXT", "gone_reason TEXT", "alive_checked_at TEXT",
+                    # the price as the seller wrote it (e.g. 450 in EUR), next to price_ron
+                    "price_orig REAL"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -100,7 +102,7 @@ class DB:
         t = now()
         cols = dict(
             source=l.source, source_id=l.source_id, url=l.url, title=l.title, description=l.description,
-            price_ron=l.price_ron, currency=l.currency, negotiable=int(l.negotiable), city=l.city,
+            price_ron=l.price_ron, price_orig=l.price, currency=l.currency, negotiable=int(l.negotiable), city=l.city,
             region=l.region, photos=json.dumps(l.photos), created_at=l.created_at,
             refreshed_at=l.refreshed_at, seller_id=l.seller_id, seller_name=l.seller_name,
             business=int(l.business), delivery=int(l.delivery), condition=l.condition,

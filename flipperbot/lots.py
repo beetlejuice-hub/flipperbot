@@ -50,7 +50,8 @@ VALUE_WORDS = {
 JUNK_WORDS = ["haine", "imbracaminte", "hainute", "pantofi", "incaltaminte", "geci", "rochii", "tricouri", "jucarii de plus",
               "piese auto", "anvelope", "jante", "lemne", "moloz", "pamant", "caramizi", "mobila", "canapea", "saltea",
               "carti scolare", "manuale", "reviste", "borcane", "sticle goale", "pungi", "ghivece", "rasaduri", "animale",
-              "catei", "pisici", "apartament", "teren", "casa de vanzare", "chirie"]
+              "catei", "pisici", "apartament", "teren", "casa de vanzare", "chirie", "casa", "vila", "cladire", "imobil",
+              "spatiu comercial", "hala", "garsoniera", "duplex", "proprietate", "camere"]
 COUNT = re.compile(r"(?<![a-z0-9])(\d{1,4})\s*(?:buc|bucati|piese|obiecte|ceasuri|aparate|telefoane|console|jocuri)(?![a-z])")
 
 

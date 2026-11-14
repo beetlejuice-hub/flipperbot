@@ -63,16 +63,35 @@ def parse_date(text: str, today: date | None = None) -> str:
     return ""
 
 
-def _price(text: str, eur_to_ron: float) -> int | None:
-    """'3 500 RON' -> 3500; a block with an old and a new price -> the last one; '1.200 EUR' -> lei."""
-    found = re.findall(r"(\d[\d .]*)\s*(RON|LEI|EUR|€)", text, re.I)
-    if not found:
+def _number(text: str) -> int | None:
+    """'3 500', '2,999', '1.200', '1 234,50' -> lei as a whole number. Spaces, commas and dots between groups of
+    three digits are thousands separators; two digits after the last comma or dot are bani (dropped)."""
+    s = text.strip()
+    m = re.fullmatch(r"(\d{1,3}(?:[ .,]\d{3})*|\d+)(?:[.,](\d{1,2}))?", s)
+    if not m:
         return None
-    number, cur = found[-1]
-    value = int(re.sub(r"[ .]", "", number))
-    if value > 10_000_000:  # glued old + new prices, or a placeholder
+    return int(re.sub(r"[ .,]", "", m.group(1)))
+
+
+def _amount(text: str, eur_to_ron: float) -> int | None:
+    """'3 500 RON' / '1.200 EUR' -> lei, or None."""
+    m = re.search(r"(\d[\d .,]*\d|\d)\s*(RON|LEI|EUR|€)", text, re.I)
+    if not m:
         return None
-    return round(value * eur_to_ron) if cur.upper() in ("EUR", "€") else value
+    value = _number(m.group(1))
+    if value is None or value > 10_000_000:  # a placeholder, or a building
+        return None
+    return round(value * eur_to_ron) if m.group(2).upper() in ("EUR", "€") else value
+
+
+def _prices(block: str, eur_to_ron: float) -> tuple[int | None, int | None]:
+    """(current price, previous price). After a price cut Publi24 shows the new price and the old one crossed out
+    (`new-price`, `old-price`): the current one is the NEW one, not whichever comes last."""
+    new = re.search(r'class="new-price"[^>]*>(.*?)</span>', block, re.S)
+    old = re.search(r'class="old-price"[^>]*>(.*?)</span>', block, re.S)
+    if new:
+        return _amount(html.unescape(new.group(1)), eur_to_ron), _amount(html.unescape(old.group(1)), eur_to_ron) if old else None
+    return _amount(_text(block, "article-price"), eur_to_ron), None
 
 
 def parse(page: str, eur_to_ron: float = 5.0, today: date | None = None) -> list[Listing]:
@@ -85,12 +104,13 @@ def parse(page: str, eur_to_ron: float = 5.0, today: date | None = None) -> list
         if not title:
             continue
         img = re.search(r'<img[^>]+src="(https://[^"]+)"', block)
+        price, previous = _prices(block, eur_to_ron)
         city = _text(block, "article-location")
         city = re.sub(r"^\d{1,2}\s+[A-Za-z]+,\s*", "", city)  # "13 Septembrie, Sector 5, Bucuresti": a date glued on
         out.append(Listing(
             source="publi24", source_id=url.group(1).rsplit("/", 1)[-1].removesuffix(".html"), url=url.group(1),
             title=title, description=_text(block, "article-description"),
-            price_ron=_price(_text(block, "article-price"), eur_to_ron), city=city.split(",")[0].strip(),
+            price_ron=price, previous_price_ron=previous, city=city.split(",")[0].strip(),
             photos=[img.group(1)] if img else [], created_at=parse_date(_text(block, "article-date"), today),
         ))
     return out

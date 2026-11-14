@@ -64,3 +64,38 @@ def test_sold_prices_beat_asking_prices():
     import json
     liq = json.loads(r["liquidity"])
     assert liq["sold"] == 4 and liq["sold_days"] == 10 and liq["label"] == "normal"
+
+
+def test_the_still_up_check_refreshes_prices(monkeypatch):
+    monkeypatch.setattr(bot.time, "sleep", lambda x: None)
+    db = DB(":memory:")
+    market = [listing(100 + i, "Ceas Seiko SKX007 diver", p, iso(3), f"m{i}") for i, p in enumerate([1000, 1100, 950, 1050, 1000])]
+    good = listing(1, "Ceas Seiko SKX007 diver", 600, iso(2), "s1")
+    bot.process(db, [*market, good], S, alert=False)
+    assert db.get("olx:1")["score"] >= 5
+    # seen 8 hours ago: a 5+ listing is refreshed after 6 hours, not a day
+    db.conn.execute("UPDATE listings SET last_seen = datetime('now', '-8 hours') WHERE key='olx:1'")
+    now = listing(1, "Ceas Seiko SKX007 diver", 900, iso(2), "s1")  # the seller raised it
+    asked = []
+    bot.check_sold(db, S, seller_listings=lambda sid, **kw: (asked.append(sid) or [now], True), log=lambda m: None)
+    assert asked == ["s1"]
+    r = db.get("olx:1")
+    assert r["price_ron"] == 900 and r["gone_at"] is None  # the card shows what OLX shows now
+
+
+def test_claude_checks_the_price_it_has_now(monkeypatch):
+    db = DB(":memory:")
+    bot.process(db, [listing(1, "Ceas Seiko SKX007 diver", 600, iso(2), "s1")], S, alert=False)
+    r = bot.refresh_listing(db, S, "olx:1", seller_listings=lambda sid, **kw: ([listing(1, "Ceas Seiko SKX007 diver", 550, iso(2), "s1")], True))
+    assert r["price_ron"] == 550
+    # OLX not answering: unchanged, no crash
+    r = bot.refresh_listing(db, S, "olx:1", seller_listings=lambda sid, **kw: 1 / 0)
+    assert r["price_ron"] == 550
+
+
+def test_a_starter_price_book_listing_is_refreshed_by_its_title():
+    db = DB(":memory:")
+    bot.process(db, [listing(1, "Iphone 14 promax 128 gb", 1850, iso(4), "")], S, alert=False)
+    r = bot.refresh_listing(db, S, "olx:1", seller_listings=lambda *a, **k: 1 / 0,
+                            search=lambda q, **kw: [listing(1, "Iphone 14 promax 128 gb", 1670, iso(4), "s9")])
+    assert r["price_ron"] == 1670 and r["seller_id"] == "s9"

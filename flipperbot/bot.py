@@ -663,23 +663,30 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
 
     web.serve(s, background=True)
     print(f"flipperbot is running. Dashboard: {web.url(s)}")
+    db.beat("starting: re-judging the stored listings with today's rules")
     try:
         rescore_if_rules_changed(db, s)
     except Exception as e:  # never let this stop the bot
         print(f"  re-judging failed: {e!r}")
     while True:
         stamp = datetime.now().strftime("%H:%M")
+        started = time.time()
         try:
             print(f"[{stamp}] polling")
+            db.beat("searching OLX")
             poll(db, s)
             if facebook_due(db, s):
+                db.beat("searching Facebook Marketplace")
                 poll_facebook(db, s)
+            db.beat("checking the best finds with Claude")
             deliver(db, s)
             try:
+                db.beat("searching Publi24 and Lajumate")
                 poll_more(db, s)
             except Exception as e:  # never stops the main bot
                 print(f"  more sources error: {e!r}")
             try:
+                db.beat("checking which listings sold")
                 check_sold(db, s)
             except olx.Blocked:
                 raise
@@ -689,12 +696,14 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
                 from . import retail
 
                 if retail.due(db, s):
+                    db.beat("looking up new prices in shops")
                     retail.look_up(db, s)  # new prices in shops for the most-listed models, once a day
             except Exception as e:  # never stops the main bot
                 print(f"  new-price look-up error: {e!r}")
             try:
                 from . import radar
 
+                db.beat("trend radar")
                 radar.tick(db, s)
             except olx.Blocked:
                 raise
@@ -705,11 +714,13 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
                 n = digest(db, s)
                 db.kv_set("last_digest", today)
                 print(f"  digest sent: {n}")
-            wait = random.uniform(*s.poll_every_min) * 60
+            # rounds start every 5-10 minutes from the START of the last one: a long round doesn't add a full wait
+            wait = max(60.0, random.uniform(*s.poll_every_min) * 60 - (time.time() - started))
         except olx.Blocked as e:
             print(f"  {e}; waiting {s.blocked_backoff_min} min")
             wait = s.blocked_backoff_min * 60
         except Exception as e:  # network hiccups etc.: log and keep going
             print(f"  error: {e!r}")
             wait = 120
+        db.beat("waiting for the next round", until=time.time() + wait)
         time.sleep(wait)

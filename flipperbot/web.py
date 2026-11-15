@@ -219,6 +219,7 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
             (s.min_comps,),
         ).fetchone()[0],
         "last_poll": db.kv_get("last_poll"),
+        "heartbeat": db.kv_get("heartbeat"),
         "ai_used": ai.used_today(db), "ai_limit": s.ai_daily_limit, "ai_available": ai.available(s),
         "ai_paused_until": time.strftime("%H:%M", time.localtime(_paused_until)) if _paused_until > time.time() else None,
         "ai_queue": len(_queue),
@@ -799,10 +800,17 @@ function drawTabs() {
 async function refreshStats() {
   try { stats = await api(`/api/stats?niche=${nicheParam()}`); } catch { return; }
   drawNiches(stats.niches);
-  const p = stats.last_poll, fresh = p && (Date.now() - new Date(p.at)) < 20 * 60000;
+  // Alive = a sign of life in the last 20 minutes, or a planned wait that hasn't run out: a long round (Claude checks,
+  // many searches) is not "not running".
+  const p = stats.last_poll, hb = stats.heartbeat;
+  const fresh = hb ? (Date.now() - new Date(hb.at)) < 20 * 60000 || (hb.until && new Date(hb.until) > Date.now() - 5 * 60000)
+    : p && (Date.now() - new Date(p.at)) < 20 * 60000;
+  const hhmm = iso => new Date(iso).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
+  const doing = hb && fresh ? (hb.until ? `next round at ${hhmm(hb.until)}` : hb.doing) : "";
   document.getElementById("status").replaceChildren(
     h("span", { class: "dot" + (fresh ? " on" : "") }),
-    p ? `${fresh ? "running" : "not running"} · last check ${ago(p.at)}` : "waiting for the first check",
+    fresh ? `running · ${doing}${p ? ` · last check ${ago(p.at)}` : ""}`
+      : p || hb ? `not running · last sign of life ${ago((hb || p).at)} (start it: flipperbot start)` : "waiting for the first check",
     ` · ${stats.total.toLocaleString("ro-RO")} listings tracked · ${stats.priced_models} models priced`,
     stats.sold_tracked ? ` · ${stats.sold_tracked.toLocaleString("ro-RO")} sales seen` : "",
     !stats.ai_available ? " · Claude not installed"

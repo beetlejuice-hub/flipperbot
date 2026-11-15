@@ -248,3 +248,13 @@ def test_sold_tab(server, tmp_path):
     assert [x["key"] for x in sold] == ["olx:101"]  # expired ones aren't sales
     assert sold[0]["gone_reason"] == "sold" and sold[0]["days_up"] == 9 and sold[0]["price"] == 1100
     assert get(server + "/api/stats")["sold_tracked"] == 1
+
+
+def test_heartbeat_in_stats(server, tmp_path):
+    db = DB(tmp_path / "f.db")
+    db.beat("checking the best finds with Claude")
+    hb = get(server + "/api/stats")["heartbeat"]
+    assert hb["doing"] == "checking the best finds with Claude" and hb["until"] is None
+    import time as _t
+    db.beat("waiting for the next round", until=_t.time() + 300)
+    assert get(server + "/api/stats")["heartbeat"]["until"]

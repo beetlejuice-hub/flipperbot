@@ -247,6 +247,11 @@ class DB:
 
     # -- price book ------------------------------------------------------------
 
+    def beat(self, doing: str, until: float | None = None) -> None:
+        """The bot is alive and doing this (the dashboard's status line). until: when the next round starts."""
+        self.kv_set("heartbeat", {"at": datetime.now().isoformat(timespec="seconds"), "doing": doing[:120],
+                                  "until": datetime.fromtimestamp(until).isoformat(timespec="seconds") if until else None})
+
     # -- your own flips ------------------------------------------------------------
     def set_bought(self, key: str, price: int, note: str = "") -> None:
         self.conn.execute("""INSERT INTO deals (key, bought_price, bought_at, note) VALUES (?, ?, ?, ?)

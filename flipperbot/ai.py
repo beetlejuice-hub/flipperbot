@@ -730,6 +730,7 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
     Raises UsageLimit when Claude's plan limit is hit (nothing is saved, so it can be retried)."""
     if not available(s) or used_today(db) >= s.ai_daily_limit:
         return None
+    db.beat(f"Claude is checking: {row['title'][:60]}")
     if row["source"] == "olx" and row["seller_id"]:
         from . import bot  # judge the price it has NOW, not the one the bot saw hours ago
 

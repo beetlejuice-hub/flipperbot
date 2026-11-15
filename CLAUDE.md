@@ -16,6 +16,9 @@ README.md for setup and the tiers.
 - Categories (`niches.py`): watches, cameras, electronics, phones, tools, lego, sneakers; each poll covers a few in turn
   (`niches_per_poll`, watches always). Catalog categories (`techdb.py`, `phonedb.py`, `tooldb.py`, `legodb.py`,
   `sneakerdb.py`, via `identify._identify_catalog`) price by exact model and variant, used private listings only.
+- Smartwatches and bands: `smartdb.py` names the exact model (huawei|band 10, apple|watch series 9...). New prices in
+  shops (`retail.py`, from Claude's checks and a daily web-search batch) cap every estimate; brand-only listings get
+  no price at all.
 - Sources: OLX (also tells which listings are gone: `bot.check_sold`), Publi24, Lajumate (`sources/`), Facebook.
   Okazii, Vinted and eMAG refuse plain requests: not read. OLX bumps and reposts are recognized (`db.upsert`).
 - The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),

@@ -82,6 +82,8 @@ class Settings:
     niches_per_poll: int = 3
     # Lots and clear-outs (lots.py): the free score a lot needs for a cheap look at its photos (Haiku, 3 photos),
     # how many lots a day get that look, and how many per poll.
+    # New prices in shops (retail.py): how many models a day get looked up (one Claude call with web search).
+    retail_lookups: int = 15
     lots_min_score: int = 4
     lots_look: bool = True
     lots_look_daily: int = 30

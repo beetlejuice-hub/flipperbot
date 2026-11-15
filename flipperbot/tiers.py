@@ -25,8 +25,8 @@ from .niches import get as niche_of
 
 # Below these a current smartwatch is almost surely a clone. Older models (Series 3, SE) are just cheap.
 SMART_FLOORS = {
-    "apple watch|ultra 2": 1000, "apple watch|ultra": 900, "apple watch|series 10": 500, "apple watch|series 9": 450,
-    "samsung galaxy watch|watch ultra": 600, "garmin|fenix 8": 1200, "garmin|epix pro": 1000,
+    "apple|watch ultra 2": 1000, "apple|watch ultra": 900, "apple|watch series 10": 500, "apple|watch series 11": 600,
+    "apple|watch series 9": 450, "samsung|galaxy watch ultra": 600, "garmin|fenix 8": 1200, "garmin|epix pro": 1000,
 }
 
 
@@ -274,11 +274,13 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             v.est_value_ron = v.profit_ron = v.est_high_ron = None
             return v
         if "|" not in (ident.model_key or ""):
-            # Priced against every listing of the brand: a ladies' quartz Citizen vs all Citizens.
-            # Too rough to alert on; a second look is enough.
-            if v.tier in ("good", "real_good"):
-                v.tier = "mid"
-            v.reason += " (brand-level price only, model unknown)"
+            # Only the brand is known: a Huawei Band against all Huaweis, a ladies' quartz Citizen against all
+            # Citizens. That's no price for THIS model: no number, no deal, just "which model is it?"
+            brand = ident.brand.name if ident.brand else "?"
+            look = "naive" in f or "vintage" in f or discount >= 0.5  # far under the brand's usual: worth a glance
+            return Verdict("mid" if look else "bad",
+                           f"{brand}: model not recognized, so no price comparison (the brand alone ranges widely)"
+                           + (": which model is it?" if look else ""))
             v.est_value_ron = v.profit_ron = v.est_high_ron = None  # too rough to show as a number
         return v
 
@@ -325,3 +327,37 @@ def liquidity(ages: list[int], sold_days: list[float] | None = None) -> dict | N
     else:
         label = "very slow"
     return {"label": label, "median_days": median_age, "for_sale": n}
+
+
+def with_retail(v: Verdict, price: int | None, r: dict | None, flags: set[str], good_profit: int, real_good_profit: int) -> Verdict:
+    """Hold a verdict to what the model costs new in shops: asking 80%+ of new (90% if sealed) is no deal; a used
+    estimate can't go above ~85% of new; and with no similar listings, the new price gives the estimate."""
+    from .retail import NOT_A_DEAL, NOT_A_DEAL_SEALED, ceiling
+
+    if not r or r.get("discontinued") or not r.get("low") or not price or "broken" in flags or v.tier == "suspect":
+        return v
+    sealed = "new" in flags
+    new = r["low"]
+    where = f"~{new} lei new in shops" + (f" ({r['source']})" if r.get("source") else "")
+    if price >= (NOT_A_DEAL_SEALED if sealed else NOT_A_DEAL) * new:
+        return Verdict("bad", f"almost the price of a new one: {price} lei vs {where}")
+    lo, hi = ceiling(r, sealed)
+    if v.est_value_ron:
+        if v.est_value_ron > lo or (v.est_high_ron or 0) > hi:
+            cut = max(0, v.est_value_ron - min(v.est_value_ron, lo))
+            v.est_value_ron, v.est_high_ron = min(v.est_value_ron, lo), min(v.est_high_ron or hi, hi)
+            v.profit_ron = (v.profit_ron or 0) - cut
+            v.reason += f" · capped by the new price ({where})"
+    else:  # no similar listings: what a used one of this model fetches, from its new price
+        v.est_value_ron, v.est_high_ron, v.profit_ron = lo, hi, lo - price
+        v.reason = f"{where}; a used one fetches ~{lo}–{hi} · " + v.reason
+        if v.tier == "bad" and v.profit_ron > 0:
+            v.tier = "mid"
+    profit = v.profit_ron or 0
+    if v.tier == "real_good" and profit < real_good_profit:
+        v.tier = "good"
+    if v.tier == "good" and profit < good_profit:
+        v.tier = "mid" if profit > 0 else "bad"
+    if v.tier == "mid" and profit <= 0:
+        v.tier = "bad"
+    return v

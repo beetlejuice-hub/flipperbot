@@ -362,6 +362,14 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
                 break
         if niche == "cameras" and family in get(niche).lens_families and not family_in_title:
             family = None  # "Coolpix ... (also selling a Nikkor)": a lens named only in the description
+    smart = None
+    if niche == "watches":
+        from . import smartdb
+
+        # Smartwatches and bands by exact model: a Huawei Band 10 is priced against Band 10s, not all Huaweis.
+        smart = smartdb.match(title_n)
+        if smart:
+            brand, brands, refs, family = smart.brand, [smart.brand], [], smart.model or None
     lens = bool(family and family in get(niche).lens_families)
     focal = None
     if niche == "cameras":
@@ -412,7 +420,10 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
     first = re.split(r"[^a-z0-9]+", title_n)[0] if title_n else ""  # "husa/carcasa ..." -> "husa"
     if first in PART_START or _any(title_n, ACCESSORY_ANYWHERE) or (
             cam and (first in CAMERA_PART_START or _any(title_n, CAMERA_PARTS))):
-        flags.add("part")
+        from .smartdb import BAND_WORDS
+
+        if not (smart and first == "bratara" and _any(title_n, list(BAND_WORDS))):  # "Bratara fitness Huawei Band 10": the band
+            flags.add("part")
     if cam and brand and brand.name == "Leica" and re.search(r"(?<![a-z])(fed|zorki|zorkiy|kiev)(?![a-z])", title_n):
         flags.add("fake_signs")  # a Soviet FED/Zorki engraved "Leica": the classic fake
     if _any(full_n, BOX_PAPERS):

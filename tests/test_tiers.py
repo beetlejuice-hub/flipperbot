@@ -79,7 +79,7 @@ def test_cheap_vintage_luxury_gets_a_look_not_suspect():
 def test_brand_only_price_never_alerts():
     comps = [1150] * 6
     v = verdict("Ceas Citizen Calendar Quartz Dama", 120, comps=comps)
-    assert v.tier == "mid" and "brand-level" in v.reason
+    assert v.tier == "mid" and "model not recognized" in v.reason and v.est_value_ron is None  # no brand-wide number
 
 
 def test_parts_named_in_plural():

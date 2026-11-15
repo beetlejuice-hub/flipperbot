@@ -108,6 +108,12 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         if ident.model_key else []
     sold = db.sold(ident.model_key, used_only=used_only)
     verdict = judge(l, ident, comps, s, db.model_price(ident.model_key), sold=[p for p, _ in sold])
+    from . import retail
+    from .tiers import with_retail
+
+    # what the model costs new in shops: the ceiling for any second-hand price
+    verdict = with_retail(verdict, l.price_ron, retail.get(db, ident.model_key), ident.flags, s.good_profit_ron,
+                          s.real_good_profit_ron)
     if verdict.tier in ("good", "real_good") and ident.segment in ("luxury", "swiss") and "vintage" not in ident.flags and l.seller_id:
         # One seller with a row of modern luxury/Swiss watches all far under market: a replica dealer.
         # (Not vintage: a vintage shop selling several old Swiss watches is normal.)
@@ -679,6 +685,13 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
                 raise
             except Exception as e:  # never stops the main bot
                 print(f"  sold check error: {e!r}")
+            try:
+                from . import retail
+
+                if retail.due(db, s):
+                    retail.look_up(db, s)  # new prices in shops for the most-listed models, once a day
+            except Exception as e:  # never stops the main bot
+                print(f"  new-price look-up error: {e!r}")
             try:
                 from . import radar
 

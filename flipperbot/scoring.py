@@ -17,7 +17,7 @@ RULE_MAX = 7  # free rules alone never go above 7: an 8+ needs an AI to agree
 
 # Bump when the rules that judge or score a listing change: the bot then re-judges every stored listing
 # once at start, so an update never leaves old listings with stale or missing scores.
-RULES_VERSION = 10
+RULES_VERSION = 11
 
 # Reasons a listing is not worth anyone's time, from the tier's own reason text.
 _DEAD = ("someone buying", "repair shop", "replica", "over budget", "fashion brand", "part/accessory", "locked to",
@@ -36,7 +36,8 @@ def rule_score(tier: str | None, flags: list[str] | set[str], reason: str | None
         return 0, "not worth it: " + next((d for d in _DEAD if d in reason), "replica/locked/wanted")
     if tier == "bad":
         # Priced and not under market = overpriced; nothing known = barely a look.
-        if any(x in reason for x in ("under what similar ones ask", "under what they ask", "vs market", "realistic sale")):
+        if any(x in reason for x in ("under what similar ones ask", "under what they ask", "vs market", "realistic sale",
+                                     "new in shops", "sold for")):
             return 0, "overpriced: not under what similar ones sell for"
         return 1, "nothing stands out"
     base = {"mid": 3, "good": 6, "real_good": 7}.get(tier or "", 1)

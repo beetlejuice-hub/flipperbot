@@ -83,6 +83,12 @@ def _first_price(r: Any, db: DB | None) -> int | None:
     return row[0] if row and r["price_ron"] and row[0] > r["price_ron"] else None
 
 
+def _retail(r: Any, db: DB | None) -> dict[str, Any] | None:
+    from . import retail
+
+    return retail.get(db, r["model_key"]) if db is not None else None
+
+
 def _message(r: Any) -> str | None:
     from .messages import for_row
 
@@ -110,7 +116,8 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
         "deal": dict(d) if db is not None and (d := db.deal(r["key"])) else None,
         "message": _message(r),
-        "listed_at": r["created_at"] or None, "currency": r["currency"], "price_orig": r["price_orig"], "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
+        "listed_at": r["created_at"] or None, "currency": r["currency"], "price_orig": r["price_orig"],
+        "retail": _retail(r, db), "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
         "repost_of": r["repost_of"], "gone_at": r["gone_at"], "gone_reason": r["gone_reason"],
         "days_up": _days_up(r), "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
@@ -671,6 +678,9 @@ function priceBox(l) {
     h("div", {}, h("div", { class: "k" }, "Sells for"),
       worth ? h("div", { class: "n" + (worth.includes("–") ? " range" : "") }, worth) : h("div", { class: "n na" }, "not enough data yet"),
       worth ? h("div", { class: "src" }, src) : null),
+    l.retail ? h("div", { class: "profit reason" }, l.retail.discontinued ? "New in shops: no longer sold new"
+      : `New in shops: ~${lei(l.retail.low)}${l.retail.high && l.retail.high !== l.retail.low ? "–" + lei(l.retail.high) : ""}`
+        + (l.retail.source ? ` (${l.retail.source})` : "")) : null,
     profit != null && worth ? h("div", { class: "profit" }, "profit ",
       h("b", { class: profit < 0 ? "neg" : "" }, (profit < 0 ? "−" : "~") + lei(Math.abs(profit))
         + (l.price ? ` (${profit < 0 ? "−" : "+"}${Math.round(Math.abs(profit) * 100 / l.price)}%)` : "")),

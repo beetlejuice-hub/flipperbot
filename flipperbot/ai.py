@@ -109,6 +109,10 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "resale_ron_low": 0,
   "resale_ron_high": 0,
   "_note": "resale_ron_low/high = what it would REALISTICALLY sell for within a few weeks, as is (sold prices, not asking prices). The summary must use these same numbers.",
+  "new_price_ron": 0,
+  "new_price_ron_high": 0,
+  "not_sold_new": false,
+  "_note3": "new_price_ron/high = what this exact model costs NEW in Romanian shops today (eMAG, Altex, Flanco... via web search); 0 if you can't find it; not_sold_new = true if it's discontinued. A used one is worth clearly less than new.",
   "model_value_ron_low": 0,
   "model_value_ron_high": 0,
   "price_note": "",
@@ -369,6 +373,17 @@ def shrink(photo: Path, px: int) -> None:
         pass
 
 
+def retail_line(db: DB, row: Any) -> str:
+    from . import retail
+
+    r = retail.get(db, row["model_key"])
+    if not r:
+        return ""
+    if r.get("discontinued"):
+        return "New in Romanian shops: no longer sold new (found earlier).\n"
+    return f"New in Romanian shops: ~{r['low']}-{r['high']} lei ({r.get('source') or 'web search'}, {str(r['at'])[:10]}). A used one is worth clearly less.\n"
+
+
 def liquidity_line(row: Any) -> str:
     try:
         q = json.loads(row["liquidity"]) if "liquidity" in row.keys() and row["liquidity"] else None
@@ -455,6 +470,10 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "resale_ron_low": 0,
   "resale_ron_high": 0,
   "_note": "resale_ron_low/high = what it would REALISTICALLY sell for within a few weeks, as is (sold prices, not asking prices). The summary must use these same numbers.",
+  "new_price_ron": 0,
+  "new_price_ron_high": 0,
+  "not_sold_new": false,
+  "_note3": "new_price_ron/high = what this exact model costs NEW in Romanian shops today (eMAG, Altex, Flanco... via web search); 0 if you can't find it; not_sold_new = true if it's discontinued. A used one is worth clearly less than new.",
   "model_value_ron_low": 0,
   "model_value_ron_high": 0,
   "price_note": "",
@@ -538,6 +557,10 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "resale_ron_low": 0,
   "resale_ron_high": 0,
   "_note": "resale_ron_low/high = what it would REALISTICALLY sell for within a few weeks, as is (sold prices, not asking prices). The summary must use these same numbers.",
+  "new_price_ron": 0,
+  "new_price_ron_high": 0,
+  "not_sold_new": false,
+  "_note3": "new_price_ron/high = what this exact model costs NEW in Romanian shops today (eMAG, Altex, Flanco... via web search); 0 if you can't find it; not_sold_new = true if it's discontinued. A used one is worth clearly less than new.",
   "model_value_ron_low": 0,
   "model_value_ron_high": 0,
   "price_note": "",
@@ -604,6 +627,10 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "resale_ron_low": 0,
   "resale_ron_high": 0,
   "_note": "resale_ron_low/high = what it would REALISTICALLY sell for within a few weeks, as is (sold prices, not asking prices). The summary must use these same numbers.",
+  "new_price_ron": 0,
+  "new_price_ron_high": 0,
+  "not_sold_new": false,
+  "_note3": "new_price_ron/high = what this exact model costs NEW in Romanian shops today (eMAG, Altex, Flanco... via web search); 0 if you can't find it; not_sold_new = true if it's discontinued. A used one is worth clearly less than new.",
   "model_value_ron_low": 0,
   "model_value_ron_high": 0,
   "price_note": "",
@@ -744,7 +771,7 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         + (TOO_CHEAP_BLOCK.format(price=row["price_ron"], ref=row["est_value_ron"]) if cheap and niche == "watches" else ""),
         seller_listings=seller_listings(db, row),
         noun=niche_of(niche).noun, checks=niche_of(niche).claude_checks.strip().lstrip("- "),
-        ebay_line=ebay_line(row) + liquidity_line(row),
+        ebay_line=ebay_line(row) + liquidity_line(row) + retail_line(db, row),
     )
     lean = not db.kv_get("claude_no_lean_flags", False)
     try:
@@ -775,6 +802,10 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         result = apply_fake_hunt(result, fake_hunt(row, result, s, folder, photos, lean))
         db.kv_set(f"ai_used:{date.today().isoformat()}", used_today(db) + 1)
     db.set_ai(row["key"], result)
+    from . import retail
+
+    if result.get("new_price_ron") or result.get("not_sold_new"):
+        retail.from_check(db, row, result)  # the model's new price, for every listing of it
     if db.model_price(row["model_key"]) and result.get("model_value_ron_low"):
         from . import bot  # Claude priced this model: the model's other listings get the corrected price
 

@@ -11,9 +11,9 @@ def verdict(title, price, desc="", comps=()):
 
 
 def test_smartwatch_models():
-    assert identify("Apple Watch Ultra 2 49mm").model_key == "apple watch|ultra 2"
+    assert identify("Apple Watch Ultra 2 49mm").model_key == "apple|watch ultra 2"
     assert identify("Garmin Fenix 7 Pro Solar").model_key == "garmin|fenix 7 pro"
-    assert identify("Samsung Galaxy Watch 6 Classic 47mm").model_key == "samsung galaxy watch|watch 6 classic"
+    assert identify("Samsung Galaxy Watch 6 Classic 47mm").model_key == "samsung|galaxy watch 6 classic"
     assert identify("Ceas Garmin Forerunner 265").segment == "smart"
 
 
@@ -47,12 +47,24 @@ def test_fake_rule_uses_the_model_in_the_title_only():
 
 
 def test_romanian_model_names_and_title_only_models():
-    assert identify("Apple watch seria 8 - 45 mm").model_key == "apple watch|series 8"
-    assert identify("Apple Watch 5 / Silver / 44 mm").model_key == "apple watch|series 5"
-    assert identify("Apple Watch serie 9 GPS 45 mm", "nu e ultra").model_key == "apple watch|series 9"
+    assert identify("Apple watch seria 8 - 45 mm").model_key == "apple|watch series 8"
+    assert identify("Apple Watch 5 / Silver / 44 mm").model_key == "apple|watch series 5"
+    assert identify("Apple Watch serie 9 GPS 45 mm", "nu e ultra").model_key == "apple|watch series 9"
     assert identify("Garmin Fenix 7s, 42 mm").model_key == "garmin|fenix 7s"
     assert identify("Smartwatch Garmin Insinct 2X Solar", "mai bun ca fenix 8").model_key == "garmin"
 
 
 def test_romanian_named_current_model_too_cheap_is_suspect():
     assert verdict("Apple watch seria 10", 300).tier == "suspect"
+
+
+def test_loosely_written_smartwatches_and_bands():
+    from flipperbot.identify import identify as ident
+
+    for title, key in [("Samsung Watch 8 40mm, GPS", "samsung|galaxy watch 8"), ("Apple wwtch 5 44mm", "apple|watch series 5"),
+                       ("Apple watch s11 nou!", "apple|watch series 11"), ("Smartwatch Huawei Gt 6, Nou", "huawei|watch gt 6"),
+                       ("Huawei Band 10", "huawei|band 10"), ("Bratara fitness Xiaomi Smart Band 9", "xiaomi|smart band 9"),
+                       ("Mi Band 8", "xiaomi|smart band 8"), ("Samsung Galaxy Fit 3", "samsung|galaxy fit 3"),
+                       ("Garmin Forerunner 265", "garmin|forerunner 265"), ("Fitbit Charge 6", "fitbit|charge 6")]:
+        assert ident(title, "", "watches").model_key == key, title
+    assert "part" in ident("Curea Huawei Band 10", "", "watches").flags  # a strap is still a strap

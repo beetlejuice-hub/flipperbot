@@ -191,6 +191,26 @@ CAM_REF = re.compile(r"(?<![a-z0-9])([a-z]{1,3}-?\d{1,4}[a-z]{0,3})(?![a-z0-9])"
 # Not model numbers: apertures (f2, f1.8, f16, f22; but F65/F80/F100 are Nikon bodies), T-stops, units, mounts.
 _NOT_CAM_REF = re.compile(r"^f\d$|^f[12]\d$|^t\d|^\d|^(?:mm|cm|mp|iso|usb|hd|fps|gb|mb|px|is|stm|usm|vr|ii|iii|mk)\d*$|^m42$|^m39$")
 EOS = re.compile(r"(?<![a-z0-9])eos[\s-]?(\d{1,4}[a-z]{0,2}|ix[\s-]?\d{1,2}|[a-z]{1,2}\d{0,2})(?![a-z0-9])")
+# Lens mounts: "Canon EF" names every EF lens there is, so without a focal length it says nothing about the price.
+MOUNTS = {"fd", "fl", "ef-s", "ef", "rf", "l", "fe", "e", "z", "x", "m42"}
+FOCAL_NO_MM = re.compile(r"(?<![0-9.,a-z])(\d{2,3}(?:-\d{2,3})?)\s?(?=(?:f|t)\s?/?\s?\d)")  # "samyang 14 t3.1", "50 f1.8"
+T_STOP = re.compile(r"(?<![a-z0-9])t\s?(\d(?:[.,]\d)?)(?![0-9])")
+# A camera's shutter count: "493.000 de cadre", "12k cadre", "shutter count: 45000", "declansari 80 000".
+_SHOTS = re.compile(r"(\d{1,3}(?:[.,\s]\d{3})+|\d{3,6}|\d{1,3}(?:[.,]\d)?\s?k)\s*(?:de\s*)?(?:cadre|declansari|actionari|clickuri|click-uri|clicks|shots|shutter)"
+                    r"|(?:shutter(?:\s*count)?|cadre|declansari|actionari)\s*[:=-]?\s*(\d{1,3}(?:[.,\s]\d{3})+|\d{3,6}|\d{1,3}(?:[.,]\d)?\s?k)(?![0-9])")
+WORN_SHUTTER = 150_000  # most bodies are rated 100-200k; pro bodies more, but this many is a worn camera anyway
+
+
+def shutter_count(text: str) -> int | None:
+    m = _SHOTS.search(text)
+    if not m:
+        return None
+    raw = (m.group(1) or m.group(2)).replace(" ", "")
+    if raw.endswith("k"):
+        return int(float(raw[:-1].replace(",", ".")) * 1000)
+    return int(re.sub(r"[.,]", "", raw))
+
+
 LENS_WORDS = ["obiectiv", "obiective", "lentila", "lens", "zoom", "prime"]
 LOT = ["lot", "loturi", "colectie de ceasuri", "colectie ceasuri", "mai multe ceasuri", "set ceasuri", "set de ceasuri", "lot de ceasuri", "ceasuri vechi", "ceasuri de colectie"]
 LOT_COUNT = re.compile(r"(?<![a-z0-9])(\d{1,3})\s*(?:buc|bucati|ceasuri|bc|aparate|obiective)(?![a-z])")
@@ -229,8 +249,8 @@ class Identity:
         b = self.brand.name.lower()
         fam = self.family.replace("-", " ") if self.family else None
         if self.lens and fam:  # a lens name means little without its focal length
-            if fam == "lens":  # no lens name: only the focal length says which lens
-                return f"{b}|lens|{self.focal}" if self.focal else b
+            if fam == "lens" or fam in MOUNTS:  # no lens name (a mount isn't one): only the focal length says which
+                return f"{b}|{fam}|{self.focal}" if self.focal else b
             return f"{b}|{fam}|{self.focal}" if self.focal else f"{b}|{fam}"
         if self.niche == "cameras" and fam:  # "ae 1 program" says more than the number "AE-1"
             return f"{b}|{fam}"
@@ -313,7 +333,8 @@ def _identify_catalog(title: str, description: str, niche: str) -> Identity:
         from .techdb import BUNDLE
 
         hits = [w for w in cat.ACCESSORY_WORDS if re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", title_n)]
-        if hits and not BUNDLE.search(title_n):
+        # "Controllere PS4 - pachet de 4": named first, the accessory is what's sold, bundle words or not
+        if hits and (not BUNDLE.search(title_n) or first in cat.ACCESSORY_WORDS):
             flags.add("part")  # "PS5 controller DualSense", "Iphone 13 husa": the accessory is for sale
     if niche == "electronics":
         games, device = techdb.GAMES.search(title_n), techdb.device_pos(title_n)
@@ -381,12 +402,14 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
     if niche == "cameras":
         m = FOCAL.search(title_n)
         if not m and _any(title_n, LENS_WORDS):  # "Obiectiv Sony 28-70": a zoom range without "mm"
-            m = re.search(r"(?<![0-9.,])(\d{2,3}\s?-\s?\d{2,3})(?![0-9])", title_n)
+            m = re.search(r"(?<![0-9.,])(\d{2,3}\s?-\s?\d{2,3})(?![0-9])", title_n) or FOCAL_NO_MM.search(title_n)
         if m:
             focal = re.sub(r"\s", "", m.group(1))
             a = APERTURE.search(title_n)
             if a:
                 focal += f" f{a.group(1).replace(',', '.')}"
+            elif T_STOP.search(title_n):  # cine lenses: "T3.1" instead of an f-number
+                focal += f" t{T_STOP.search(title_n).group(1).replace(',', '.')}"
         is_lens_listing = (bool(m) and (_any(title_n, LENS_WORDS) or lens or not family)) or (
             _any(title_n, LENS_WORDS) and not family)
         if is_lens_listing and not lens:
@@ -409,6 +432,8 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
         flags.add("broken")
     if _any(full_n, BATTERY):
         flags.add("battery")  # usually a 20-lei fix: the best kind of "broken"
+    if cam and not lens and (shots := shutter_count(full_n)) and shots >= WORN_SHUTTER:
+        flags.add("worn_shutter")  # "493.000 de cadre": past its rated life, a new shutter is the price of a lens
     if _any(full_n, REPLICA):
         flags.add("replica")
     if _any(full_n, FAKE_SIGNS):

@@ -309,7 +309,10 @@ DAMAGE = ["fisurat", "fisurata", "fisura", "crapat", "crapata", "crapatura", "in
 BROKEN = DAMAGE + ["nu porneste", "nu mai porneste", "nu se aprinde", "nu afiseaza", "nu da imagine", "fara imagine", "ecran spart",
           "display spart", "afisaj spart", "placa de baza arsa", "placa arsa", "defect", "defecta", "defecte", "pentru piese",
           "nefunctional", "nefunctionala", "blue light of death", "ylod", "rrod", "artefacte", "artifacts",
-          "se supraincalzeste", "se opreste singur", "se opreste singura", "nu citeste discuri"]
+          "se supraincalzeste", "se opreste singur", "se opreste singura", "nu citeste discuri",
+          # works only sometimes: a faulty one, priced as one
+          "cand merge cand nu", "uneori merge", "merge cand vrea", "merge intermitent", "functioneaza intermitent",
+          "se blocheaza", "se restarteaza", "se reseteaza singur", "se inchide singur", "nu functioneaza"]
 LOCKED = ["icloud", "activation lock", "blocat icloud", "blocat pe cont", "cont blocat", "mdm", "parola bios", "bios parolat",
           "bios blocat", "banned", "ban pe cont", "consola banata", "cont banat"]
 MODDED = ["modat", "modata", "chipat", "chipata", "jailbreak", "jailbreakuit", "decodat", "decodata", "piratat", "piratata",

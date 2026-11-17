@@ -18,7 +18,7 @@ import statistics
 from dataclasses import dataclass
 
 from .config import Settings
-from .identify import Identity, _family_re, _smart_words, normalize
+from .identify import MOUNTS, Identity, _family_re, _smart_words, normalize
 from .models import Listing
 from .niches import get as niche_of
 
@@ -87,6 +87,8 @@ def repair_cost(ident: Identity, s: Settings) -> int:
     if "broken" in ident.flags:
         costs = s.repair_ron if ident.niche == "watches" else niche_of(ident.niche).repair_ron
         return costs.get(ident.segment or "", 300)
+    if "worn_shutter" in ident.flags:
+        return 900  # a new shutter, fitted
     if "battery" in ident.flags:
         return s.battery_fix_ron
     return 0
@@ -260,14 +262,15 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             v.reason += " · this cheap for the brand: make sure it's real"
         if ident.niche in ("watches", "cameras") and discount >= 0.6 and v.tier in ("good", "real_good") \
                 and "broken" not in f and seg not in ("luxury", "swiss") \
-                and not (exact or (ident.lens and ident.family != "lens")):  # exact reference / named lens: like for like
+                and not (exact or (ident.lens and ident.family not in ("lens", *MOUNTS))):  # exact ref / named lens: like for like
             # (luxury/Swiss have their own guards: the replica-dealer pattern, the fake check)
             # 60%+ under similar listings is more often a cheaper version than the ones compared (a Seamaster Polaris
             # against all Seamasters, a kit lens against pro ones) than a steal: Claude looks before it's a deal.
             v.tier = "mid"
             v.reason = "far under similar listings: check it's the same version, let Claude look · " + v.reason
-        if ident.niche in ("electronics", "phones") and discount >= 0.45 and v.tier in ("good", "real_good") \
-                and "broken" not in f:
+        smartwatch = ident.niche == "watches" and seg in ("smart", "band")
+        if (ident.niche in ("electronics", "phones") or smartwatch) and discount >= 0.45 \
+                and v.tier in ("good", "real_good") and "broken" not in f:
             # A working PS5 or iPhone at half price is nearly always a scam, locked, faulty or not what the title says.
             v.tier = "mid"
             v.reason = "suspiciously cheap: often a scam, locked or faulty, let Claude check first · " + v.reason

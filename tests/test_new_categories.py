@@ -1,6 +1,11 @@
 import pytest
 
 from flipperbot.identify import identify
+from flipperbot.config import Settings
+from flipperbot.models import Listing
+from flipperbot.tiers import judge
+
+S = Settings()
 
 
 @pytest.mark.parametrize("niche, title, key, flag", [
@@ -80,3 +85,36 @@ def test_phone_accessories_and_floors():
     assert "part" in identify("Iphone 13 husa", "", "phones").flags
     assert "part" not in identify("iPhone 15 Pro 256GB, baterie 90%, camera perfecta", "", "phones").flags
     assert min_price("iphone 13 128gb") == 750 and min_price("galaxy s24 ultra") == 600 and min_price("iphone 8") is None
+
+
+def test_live_misreads_fixed():
+    # the accessory named first is what's sold, "pachet" or not
+    assert "part" in identify("Controllere PS4 – 2 bucăți sau pachet de 4 bucăți", "", "electronics").flags
+    # works only sometimes / one function dead: faulty
+    assert "broken" in identify("Ps 4 pro 1tb - cand merge cand nu merge", "", "electronics").flags
+    assert "broken" in identify("Samsung Galaxy s23 ultra 512GB, amprenta nefuncționala", "", "phones").flags
+    assert "broken" not in identify("iPhone 14", "camera nu are zgarieturi, merge perfect", "phones").flags
+    assert "broken" not in identify("Xbox Series X, controller cu drift", "", "electronics").flags
+
+
+def test_lenses_are_priced_by_focal_length_not_by_mount():
+    assert identify("Obiectiv Samyang 14 t3.1 - montura Canon EF", "", "cameras").model_key == "canon|ef|14 t3.1"
+    assert identify("Obiectiv Canon EF 50 f1.8", "", "cameras").model_key == "canon|ef|50 f1.8"
+    assert identify("Obiectiv Canon EF", "", "cameras").model_key == "canon"  # every EF lens: no price from that
+
+
+def test_worn_shutter():
+    from flipperbot.identify import shutter_count
+
+    assert "worn_shutter" in identify("Nikon D750 - BODY - 493.000 de cadre", "", "cameras").flags
+    assert "worn_shutter" not in identify("Canon 6D", "are 12k cadre", "cameras").flags
+    assert shutter_count("shutter count: 45000") == 45000 and shutter_count("declansari 180 000") == 180000
+    v = judge(Listing("olx", "1", "u", "Nikon D750 - BODY - 493.000 de cadre", price_ron=700),
+              identify("Nikon D750 - BODY - 493.000 de cadre", "", "cameras"), [2400, 2300, 2500, 2400], S)
+    assert "repair ~900" in v.reason
+
+
+def test_a_half_price_apple_watch_is_suspicious():
+    v = judge(Listing("olx", "1", "u", "Apple watch series 10, GPS, Cellular 46mm", price_ron=550),
+              identify("Apple watch series 10, GPS, Cellular 46mm"), [1200] * 8, S)
+    assert v.tier == "mid" and "suspiciously cheap" in v.reason

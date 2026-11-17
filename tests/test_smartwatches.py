@@ -19,7 +19,8 @@ def test_smartwatch_models():
 
 def test_smartwatch_priced_from_its_own_listings():
     comps = [2800, 3000, 3100, 2900, 3200, 3000]
-    assert verdict("Apple Watch Ultra 2 49mm", 1300, comps=comps).tier in ("good", "real_good")
+    assert verdict("Apple Watch Ultra 2 49mm", 1800, comps=comps).tier in ("good", "real_good")
+    assert verdict("Apple Watch Ultra 2 49mm", 1300, comps=comps).tier == "mid"  # half price: locked or a scam, Claude first
 
 
 def test_clones_and_locked_watches():

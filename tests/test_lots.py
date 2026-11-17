@@ -72,3 +72,12 @@ def test_the_daily_cap(monkeypatch):
     s = Settings()
     db.kv_set(f"lots_looked:{__import__('datetime').date.today().isoformat()}", s.lots_look_daily)
     assert lots.look(db, s, log=lambda m: None, run=lambda *a, **k: 1 / 0) == 0
+
+
+def test_a_strong_7_from_the_quick_read_also_gets_the_full_check():
+    db = DB(":memory:")
+    bot.process(db, [lot(1, "Lot ceasuri vechi", 300, "ceasuri vechi de la bunicul")], S)
+    bot.process(db, [lot(2, "Lot ceasuri vechi rusesti", 300, "ceasuri vechi de la bunicul")], S)
+    db.set_quick("olx:1", {"score": 7, "value_low": 900, "value_high": 1200, "fake_risk": "low"})  # +600: worth a look
+    db.set_quick("olx:2", {"score": 7, "value_low": 500, "value_high": 600, "fake_risk": "low"})  # +200: not enough for a 7
+    assert [x["key"] for x in bot.pending_alerts(db, S)] == ["olx:1"]

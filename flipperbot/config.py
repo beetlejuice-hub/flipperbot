@@ -129,7 +129,9 @@ class Settings:
     ai_quick: bool = True
     quick_model: str = "haiku"
     quick_daily_calls: int = 40  # batches a day (up to 20 listings each)
-    ai_daily_limit: int = 15  # a $20 plan runs out fast; raise it if you never hit limits
+    # The full check runs on Haiku (about a third of the plan usage of the bigger models), so it can look at more:
+    # only checked listings can reach 8-10. Lower it if you hit the plan's limits.
+    ai_daily_limit: int = 30
     # Claude looks at every real_good before it's sent to Telegram, then at good ones with what's left
     # of the day's budget (those only show on the dashboard).
     ai_tiers: list[str] = field(default_factory=lambda: ["real_good", "good"])

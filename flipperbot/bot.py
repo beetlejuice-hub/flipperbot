@@ -385,8 +385,11 @@ def pending_alerts(db: DB, s: Settings) -> list[Any]:
     """What gets the full Claude check by itself: listings scored 8+ (the quick AI read put them there),
     or, with the quick step off, real good deals. Fresh, not yet checked or decided."""
     rank = "CASE {c} WHEN 'real_good' THEN 4 WHEN 'good' THEN 3 WHEN 'mid' THEN 2 WHEN 'suspect' THEN 1 WHEN 'bad' THEN 0 ELSE -1 END"
-    which = ("json_extract(quick, '$.score') >= 8 AND COALESCE(json_extract(quick, '$.fake_risk'), '') != 'high'"
-             f" AND COALESCE(json_extract(quick, '$.value_low'), 0) - price_ron >= {int(s.good_profit_ron)}"
+    # 8+ from the quick read with a good deal's profit, or a 7 with a real good deal's profit (the quick read is
+    # text only and shy of 8s; the full check sees the photos and decides)
+    which = ("COALESCE(json_extract(quick, '$.fake_risk'), '') != 'high' AND ("
+             f"(json_extract(quick, '$.score') >= 8 AND COALESCE(json_extract(quick, '$.value_low'), 0) - price_ron >= {int(s.good_profit_ron)})"
+             f" OR (json_extract(quick, '$.score') >= 7 AND COALESCE(json_extract(quick, '$.value_low'), 0) - price_ron >= {int(s.real_good_profit_ron)}))"
              if s.ai_quick else f"tier IN ({','.join(repr(t) for t in s.alert_tiers)})")
     q = f"""SELECT * FROM listings WHERE ({which}) AND ai IS NULL
             AND {rank.format(c='tier')} >= {rank.format(c='notified_tier')}

@@ -113,6 +113,9 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "new_price_ron_high": 0,
   "not_sold_new": false,
   "_note3": "new_price_ron/high = what this exact model costs NEW in Romanian shops today (eMAG, Altex, Flanco... via web search); 0 if you can't find it; not_sold_new = true if it's discontinued. A used one is worth clearly less than new.",
+  "exact_model": "",
+  "bot_model_right": true,
+  "_note4": "exact_model = maker, model and variant as YOU read it from the photos and text (e.g. \"Huawei Band 9\", \"Seiko SKX007\", \"PS5 Slim Digital\", \"iPhone 13 Pro 256GB\"); empty for a lot. bot_model_right = false if the bot's model (above) is wrong, e.g. a Band 9 the bot thought was a Band 10.",
   "model_value_ron_low": 0,
   "model_value_ron_high": 0,
   "price_note": "",
@@ -474,6 +477,9 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "new_price_ron_high": 0,
   "not_sold_new": false,
   "_note3": "new_price_ron/high = what this exact model costs NEW in Romanian shops today (eMAG, Altex, Flanco... via web search); 0 if you can't find it; not_sold_new = true if it's discontinued. A used one is worth clearly less than new.",
+  "exact_model": "",
+  "bot_model_right": true,
+  "_note4": "exact_model = maker, model and variant as YOU read it from the photos and text (e.g. \"Huawei Band 9\", \"Seiko SKX007\", \"PS5 Slim Digital\", \"iPhone 13 Pro 256GB\"); empty for a lot. bot_model_right = false if the bot's model (above) is wrong, e.g. a Band 9 the bot thought was a Band 10.",
   "model_value_ron_low": 0,
   "model_value_ron_high": 0,
   "price_note": "",
@@ -563,6 +569,9 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "new_price_ron_high": 0,
   "not_sold_new": false,
   "_note3": "new_price_ron/high = what this exact model costs NEW in Romanian shops today (eMAG, Altex, Flanco... via web search); 0 if you can't find it; not_sold_new = true if it's discontinued. A used one is worth clearly less than new.",
+  "exact_model": "",
+  "bot_model_right": true,
+  "_note4": "exact_model = maker, model and variant as YOU read it from the photos and text (e.g. \"Huawei Band 9\", \"Seiko SKX007\", \"PS5 Slim Digital\", \"iPhone 13 Pro 256GB\"); empty for a lot. bot_model_right = false if the bot's model (above) is wrong, e.g. a Band 9 the bot thought was a Band 10.",
   "model_value_ron_low": 0,
   "model_value_ron_high": 0,
   "price_note": "",
@@ -634,6 +643,9 @@ Other listings by the same seller that the bot has seen: {seller_listings}
   "new_price_ron_high": 0,
   "not_sold_new": false,
   "_note3": "new_price_ron/high = what this exact model costs NEW in Romanian shops today (eMAG, Altex, Flanco... via web search); 0 if you can't find it; not_sold_new = true if it's discontinued. A used one is worth clearly less than new.",
+  "exact_model": "",
+  "bot_model_right": true,
+  "_note4": "exact_model = maker, model and variant as YOU read it from the photos and text (e.g. \"Huawei Band 9\", \"Seiko SKX007\", \"PS5 Slim Digital\", \"iPhone 13 Pro 256GB\"); empty for a lot. bot_model_right = false if the bot's model (above) is wrong, e.g. a Band 9 the bot thought was a Band 10.",
   "model_value_ron_low": 0,
   "model_value_ron_high": 0,
   "price_note": "",
@@ -728,6 +740,15 @@ def is_limit_error(result: dict[str, Any] | None) -> bool:
     return bool(result and "error" in result and _LIMIT.search(str(result["error"])))
 
 
+def model_line(row: Any) -> str:
+    """The model the bot priced it as, for Claude to confirm or correct."""
+    key = row["model_key"] or ""
+    if "|" not in key:
+        return "The bot could not name the exact model (only the brand, if that). Name it yourself in exact_model.\n"
+    return (f"The bot read the model from the title as: {key.replace('|', ' ')}. Its prices are for THAT model; "
+            "check it against the photos and the text (generation, size, variant, storage).\n")
+
+
 def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
     """Run Claude on one listing row. Returns the parsed verdict, or None.
     Raises UsageLimit when Claude's plan limit is hit (nothing is saved, so it can be retried)."""
@@ -775,7 +796,7 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         + (TOO_CHEAP_BLOCK.format(price=row["price_ron"], ref=row["est_value_ron"]) if cheap and niche == "watches" else ""),
         seller_listings=seller_listings(db, row),
         noun=niche_of(niche).noun, checks=niche_of(niche).claude_checks.strip().lstrip("- "),
-        ebay_line=ebay_line(row) + liquidity_line(row) + retail_line(db, row),
+        ebay_line=model_line(row) + ebay_line(row) + liquidity_line(row) + retail_line(db, row),
     )
     lean = not db.kv_get("claude_no_lean_flags", False)
     try:
@@ -805,6 +826,14 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         # A "buy" on a too-cheap or often-faked watch: a second Claude call that only looks for proof it's fake.
         result = apply_fake_hunt(result, fake_hunt(row, result, s, folder, photos, lean))
         db.kv_set(f"ai_used:{date.today().isoformat()}", used_today(db) + 1)
+    if result.get("bot_model_right") is False and result.get("exact_model") and "error" not in result \
+            and result.get("authenticity") != "likely_fake" and not is_lot:
+        from . import bot  # the photos show another model: price it as that one, and don't teach the wrong model's book
+
+        new = bot.fix_model(db, s, row["key"], str(result["exact_model"]))
+        if new:
+            result["model_fixed"] = f"{(row['model_key'] or '').replace('|', ' ')} -> {new.replace('|', ' ')}"
+            row = db.get(row["key"])
     db.set_ai(row["key"], result)
     from . import retail
 

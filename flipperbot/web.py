@@ -686,7 +686,8 @@ function priceBox(l) {
       h("b", { class: profit < 0 ? "neg" : "" }, (profit < 0 ? "−" : "~") + lei(Math.abs(profit))
         + (l.price ? ` (${profit < 0 ? "−" : "+"}${Math.round(Math.abs(profit) * 100 / l.price)}%)` : "")),
       a && l.value ? h("span", { class: "reason" }, ` · ${botWas(l, lo)}`) : "") : null,
-    a && a.price_note ? h("div", { class: "profit reason" }, "Claude on the price: " + a.price_note) : null);
+    a && a.price_note ? h("div", { class: "profit reason" }, "Claude on the price: " + a.price_note) : null,
+    a && a.model_fixed ? h("div", { class: "profit reason" }, "Claude corrected the model: " + a.model_fixed + " (repriced)") : null);
 }
 
 // When Claude's price differs from the bot's, say which way: the bot's number came from asking prices.

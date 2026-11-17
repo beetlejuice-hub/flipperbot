@@ -23,3 +23,5 @@ README.md for setup and the tiers.
   Okazii, Vinted and eMAG refuse plain requests: not read. OLX bumps and reposts are recognized (`db.upsert`).
 - The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),
   8+ full Claude check. Tests never call the real Claude (`tests/conftest.py`).
+- Claude's check names the exact model from the photos; if it isn't the bot's, `bot.fix_model` re-keys the listing
+  (`model_fix` column, kept on later polls) so its prices and the price book are for the right model.

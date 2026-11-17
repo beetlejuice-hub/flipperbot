@@ -98,6 +98,9 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     # OLX has its own "brand" field on watch listings; count it as part of the description.
     brand_field = l.params.get("brand") if isinstance(l.params.get("brand"), str) else ""
     ident = identify(l.title, f"{l.description} {brand_field}", l.niche)
+    stored = db.get(l.key)
+    if stored is not None and stored["model_fix"]:
+        ident = apply_model_fix(ident, stored["model_fix"], l.niche)
     # Electronics: a sealed new console asks far more than a used one; compare used with used.
     # (LEGO prices sealed sets as their own model instead; the rest compare a used one with used private listings.)
     used_only = l.niche in ("electronics", "phones", "tools", "sneakers") and "new" not in ident.flags
@@ -137,7 +140,6 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         verdict.tier = "mid" if liq["label"] == "very slow" or verdict.tier == "good" else "good"
         verdict.reason = (f"sells {liq['label']}: similar ones have been up ~{liq['median_days']} days, "
                           f"{liq['for_sale']} for sale · " + verdict.reason)
-    stored = db.get(l.key)
     origin = stored["orig_created_at"] if stored is not None and stored["orig_created_at"] else None
     # A delete-and-post-again keeps its real age: the first time this seller posted the item.
     age = listing_age_days(origin or l.created_at)
@@ -166,6 +168,34 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     db.conn.commit()
     db.update_score(l.key)
     return db.get(l.key)
+
+
+def apply_model_fix(ident: Any, model_text: str, niche: str | None) -> Any:
+    """The listing's model as Claude named it (from the photos and the whole text), in place of the bot's guess
+    from the title. Keeps what the title said about condition (broken, part, sealed...)."""
+    fixed = identify(model_text, "", niche)
+    if "|" not in (fixed.model_key or ""):
+        return ident
+    ident.brand, ident.family, ident.refs = fixed.brand, fixed.family, fixed.refs
+    ident.focal, ident.lens = fixed.focal, fixed.lens
+    if fixed.brand not in ident.brands:
+        ident.brands = [fixed.brand, *ident.brands]
+    return ident
+
+
+def fix_model(db: DB, s: Settings, key: str, model_text: str) -> str | None:
+    """Claude says the listing is a different model than the bot thought: re-key and re-price it.
+    Returns the new model key, or None if the text doesn't name a model the bot knows."""
+    row = db.get(key)
+    if row is None or not model_text:
+        return None
+    new = apply_model_fix(identify(row["title"], row["description"] or "", row["niche"]), model_text, row["niche"]).model_key
+    if "|" not in (new or "") or new == row["model_key"]:
+        return None
+    db.conn.execute("UPDATE listings SET model_fix=? WHERE key=?", (model_text[:120], key))
+    db.conn.commit()
+    evaluate(db, row_to_listing(db.get(key)), s, ebay_cached_only=True)
+    return new
 
 
 def with_ebay(db: DB, l: Listing, ident: Any, verdict: Any, s: Settings, cached_only: bool = False) -> dict | None:

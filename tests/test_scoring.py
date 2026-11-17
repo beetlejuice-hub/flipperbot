@@ -187,3 +187,34 @@ def test_claude_corrects_the_models_price_for_its_other_listings(monkeypatch, tm
     other = db.get("olx:150")  # repriced from Claude's sold prices: 650 is now over what it sells for
     assert (other["est_value_ron"], other["est_high_ron"]) == (500, 600)
     assert "sold price Claude checked" in other["reason"] and other["score"] == 0
+
+
+def test_claude_names_another_model_and_the_listing_is_repriced_as_that(monkeypatch, tmp_path):
+    from flipperbot import ai
+
+    s = Settings()
+    monkeypatch.setattr(Settings, "photos_dir", property(lambda self: tmp_path))
+    monkeypatch.setattr(ai, "log_call", lambda *a: None)
+    monkeypatch.setattr(ai, "available", lambda s_: True)
+    db = setup(s)  # SKX007s at ~1000
+    assert db.get("olx:200")["model_key"] == "seiko|SKX007"
+    # the photos show an SKX009, not the SKX007 the title says
+    answer = {"verdict": "negotiate", "watches": [], "authenticity": "likely_genuine", "confidence": 70,
+              "resale_ron_low": 700, "resale_ron_high": 800, "model_value_ron_low": 700, "model_value_ron_high": 800,
+              "exact_model": "Seiko SKX009", "bot_model_right": False}
+    monkeypatch.setattr(ai.subprocess, "run",
+                        lambda args, **kw: subprocess.CompletedProcess(args, 0, json.dumps({"result": json.dumps(answer)}), ""))
+    got = ai.check(db, db.get("olx:200"), s)
+    r = db.get("olx:200")
+    assert r["model_key"] == "seiko|SKX009" and r["model_fix"] == "Seiko SKX009"
+    assert "SKX007 -> seiko SKX009" in got["model_fixed"]
+    assert db.model_price("seiko|SKX009") == (700, 800) and db.model_price("seiko|SKX007") is None  # the right book
+    bot.process(db, [olx.parse_offer(offer(200, "Seiko SKX007 automatic", 420))], s, alert=False)
+    assert db.get("olx:200")["model_key"] == "seiko|SKX009"  # seen again: Claude's model stays
+
+
+def test_claude_is_told_the_bots_model():
+    from flipperbot.ai import model_line
+
+    assert "seiko SKX007" in model_line({"model_key": "seiko|SKX007"})
+    assert "could not name" in model_line({"model_key": "seiko"})

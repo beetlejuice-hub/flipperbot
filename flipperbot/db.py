@@ -86,7 +86,9 @@ class DB:
                     # gone from OLX: when we found out, and why (sold / expired / reposted)
                     "gone_at TEXT", "gone_reason TEXT", "alive_checked_at TEXT",
                     # the price as the seller wrote it (e.g. 450 in EUR), next to price_ron
-                    "price_orig REAL"):  # your call on an Interesting listing: claude / skip / fake
+                    "price_orig REAL",
+                    # the exact model as Claude read it from the photos, when the title misled the bot
+                    "model_fix TEXT"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()

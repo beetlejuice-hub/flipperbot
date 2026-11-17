@@ -69,7 +69,7 @@ BROKEN = DAMAGE + ["display spart", "ecran spart", "sticla sparta", "spart", "nu
 # "neverlock(at)" means unlocked, so it's not here. Network-locked, iCloud/Google-locked, blacklisted: not resellable as is.
 LOCKED = ["icloud", "blocat icloud", "cont icloud", "codat", "codat in retea", "blocat in retea", "blocat retea", "doar retea",
           "frp", "cont google", "blacklist", "raportat furat", "imei blocat", "blocat imei"]
-PART_START = ["husa", "huse", "folie", "folii", "display", "ecran", "baterie", "acumulator", "carcasa", "rama", "incarcator",
+PART_START = ["husa", "huse", "folie", "folii", "geam", "geamuri", "protectie", "display", "ecran", "baterie", "acumulator", "carcasa", "rama", "incarcator",
               "cablu", "camera", "casti", "suport", "sticla", "capac", "mufa", "placa", "difuzor", "buton", "tastatura"]
 ACCESSORY_ANYWHERE = ["pentru iphone", "pentru samsung", "compatibil iphone", "compatibil cu iphone", "for iphone", "pentru galaxy"]
 CLONES = ["replica", "clona", "copie", "high copy", "1:1", "a+ quality", "aaa", "android in loc"]
@@ -78,7 +78,7 @@ SERVICE = ["reparatii", "reparatie", "service", "decodare", "decodez", "inlocuir
 
 
 # Accessories named anywhere in a phone title ("Iphone 13 husa"); not "camera" or "baterie" (phone ads describe those).
-ACCESSORY_WORDS = ["husa", "huse", "folie", "folii", "incarcator", "cablu", "carcasa", "rama", "sticla spate", "lentila",
+ACCESSORY_WORDS = ["husa", "huse", "folie", "folii", "geam protectie", "sticla protectie", "folie sticla", "incarcator", "cablu", "carcasa", "rama", "sticla spate", "lentila",
                    "suport", "stand", "magsafe", "airpods", "casti", "piese", "display nou", "ecran nou"]
 MIN_PRICE: dict[str, int] = {}
 

@@ -83,6 +83,7 @@ def test_sneaker_floors_keep_replicas_out():
 def test_phone_accessories_and_floors():
     from flipperbot.phonedb import min_price
     assert "part" in identify("Iphone 13 husa", "", "phones").flags
+    assert "part" in identify("Geam Sticla Ecran Display iPhone 12 13 Pro 14 15 Pro Max", "", "phones").flags
     assert "part" not in identify("iPhone 15 Pro 256GB, baterie 90%, camera perfecta", "", "phones").flags
     assert min_price("iphone 13 128gb") == 750 and min_price("galaxy s24 ultra") == 600 and min_price("iphone 8") is None
 

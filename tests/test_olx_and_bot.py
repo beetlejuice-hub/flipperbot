@@ -185,7 +185,7 @@ def test_replica_dealer_pattern():
     for l in market:
         l.seller_id = f"honest{l.source_id}"
     bot.process(db, market, s, alert=False)
-    dealer = [olx.parse_offer(offer(300 + i, f"TAG Heuer Carrera Calibre 5 v{i}", 3050)) for i in range(3)]
+    dealer = [olx.parse_offer(offer(300 + i, f"TAG Heuer Carrera Calibre 5 v{i}", 4800)) for i in range(3)]
     for l in dealer:
         l.seller_id = "dealer"
     bot.process(db, dealer, s, alert=False)

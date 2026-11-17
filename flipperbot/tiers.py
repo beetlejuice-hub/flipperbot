@@ -258,7 +258,11 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         if v.tier in ("good", "real_good") and not ident.brand_in_title:
             v.tier = "mid"
             v.reason += " (brand only named in the description)"
-        if v.tier in ("good", "real_good") and seg in ("luxury", "swiss") and discount >= 0.5:
+        if v.tier in ("good", "real_good") and seg == "luxury" and discount >= 0.65 and not f & {"vintage", "naive"}:
+            # A modern Omega/Rolex/Tag at a third of the market: replicas are, real ones (almost) never.
+            v.tier = "suspect"
+            v.reason = "likely fake: a real modern one is never this cheap, Claude must look first · " + v.reason
+        elif v.tier in ("good", "real_good") and seg in ("luxury", "swiss") and discount >= 0.5:
             v.reason += " · this cheap for the brand: make sure it's real"
         if ident.niche in ("watches", "cameras") and discount >= 0.6 and v.tier in ("good", "real_good") \
                 and "broken" not in f and seg not in ("luxury", "swiss") \

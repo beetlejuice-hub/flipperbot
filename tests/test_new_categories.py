@@ -118,3 +118,14 @@ def test_a_half_price_apple_watch_is_suspicious():
     v = judge(Listing("olx", "1", "u", "Apple watch series 10, GPS, Cellular 46mm", price_ron=550),
               identify("Apple watch series 10, GPS, Cellular 46mm"), [1200] * 8, S)
     assert v.tier == "mid" and "suspiciously cheap" in v.reason
+
+
+def test_phone_defects_and_storage_from_the_description():
+    i = identify("Iphone 14 pro max", "Vând iPhone 14 Pro Max   Defecte ce se vede în poză   256 memoria", "phones")
+    assert i.model_key == "apple|iphone 14 pro max 256gb" and "broken" in i.flags
+
+
+def test_a_modern_omega_at_a_quarter_of_the_market_is_likely_fake():
+    t = "Ceas automatic omega speedmaster"
+    v = judge(Listing("olx", "1", "u", t, price_ron=4500), identify(t), [18000, 19000, 18500, 20000, 18700, 19200], S)
+    assert v.tier == "suspect" and "likely fake" in v.reason

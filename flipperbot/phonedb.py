@@ -41,14 +41,14 @@ def match(title: str, full: str) -> TechMatch | None:
     if m:
         variant = re.sub(r"\s", " ", (m.group(2) or "")).replace("promax", "pro max")
         model = f"iphone {m.group(1)}" + (f" {variant}" if variant else "")  # "iphone air" too
-        return TechMatch(_brand("apple", "apple"), model + _storage(title), "apple")
+        return TechMatch(_brand("apple", "apple"), model + (_storage(title) or _storage(full)), "apple")
     m = GALAXY.search(title)
     if m and ("samsung" in title or "galaxy" in title):
         name = re.sub(r"\s", "", m.group(1))
         name = re.sub(r"z(fold|flip)(\d)", r"z \1 \2", name)
         variant = (m.group(2) or "").replace("+", "plus")
         model = f"galaxy {name}" + (f" {variant}" if variant else "")
-        return TechMatch(_brand("samsung", "samsung"), model + _storage(title), "samsung")
+        return TechMatch(_brand("samsung", "samsung"), model + (_storage(title) or _storage(full)), "samsung")
     m = PIXEL.search(title)
     if m:
         variant = re.sub(r"\s", " ", m.group(2) or "")
@@ -62,7 +62,8 @@ def match(title: str, full: str) -> TechMatch | None:
 DAMAGE = ["fisurat", "fisurata", "fisura", "crapat", "crapata", "crapatura", "indoit", "indoita", "cazatura", "a cazut",
           "ciobit", "ciobita", "pixeli morti", "dead pixel", "linii pe ecran", "pata pe ecran", "burn in", "ecran ars"]  # cracked, bent, dropped: priced as damaged
 BROKEN = DAMAGE + ["display spart", "ecran spart", "sticla sparta", "spart", "nu porneste", "nu se aprinde", "face id nu", "faceid nu",
-          "bootloop", "placa de baza", "nu are semnal", "fara semnal", "defect", "defecta", "pentru piese", "nefunctional",
+          "bootloop", "placa de baza", "nu are semnal", "fara semnal", "defect", "defecta", "defecte", "defectiuni",
+          "pentru piese", "nefunctional",
           "nefunctionala", "nefunctionale", "nu functioneaza", "face id nefunctional", "faceid nefunctional",
           "cand merge cand nu", "se restarteaza", "se blocheaza", "se inchide singur"]
 # "neverlock(at)" means unlocked, so it's not here. Network-locked, iCloud/Google-locked, blacklisted: not resellable as is.

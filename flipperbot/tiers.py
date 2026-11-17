@@ -105,6 +105,13 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
     # --- not for us ---------------------------------------------------------
     if not price or price < 10:
         return Verdict("bad", "no price")
+    if ident.niche in ("electronics", "phones") and ident.family and "broken" not in f and "part" not in f:
+        from . import phonedb, techdb
+
+        floor = techdb.MIN_PRICE.get(ident.family) if ident.niche == "electronics" else phonedb.min_price(ident.family)
+        if floor and price < floor:
+            return Verdict("bad", f"{price} lei is too cheap to be a working {ident.family} (under {floor}): "
+                                  "probably a part/accessory, a box, a game or bait")
     if ident.niche == "lots":  # no one model to price: the free lot score decides who gets a look at the photos
         from .lots import prefilter
 

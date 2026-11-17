@@ -520,7 +520,9 @@ The listing's photos are saved in this folder: {photos}
 Read every photo. Zoom in on model stickers and labels, ports, screens, the graphics card's name, the box.
 
 Then:
-1. Identify exactly what's sold: model AND variant (PS5 disc/digital/slim/Pro and storage; Switch V1/V2/OLED/Lite;
+1. FIRST: is the listing the device itself, or an accessory, part, box, game or code FOR it (a "PS5 controller", "PS5
+   buttons", "iPhone 13 case")? If it's the accessory, value the accessory, never the device.
+   Then identify exactly what's sold: model AND variant (PS5 disc/digital/slim/Pro and storage; Switch V1/V2/OLED/Lite;
    Steam Deck LCD/OLED and storage; graphics card chip and VRAM; processor; laptop or PC: CPU, GPU, RAM, storage,
    screen). What's included (controllers, games, box, charger) adds a little; list it.
 2. Is it what it claims, and can it be used?
@@ -599,7 +601,8 @@ The listing's photos are saved in this folder: {photos}
 Read every photo. Zoom in on labels, model codes, logos, serial or style-code tags, the box.
 
 Then:
-1. Identify exactly what's sold: maker, model and variant (and what's included). If it's a lot or bundle, go item by item.
+1. FIRST: is the listing the item itself, or an accessory, part, box or game FOR it? Value only what's actually sold.
+   Then identify exactly what's sold: maker, model and variant (and what's included). If it's a lot or bundle, go item by item.
 2. Is it real, unlocked and usable? What to check for this kind of item:
    {checks}
    - Scams and bait: far under market, stock or catalogue photos, "only bank transfer / courier", a seller with many

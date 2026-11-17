@@ -73,3 +73,10 @@ def test_sneaker_floors_keep_replicas_out():
     probe.niche = "sneakers"
     bot.process(db, [probe], s, alert=False)
     assert db.get("olx:3")["est_value_ron"] >= 700  # the six 220-lei fakes don't drag the market down
+
+
+def test_phone_accessories_and_floors():
+    from flipperbot.phonedb import min_price
+    assert "part" in identify("Iphone 13 husa", "", "phones").flags
+    assert "part" not in identify("iPhone 15 Pro 256GB, baterie 90%, camera perfecta", "", "phones").flags
+    assert min_price("iphone 13 128gb") == 750 and min_price("galaxy s24 ultra") == 600 and min_price("iphone 8") is None

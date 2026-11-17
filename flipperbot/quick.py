@@ -28,6 +28,9 @@ score 0-10: 0 = fake/replica, junk, not the item, or overpriced; 3 = ordinary, n
 6-7 = probably a good deal; 8-10 = clearly underpriced and genuine-looking, worth a full check right away.
 value_low/high: what it would realistically sell for in Romania within a few weeks (lei), as is.
 fake_risk: low, medium or high. note: at most 12 words, why.
+FIRST decide what is actually for sale. A controller, buttons, cover, skin, charger, cable, case, box, game, code or
+spare part FOR a device is NOT the device: score 0-2 and value it as that accessory. Value the EXACT model and
+variant ("model:" is the bot's guess; correct it in the note if the title says otherwise), never a pricier sibling.
 
 What a good flipper knows about these categories:
 {knowledge}
@@ -59,7 +62,9 @@ def listing_line(i: int, r: Any) -> str:
     niche = r["niche"] if "niche" in r.keys() else ""
     kind = {"cameras": "camera/lens", "electronics": "console/PC/laptop/part", "phones": "phone", "tools": "power tool",
             "lego": "LEGO", "sneakers": "sneakers"}.get(niche or "", "watch")
-    return f"[{i}] ({kind}) {r['title']} | {r['price_ron']} lei | {r['city'] or ''} | bot: {(r['reason'] or '')[:160]} | {desc}"
+    model = (r["model_key"] or "").replace("|", " ") or "model not recognized"
+    return (f"[{i}] ({kind}) {r['title']} | {r['price_ron']} lei | {r['city'] or ''} | model: {model} | "
+            f"bot: {(r['reason'] or '')[:160]} | {desc}")
 
 
 def parse(text: str) -> list[dict[str, Any]]:

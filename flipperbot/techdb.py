@@ -330,3 +330,27 @@ CLONES = ["consola magica", "magica", "game stick", "gamestick", "retro game sti
 LEADING = re.compile(r"^(?:vand|vind|vinde|vanzare|de vanzare|ofer|urgent|super pret|oferta|pachet|set|nou|noua)\b[\s:!,.-]*")
 SERVICE = ["reparatii", "reparatie", "service", "repar", "inchiriez", "inchiriere", "decodare", "modare"]
 WANTED = ["caut", "cumpar", "cumparam", "achizitionez", "achizitionam"]
+
+
+# Accessories, parts and games named anywhere in the title ("PS5 controller DualSense", "Butoane PS5", "Fifa 25 ps5"):
+# the thing for sale is the accessory, unless the title reads like the device with extras ("PS5 Slim + 2 controllere").
+ACCESSORY_WORDS = ["controller", "controler", "controllere", "controlere", "maneta", "manete", "dualsense", "dualshock",
+                   "joystick", "thumbstick", "thumbsticks", "grip", "grips", "buton", "butoane", "capac", "capace", "skin",
+                   "sticker", "stickere", "abtibild", "folie", "husa", "huse", "cablu", "cabluri", "incarcator", "statie",
+                   "dock", "docking", "ventilator", "cooler", "stand", "suport", "voucher", "telecomanda", "casti", "headset",
+                   "volan", "pedale", "mufa", "faceplate", "cover", "covers", "panouri", "carcasa", "piese", "joc", "jocuri",
+                   "fifa", "fc 24", "fc 25", "fc 26", "gta", "call of duty", "spider-man", "spiderman", "god of war", "nba 2k",
+                   "mortal kombat", "minecraft", "hogwarts", "elden ring", "forza", "mario", "zelda", "pokemon", "red dead",
+                   "ghost of", "horizon", "the last of us", "assassin", "battlefield", "tekken", "crash bandicoot", "lego"]
+BUNDLE = re.compile(r"(?:\+|(?<![a-z])(?:cu|plus|pachet|bundle|consola|console|si \d|\d+ (?:controllere|manete|jocuri)))(?![a-z])")
+
+# Below these (lei) it isn't a working one of the model, whatever the title: an accessory, a part, a box, or bait.
+MIN_PRICE = {"ps5 pro": 1800, "ps5": 900, "ps5 digital": 800, "ps4 pro": 400, "ps4": 250, "ps portal": 400, "ps vr2": 500,
+             "xbox series x": 900, "xbox series s": 450, "xbox one x": 350, "xbox one": 200, "switch 2": 1200,
+             "switch oled": 500, "switch": 300, "switch lite": 250, "steam deck oled": 1300, "steam deck": 700,
+             "rog ally x": 1500, "rog ally": 900, "legion go": 1200}
+
+
+def accessory_in_title(title: str) -> bool:
+    words = [w for w in ACCESSORY_WORDS if re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", title)]
+    return bool(words) and not BUNDLE.search(title)

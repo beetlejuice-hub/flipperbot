@@ -309,6 +309,12 @@ def _identify_catalog(title: str, description: str, niche: str) -> Identity:
     first = re.split(r"[^a-z0-9]+", body)[0] if body else ""
     if first in cat.PART_START or _any(title_n, cat.ACCESSORY_ANYWHERE):
         flags.add("part")
+    if hasattr(cat, "ACCESSORY_WORDS") and m and m.segment != "laptop" and m.segment != "pc":
+        from .techdb import BUNDLE
+
+        hits = [w for w in cat.ACCESSORY_WORDS if re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", title_n)]
+        if hits and not BUNDLE.search(title_n):
+            flags.add("part")  # "PS5 controller DualSense", "Iphone 13 husa": the accessory is for sale
     if niche == "electronics":
         games, device = techdb.GAMES.search(title_n), techdb.device_pos(title_n)
         if games and device is not None and games.start() < device:

@@ -161,3 +161,23 @@ def test_half_price_working_electronics_is_suspicious_and_broken_is_priced_as_br
 def test_damage_in_the_description():
     i = identify("Macbook pro m1 pro 2021 16 CITITI ANUNTUL", "A suferit o cazatura, cu ecranul indoit asa", "electronics")
     assert "broken" in i.flags
+
+
+@pytest.mark.parametrize("title", ["PS5 controller DualSense alb", "Butoane PS5 controller", "Buton power PS5", "Thumbstick ps5",
+                                   "DualSense Edge ps5", "Statie incarcare controller ps5", "Fifa 25 ps5", "PS5 skin sticker"])
+def test_accessories_named_anywhere_are_accessories(title):
+    assert "part" in identify(title, "", "electronics").flags
+
+
+@pytest.mark.parametrize("title", ["PS5 Slim + 2 controllere", "PS5 Digital cu 2 manete", "Consola PS5 Slim 1TB", "Vand PS5 Pro 2TB"])
+def test_consoles_with_extras_are_consoles(title):
+    assert "part" not in identify(title, "", "electronics").flags
+
+
+def test_a_ps5_can_not_cost_10_lei():
+    db = DB(":memory:")
+    l = olx.parse_offer({**offer(1, "PS5 slim alb", 10), "category": {"id": 1878}})
+    l.niche = "electronics"
+    bot.process(db, [l], S, alert=False)
+    r = db.get("olx:1")
+    assert r["tier"] == "bad" and "too cheap to be a working ps5" in r["reason"] and r["score"] == 0

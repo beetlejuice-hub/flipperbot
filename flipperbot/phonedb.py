@@ -72,3 +72,20 @@ ACCESSORY_ANYWHERE = ["pentru iphone", "pentru samsung", "compatibil iphone", "c
 CLONES = ["replica", "clona", "copie", "high copy", "1:1", "a+ quality", "aaa", "android in loc"]
 WANTED = ["caut", "cumpar", "cumparam", "achizitionez", "achizitionam", "cumpar telefoane"]
 SERVICE = ["reparatii", "reparatie", "service", "decodare", "decodez", "inlocuire display", "schimb display", "schimb baterie"]
+
+
+# Accessories named anywhere in a phone title ("Iphone 13 husa"); not "camera" or "baterie" (phone ads describe those).
+ACCESSORY_WORDS = ["husa", "huse", "folie", "folii", "incarcator", "cablu", "carcasa", "rama", "sticla spate", "lentila",
+                   "suport", "stand", "magsafe", "airpods", "casti", "piese", "display nou", "ecran nou"]
+MIN_PRICE: dict[str, int] = {}
+
+
+def min_price(model: str) -> int | None:
+    """Below this it isn't a working one: iPhone 11 ~450 lei, rising ~150 a generation; flagship Galaxy S ~350+."""
+    m = re.match(r"iphone (\d{1,2})", model)
+    if m and int(m.group(1)) >= 11:
+        return 150 * (int(m.group(1)) - 8)
+    m = re.match(r"galaxy s(\d{2})", model)
+    if m and int(m.group(1)) >= 21:
+        return 100 * (int(m.group(1)) - 18)
+    return None

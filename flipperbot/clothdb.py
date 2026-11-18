@@ -247,7 +247,8 @@ _NEGATED = re.compile(r"(?<![a-z])(?:fara|nu are|nu prezinta|nici o|nicio|niciun
 
 def clean(title: str) -> str:
     """Like the electronics one, and "fara pete, fara gauri, fara defecte" (no stains, no holes) said away first."""
-    return _NEGATED.sub(" ", _tech_clean(title))
+    t = re.sub(r"(?<![a-z])(margiela|mm6)(\s+\w+)?\s+replica(?![a-z])", r"\1\2", _tech_clean(title))  # a real line
+    return _NEGATED.sub(" ", t)
 
 
 def size(text: str) -> str | None:
@@ -261,14 +262,22 @@ CLONES = ["replica", "replici", "copie", "calitate premium", "premium quality", 
           "calitate top", "top calitate", "calitate 1:1", "1:1", "1 la 1", "aaa", "a+++", "first copy", "high copy",
           "mirror", "mirror quality", "top quality", "high quality", "calitate turceasca", "import turcia",
           "fake", "imitatie", "inspired", "inspirat", "model inspirat", "tip "]
-CLONES_IN_TEXT = ["replica", "calitate premium", "super calitate", "calitate 1:1", "1:1", "first copy", "high copy",
+CLONES_IN_TEXT = ["replica", "calitate premium", "calitatea premium", "calitate de top", "calitate top", "calitate superioara",
+                  "calitatea superioara", "super calitate", "calitate 1:1", "premium quality", "top quality", "aaa quality", "1:1", "first copy", "high copy",
                   "mirror quality", "calitate turceasca", "import turcia", "nu este original", "nu e original",
                   "nu sunt originale", "nu este originala", "nu e originala", "calitatea a", "inspired by"]
+# One of these is enough: a private seller has one size, a replica shop has them all.
+SHOP_SIZES = ["toate marimile", "marimi disponibile", "masuri disponibile", "marimile disponibile", "disponibil pe toate marimile",
+              "mai multe marimi", "orice marime", "diferite modele", "mai multe modele", "toate culorile", "mai multe culori",
+              "marimi de la", "marimi: s", "marimi s m l", "s m l xl", "s, m, l", "s-xl", "s - xl", "s-xxl", "m-xxl",
+              "pe stoc", "in stoc", "stoc limitat", "en gros", "engros", "angro"]
 # A shop selling every size of a "luxury" piece, new, is selling replicas.
 DEALER = ["toate marimile", "marimi disponibile", "disponibil pe toate marimile", "pe stoc", "stoc limitat",
           "ultimele stocuri", "en gros", "engros", "angro", "colectie noua", "colectia noua", "promo", "reducere",
           "livrare gratuita", "livrare in 24", "transport gratuit", "transport inclus", "plata la livrare", "ramburs",
           "comanda", "comenzi", "orice marime", "toate culorile", "mai multe culori", "set de 3", "pachet 3"]
+MANY_SIZES = re.compile(r"(?<![a-z0-9])(?:xs|s|m|l|xl|xxl)\s*[,/;-]?\s*(?:s|m|l|xl|xxl)\s*[,/;-]?\s*(?:m|l|xl|xxl|xxxl|2xl|3xl)(?![a-z0-9])")
+PLURAL = re.compile(r"(?<![a-z])(tricouri|hanorace|bluze|pulovere|geci|jachete|treninguri|sepci|camasi|blugi la|pantaloni la)(?![a-z])")
 PREMIUM_WORD = re.compile(r"(?<![a-z])(premium|calitate|lux)(?![a-z])")
 WANTED = ["caut", "cumpar", "cumparam", "achizitionez", "achizitionam"]
 SERVICE = ["croitorie", "retus", "spalatorie", "curatatorie", "inchiriez", "inchiriere"]
@@ -319,9 +328,17 @@ def extra_flags(title: str, full: str) -> set[str]:
         flags.add("replica")
     if seg in ("luxury", "grail", "premium") and PREMIUM_WORD.search(title):
         flags.add("replica")  # "Hanorac Balenciaga premium", "Tricou Moncler calitate": the seller's own word for a copy
-    if seg in ("luxury", "grail", "premium") and sum(
-            bool(re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", full)) for w in DEALER) >= 2:
+    if seg in ("luxury", "grail", "premium") and (
+            sum(bool(re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", full)) for w in DEALER) >= 2
+            or any(re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", full) for w in SHOP_SIZES)):
         flags.add("dealer")  # a shop: every size, delivery, cash on delivery
+    if seg in ("luxury", "grail", "premium") and MANY_SIZES.search(full):
+        flags.add("dealer")  # "marimi S, M, L, XL": every size of it in stock
+    if seg in ("luxury", "grail") and PLURAL.search(title):
+        flags.add("dealer")  # "Tricouri LV", "Geci Moncler": a stock of them
+    named = {b.name for p, b in _PATTERNS if b.segment in ("luxury", "grail", "premium") and p.search(title)}
+    if len(named) >= 3:
+        flags.add("dealer")  # "Hanorac Balenciaga Off White Amiri, Boss, Armani": a replica shop's keyword list
     if any(re.search(rf"(?<![a-z]){re.escape(w)}(?![a-z])", title) for w in NOT_MENS):
         flags.add("not_mens")
     if seg == "fast":

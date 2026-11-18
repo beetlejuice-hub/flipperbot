@@ -144,7 +144,7 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         return Verdict("bad", "repair shop ad")
     if "locked" in f:
         return Verdict("bad", "locked to someone's account (iCloud/Google): stolen or unusable")
-    if ident.niche == "clothing":
+    if ident.niche in ("clothing", "sneakers"):
         v = _clothing_flags(l, ident)
         if v:
             return v

@@ -98,6 +98,17 @@ def _message(r: Any) -> str | None:
         return None
 
 
+def _size(r: Any) -> str | None:
+    """Clothes and sneakers: the size, as the title or description gives it."""
+    if r["niche"] not in ("clothing", "sneakers"):
+        return None
+    from . import clothdb, sneakerdb
+    from .identify import normalize
+
+    text = normalize(f"{r['title']} {r['description'] or ''}")
+    return sneakerdb.size(text) if r["niche"] == "sneakers" else clothdb.size(text)
+
+
 def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
     photos = json.loads(r["photos"] or "[]")
     a = json.loads(r["ai"]) if r["ai"] else None
@@ -118,6 +129,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "message": _message(r),
         "listed_at": r["created_at"] or None, "currency": r["currency"], "price_orig": r["price_orig"],
         "retail": _retail(r, db), "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
+        "size": _size(r),
         "repost_of": r["repost_of"], "gone_at": r["gone_at"], "gone_reason": r["gone_reason"],
         "days_up": _days_up(r), "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
@@ -329,6 +341,14 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                 self._json(listing_json(row, db) if row else {"error": "unknown listing"}, 200 if row else 404)
             elif u.path == "/api/stats":
                 self._json(stats(db, s, qs.get("niche", "")))
+            elif u.path.startswith("/api/photo/"):
+                from . import manual
+
+                parts = unquote(u.path).split("/")  # /api/photo/<key>/<n>
+                path = manual.photo_path(s, parts[3], parts[4]) if len(parts) == 5 else None
+                if not path:
+                    return self._send(404, b"not found", "text/plain")
+                self._send(200, path.read_bytes(), "image/jpeg")
             elif u.path == "/api/flips":
                 self._json(db.flips())
             elif u.path == "/api/radar":
@@ -341,9 +361,31 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
             else:
                 self._send(404, b"not found", "text/plain")
 
+        def _add_by_hand(self) -> None:
+            """A Vinted (or other) listing pasted into the dashboard: judged like any other, Claude checks it if asked."""
+            from . import manual
+
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > manual.MAX_BODY_BYTES:
+                return self._json({"error": "too much: at most 8 photos"}, 413)
+            try:
+                data = json.loads(self.rfile.read(n) or b"{}")
+                db = DB(s.db_path)
+                row = manual.add(db, s, data if isinstance(data, dict) else {})
+            except manual.Invalid as e:
+                return self._json({"error": str(e)}, 400)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return self._json({"error": "that didn't arrive whole, try again"}, 400)
+            if data.get("claude") and ai.available(s):
+                db.set_triage(row["key"], "claude")
+                send_to_claude(s, row["key"])
+            self._json(listing_json(db.get(row["key"]), db))
+
         def do_POST(self) -> None:
             if not self._host_ok() or self.headers.get("X-Flipperbot") != "1":
                 return self._send(403, b"forbidden", "text/plain")
+            if urlparse(self.path).path == "/api/manual":
+                return self._add_by_hand()
             # Browsers send the listing key URL-encoded ("olx%3A123"): decode before matching.
             m = re.fullmatch(r"/api/(star|unstar|hide|unhide|ai|skip|fake|bought|resold|unbought)/([\w:.-]+)",
                              unquote(urlparse(self.path).path))
@@ -521,6 +563,19 @@ button.copy { font: inherit; font-size: 12px; padding: 1px 8px; border-radius: 6
   padding: 6px 4px; min-width: 190px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
 .multi label { display: flex; gap: 8px; align-items: center; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
 .err { color: var(--sus); font-size: 13px; }
+.tools button.mode { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card);
+  color: var(--ink); cursor: pointer; white-space: nowrap; } .tools button.mode.on { border-color: var(--accent); font-weight: 700; }
+dialog#add { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); width: min(560px, 94vw); padding: 16px; }
+dialog#add::backdrop { background: rgba(0,0,0,.45); }
+dialog#add h2 { margin: 0 0 4px; font-size: 18px; } dialog#add p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+dialog#add label { display: block; font-size: 13px; margin: 8px 0 3px; color: var(--muted); }
+dialog#add input, dialog#add textarea, dialog#add select { width: 100%; box-sizing: border-box; font: inherit; padding: 7px 9px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+dialog#add .two { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+dialog#add .thumbs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; } dialog#add .thumbs img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
+dialog#add .row2 { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; align-items: center; }
+dialog#add .row2 button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--ink); cursor: pointer; }
+dialog#add .row2 button.go { background: var(--accent); color: #fff; border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -528,6 +583,8 @@ button.copy { font: inherit; font-size: 12px; padding: 1px 8px; border-radius: 6
   <div class="top"><h1>flipperbot</h1><span class="status" id="status">loading…</span></div>
   <nav id="tabs"></nav>
   <div class="tools">
+    <button class="mode" id="clothesMode" title="Only clothing and sneakers: the clothes tracker">👕 Clothes</button>
+    <button class="mode" id="addBtn" title="Paste a Vinted listing you found: the bot prices it and checks it for fakes">➕ Vinted item</button>
     <details id="niches" class="multi"><summary>All categories</summary><div id="nicheList"></div></details>
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
@@ -535,6 +592,24 @@ button.copy { font: inherit; font-size: 12px; padding: 1px 8px; border-radius: 6
     </select>
   </div>
 </div></header>
+<dialog id="add"><form method="dialog" id="addForm">
+  <h2>Check a Vinted item</h2>
+  <p>Found something on Vinted? Paste it here: the bot names the brand and line, prices it against similar ones, runs the fake
+  checks, and Claude looks at the photos and labels. Add screenshots of the photos, especially the labels and tags.</p>
+  <label>Link</label><input name="url" type="url" placeholder="https://www.vinted.ro/items/…">
+  <label>Title</label><input name="title" required placeholder="Geaca Stone Island Ghost, marimea L">
+  <div class="two">
+    <div><label>Price (lei)</label><input name="price" required inputmode="decimal" placeholder="450"></div>
+    <div><label>Size</label><input name="size" placeholder="L"></div>
+    <div><label>Category</label><select name="niche"><option value="clothing">👕 Clothing</option><option value="sneakers">👟 Sneakers</option>
+      <option value="watches">⌚ Watches</option><option value="electronics">🎮 Electronics</option><option value="phones">📱 Phones</option></select></div>
+  </div>
+  <label>Description</label><textarea name="description" rows="4" placeholder="As the seller wrote it: condition, where bought, measurements…"></textarea>
+  <label>Photos (up to 8: labels, tags, badge, zips)</label><input name="photos" type="file" accept="image/*" multiple>
+  <div class="thumbs" id="thumbs"></div>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:10px;color:var(--ink)"><input type="checkbox" name="claude" checked style="width:auto"> Let Claude check it now</label>
+  <div class="row2"><span class="err" id="addErr"></span><button value="cancel" formnovalidate>Cancel</button><button class="go" id="addGo" value="go">Check it</button></div>
+</form></dialog>
 <main><div class="hint" id="hint" hidden>Keys: <b>C</b> let Claude check · <b>S</b> skip · <b>F</b> fake / not interested (top card)</div><div class="grid" id="grid"></div><div class="empty" id="empty" hidden></div></main>
 <script>
 const TABS = [
@@ -595,7 +670,7 @@ function h(tag, attrs = {}, ...kids) {
   for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
   return el;
 }
-const SITES = { olx: "OLX", facebook: "Facebook", publi24: "Publi24", lajumate: "Lajumate" };
+const SITES = { olx: "OLX", facebook: "Facebook", publi24: "Publi24", lajumate: "Lajumate", vinted: "Vinted", manual: "the seller's page" };
 const siteName = s => SITES[s] || s || "OLX";
 const lei = n => n == null ? "?" : n.toLocaleString("ro-RO") + " lei";
 function ago(iso) {
@@ -761,7 +836,7 @@ function card(l) {
             : ` · similar ones up ~${l.liquidity.median_days} days, ${l.liquidity.for_sale} for sale`)) : null,
         l.ebay && !(l.reason || "").startsWith("eBay:") ? h("div", { class: "checks" },
           `eBay (${l.ebay.n} listed, used): realistic ~${l.ebay.low.toLocaleString("ro-RO")}–${lei(l.ebay.high)}`) : null,
-        h("div", { class: "meta" }, [l.icon + " " + siteName(l.source),
+        h("div", { class: "meta" }, [l.icon + " " + siteName(l.source), l.size ? `size ${l.size}` : "",
           l.first_price ? `price cut from ${lei(l.first_price)}` : "",
           l.listed_at ? `listed ${ago(l.listed_at)}` : "",
           l.first_posted ? `reposted: first posted ${ago(l.first_posted)}` : "",
@@ -927,7 +1002,53 @@ let t;
 document.getElementById("q").addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 250); });
 document.getElementById("sort").addEventListener("change", load);
 window.addEventListener("hashchange", () => { view = location.hash.slice(1) || "interesting"; drawTabs(); load(); });
-sortFor(view); drawTabs(); refreshStats(); load();
+// --- the clothes tracker: only clothing and sneakers, one click ---------------------------------------------------
+const CLOTHES = ["clothing", "sneakers"];
+const clothesOn = () => chosen.length === CLOTHES.length && CLOTHES.every(k => chosen.includes(k));
+function drawMode() {
+  document.getElementById("clothesMode").classList.toggle("on", clothesOn());
+  document.title = clothesOn() ? "flipperbot · clothes" : "flipperbot";
+}
+document.getElementById("clothesMode").addEventListener("click", () => {
+  chosen = clothesOn() ? [] : [...CLOTHES];
+  localStorage.setItem("flipperbot-niches", JSON.stringify(chosen));
+  nichesDrawn = ""; drawMode(); refreshStats(); load();
+});
+
+// --- a Vinted item, pasted by hand (the bot never reads Vinted itself) ----------------------------------------------
+async function toJpeg(file) {  // smaller and always JPEG: what the bot stores and Claude reads
+  const bmp = await createImageBitmap(file).catch(() => null);
+  if (!bmp) throw new Error(`couldn't read ${file.name}: save it as JPEG or PNG`);
+  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+const addDlg = document.getElementById("add"), addForm = document.getElementById("addForm");
+document.getElementById("addBtn").addEventListener("click", () => { document.getElementById("addErr").textContent = ""; addDlg.showModal(); });
+addForm.photos.addEventListener("change", () => {
+  document.getElementById("thumbs").replaceChildren(...[...addForm.photos.files].slice(0, 8).map(f => h("img", { src: URL.createObjectURL(f), alt: "" })));
+});
+addForm.addEventListener("submit", async e => {
+  if (e.submitter && e.submitter.value === "cancel") return;
+  e.preventDefault();
+  const err = document.getElementById("addErr"), go = document.getElementById("addGo");
+  err.textContent = ""; go.disabled = true; go.textContent = "Checking…";
+  try {
+    const photos = [];
+    for (const f of [...addForm.photos.files].slice(0, 8)) photos.push(await toJpeg(f));
+    const body = { url: addForm.url.value, title: addForm.title.value, price: addForm.price.value, size: addForm.size.value,
+                   niche: addForm.niche.value, description: addForm.description.value, claude: addForm.claude.checked, photos };
+    const l = await api("/api/manual", { method: "POST", headers: { "X-Flipperbot": "1", "Content-Type": "application/json" },
+                                         body: JSON.stringify(body) });
+    addDlg.close(); addForm.reset(); document.getElementById("thumbs").replaceChildren();
+    const el = card(l); document.getElementById("grid").prepend(el); document.getElementById("empty").hidden = true;
+    el.scrollIntoView({ behavior: "smooth", block: "start" }); refreshStats();
+  } catch (x) { err.textContent = x.message; }
+  go.disabled = false; go.textContent = "Check it";
+});
+
+sortFor(view); drawTabs(); drawMode(); refreshStats(); load();
 setInterval(refreshStats, 60000);
 setInterval(() => { if (!document.hidden && !document.getElementById("q").value) load(); }, 120000);
 </script>

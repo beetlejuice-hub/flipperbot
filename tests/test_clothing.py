@@ -112,3 +112,73 @@ def test_the_fake_hunt_runs_on_often_faked_clothes():
     assert ai.needs_fake_hunt(row, {"verdict": "buy", "authenticity": "likely_genuine"})
     row = {**row, "brand": "Carhartt"}
     assert not ai.needs_fake_hunt(row, {"verdict": "buy", "authenticity": "likely_genuine"})
+
+
+def _jpeg_data_url():
+    import base64
+
+    return "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0" + b"0" * 100).decode()
+
+
+def test_a_vinted_item_pasted_by_hand(monkeypatch, tmp_path):
+    from flipperbot import manual
+
+    s = Settings()
+    monkeypatch.setattr(Settings, "photos_dir", property(lambda self: tmp_path))
+    db = DB(":memory:")
+    row = manual.add(db, s, {"url": "https://www.vinted.ro/items/7412345678-geaca-stone-island", "title": "Geaca Stone Island Ghost",
+                             "price": "450", "size": "L", "description": "purtata putin", "niche": "clothing",
+                             "photos": [_jpeg_data_url(), _jpeg_data_url()]})
+    assert row["key"] == "vinted:7412345678" and row["model_key"] == "stone island|ghost jacket"
+    assert (tmp_path / "vinted_7412345678" / "2.jpg").read_bytes().startswith(b"\xff\xd8")
+    assert manual.photo_path(s, "vinted:7412345678", "1") and manual.photo_path(s, "olx:1", "1") is None
+    assert manual.photo_path(s, "vinted:../../etc", "1") is None
+    assert "Marime: L" in row["description"]
+    # pasted again without photos: same listing, photos kept
+    row = manual.add(db, s, {"url": "https://www.vinted.ro/items/7412345678-x", "title": "Geaca Stone Island Ghost", "price": 420})
+    assert row["price_ron"] == 420 and len(__import__("json").loads(row["photos"])) == 2
+
+
+@pytest.mark.parametrize("data, why", [
+    ({"title": "x", "price": 10}, "title"), ({"title": "Geaca Moncler", "price": "abc"}, "price"),
+    ({"title": "Geaca Moncler", "price": 10, "url": "javascript:alert(1)"}, "https"),
+    ({"title": "Geaca Moncler", "price": 10, "photos": ["data:image/png;base64,AAAA"]}, "JPEG"),
+])
+def test_pasted_listings_are_checked(data, why, monkeypatch, tmp_path):
+    from flipperbot import manual
+
+    monkeypatch.setattr(Settings, "photos_dir", property(lambda self: tmp_path))
+    with pytest.raises(manual.Invalid, match=why):
+        manual.add(DB(":memory:"), Settings(), data)
+
+
+@pytest.mark.parametrize("title, key, flag", [
+    ("Rick Owens Geobasket 43", "rick owens|geobasket", None),
+    ("Maison Margiela GAT replica 42", "maison margiela|gat", None),  # "Replica" is Margiela's line, not a confession
+    ("Margiela Replica sneakers 43", "maison margiela|gat", None),
+    ("Adidasi Jordan 4 replica", "nike|jordan 4", "replica"),
+    ("Balenciaga Triple S", "balenciaga|triple s", None),
+    ("Adidasi Dior B22", "dior|b22", None),
+    ("Air Jordan 4 Retro Military Black, calitate premium", "nike|jordan 4", "replica"),
+])
+def test_designer_sneakers(title, key, flag):
+    i = identify(title, "", "sneakers")
+    assert i.model_key == key
+    assert (flag in i.flags) if flag else not i.flags & {"replica", "dealer"}
+
+
+def test_sneaker_shops_selling_every_size():
+    assert "dealer" in identify("Balenciaga Triple S", "marimi 40 41 42 43 44", "sneakers").flags
+    assert "dealer" in identify("Nike Dunk Low Panda", "disponibile 39-45, livrare gratuita", "sneakers").flags
+    assert "dealer" not in identify("Nike Dunk Low Panda 43", "purtati de 2 ori, marimea 43", "sneakers").flags
+    v = judge(Listing("olx", "1", "u", "Balenciaga Triple S", description="marimi 40 41 42 43 44", price_ron=450),
+              identify("Balenciaga Triple S", "marimi 40 41 42 43 44", "sneakers"), [], S)
+    assert v.tier == "suspect" and "shop" in v.reason
+
+
+def test_shop_listings_of_clothes():
+    for t, d in [("Hanorac Balenciaga Off White Amiri, Boss, Armani", ""), ("Tricouri LV-din bumbac 100%", ""),
+                 ("Geaca Burberry neagra marimi S,M,L", ""), ("Hoodie Off White", "Masuri disponibile in momentul postarii")]:
+        assert "dealer" in identify(t, d, "clothing").flags, t
+    for t, d in [("Geaca Stone Island marimea L", "stare buna, m"), ("Geaca Moncler", "marime: L / 50")]:
+        assert "dealer" not in identify(t, d, "clothing").flags, t

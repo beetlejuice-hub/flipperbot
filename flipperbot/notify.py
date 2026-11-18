@@ -55,6 +55,8 @@ def send(s: Settings, text: str, photo: str | None = None) -> None:
     if not enabled(s):
         print(text.replace("<b>", "").replace("</b>", ""))
         return
+    if photo and not photo.startswith("http"):
+        photo = None  # a hand-added listing's photo lives on this Mac, not on the web
     try:
         if photo and len(text) <= 1024:
             _call(s, "sendPhoto", chat_id=s.telegram_chat_id, photo=photo, caption=text, parse_mode="HTML")

@@ -207,3 +207,16 @@ def test_replicas_dont_set_the_market():
     bot.process(db, [*fakes, one], S, alert=False)
     r = db.get("olx:200")
     assert r["model_key"] == "moncler|puffer" and r["tier"] == "mid" and "under 900" in r["reason"]
+
+
+def test_live_false_alarms_and_catches():
+    # an adjustable cap fits "any size": not a shop
+    assert "dealer" not in identify("Sapca corteiz neagra", "Se poate regla la orice marime", "clothing").flags
+    # Acne Studios is rarely faked: a cheap used one is a find, not a replica
+    v = verdict("Tricou acne studios", 69, "nepurtat, marimea s", [250] * 6)
+    assert v.tier in ("good", "real_good")
+    # several jackets of ordinary brands in one listing: not one jacket at 50 lei
+    assert "lot" in identify("Geci Columbia , Superdry , Timeout", "", "clothing").flags
+    # a special edition, new, "two sizes available", at a fraction of retail
+    assert "dealer" in identify("Arc'teryx Alpha SV Jacket, Gore-Tex Pro, editie sarpe, marimile S si M",
+                                "am disponibile doua marimi: s si m", "clothing").flags

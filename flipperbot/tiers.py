@@ -94,6 +94,12 @@ def repair_cost(ident: Identity, s: Settings) -> int:
     return 0
 
 
+def _clothes_faked() -> set[str]:
+    from .clothdb import OFTEN_FAKED
+
+    return OFTEN_FAKED
+
+
 def _clothing_flags(l: Listing, ident: Identity) -> Verdict | None:
     """Men's clothing: replica talk, fast fashion, women's and kids', shops selling every size."""
     from . import clothdb
@@ -268,7 +274,7 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         comps = list(sold)
     market = market_price(comps) if (use_sold or len(comps) >= s.min_comps) else None
     if market and ident.niche == "clothing" and price < 0.35 * market and model_known \
-            and seg in ("grail", "luxury", "premium"):
+            and (seg in ("grail", "luxury") or (ident.brand and ident.brand.name in _clothes_faked())):
         return Verdict("suspect", f"{price} lei vs ~{market} usual: a third of what similar ones ask, nearly always a "
                                   "replica (or not what the title says)")
     if market and ident.niche in ("electronics", "phones", "tools", "lego", "sneakers") and price < 0.35 * market \

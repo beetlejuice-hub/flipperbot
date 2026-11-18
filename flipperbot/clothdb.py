@@ -276,7 +276,7 @@ CLONES_IN_TEXT = ["replica", "calitate premium", "calitatea premium", "calitate 
                   "nu sunt originale", "nu este originala", "nu e originala", "calitatea a", "inspired by"]
 # One of these is enough: a private seller has one size, a replica shop has them all.
 SHOP_SIZES = ["toate marimile", "marimi disponibile", "masuri disponibile", "marimile disponibile", "disponibil pe toate marimile",
-              "mai multe marimi", "orice marime", "diferite modele", "mai multe modele", "toate culorile", "mai multe culori",
+              "mai multe marimi", "diferite modele", "mai multe modele", "toate culorile", "mai multe culori",
               "marimi de la", "marimi: s", "marimi s m l", "s m l xl", "s, m, l", "s-xl", "s - xl", "s-xxl", "m-xxl",
               "pe stoc", "in stoc", "stoc limitat", "en gros", "engros", "angro"]
 # A shop selling every size of a "luxury" piece, new, is selling replicas.
@@ -344,6 +344,8 @@ def extra_flags(title: str, full: str) -> set[str]:
         flags.add("dealer")  # "marimi S, M, L, XL": every size of it in stock
     if seg in ("luxury", "grail") and PLURAL.search(title):
         flags.add("dealer")  # "Tricouri LV", "Geci Moncler": a stock of them
+    elif PLURAL.search(title):
+        flags.add("lot")  # "Geci Columbia, Superdry", "Tricouri Stussy - 4 modele": several pieces, several prices
     named = {b.name for p, b in _PATTERNS if b.segment in ("luxury", "grail", "premium") and p.search(title)}
     if len(named) >= 3:
         flags.add("dealer")  # "Hanorac Balenciaga Off White Amiri, Boss, Armani": a replica shop's keyword list

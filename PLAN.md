@@ -81,10 +81,14 @@ random searches.
    Vinted would need an official route (an API key/partner program) or the person's own browser.
 4. Mids: second price source; listings that sit unsold for weeks (negotiation targets).
 5. Learn from outcomes: mark what you bought and what it sold for, and tune the tiers from that.
-6. **More categories, picked with the dashboard's category boxes**: consoles and PC parts (now only on the
-   trend radar's watchlist), LEGO, then sneakers/clothes. Sneakers sell on Vinted (vinted.ro) and OLX:
-   Fuyucch1/Vinted-Notifications shows how Vinted's catalog search is read; check it answers plain
-   requests before relying on it, as with OLX (no browser imitation).
+6. **Clothes tracker (men's clothing + sneakers), started 2026-11-18.** `clothdb.py` + `knowledge/clothing.md`,
+   designer sneakers in `sneakerdb.py`, the dashboard's 👕 Clothes switch. Checked on ~5,000 live OLX listings: most
+   "luxury" men's clothing on OLX is replica shops; the rules catch the slang, disguised brand names, size runs and
+   shop listings, and keep them out of the comparisons. Vinted (checked 2026-11-18): the API answers 403 and the
+   catalog page shows Cloudflare's bot check after one request, so it's not read; the Vinted wrappers on GitHub get
+   around that by imitating a browser, which we don't do. Vinted items come in by hand ("➕ Vinted item").
+   Next: Facebook clothing queries on the second account; Grailed/Vestiaire sold prices through Claude's checks;
+   seasonal timing (outerwear Oct-Jan); a size-aware price (M/L sell fastest).
 7. **Seller reputation** (idea from BoPeng/ai-marketplace-monitor): OLX account age, number of listings,
    business flag into the score and the Claude check: new accounts and dealers posing as private sellers.
 8. **Price history per model**: a weekly median snapshot per model, so the radar's "rising" uses a real

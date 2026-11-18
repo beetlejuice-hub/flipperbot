@@ -182,3 +182,28 @@ def test_shop_listings_of_clothes():
         assert "dealer" in identify(t, d, "clothing").flags, t
     for t, d in [("Geaca Stone Island marimea L", "stare buna, m"), ("Geaca Moncler", "marime: L / 50")]:
         assert "dealer" not in identify(t, d, "clothing").flags, t
+
+
+def test_a_rare_line_is_compared_with_the_brands_same_kind():
+    db = DB(":memory:")
+    jackets = [olx.parse_offer({**offer(100 + i, f"Geaca Stone Island marimea L v{i}", p), "category": {"id": 2075}})
+               for i, p in enumerate([1200, 1100, 1300, 1000, 1250])]
+    ghost = olx.parse_offer({**offer(200, "Geaca Stone Island Ghost Piece marimea L", 650), "category": {"id": 2075}})
+    for l in [*jackets, ghost]:
+        l.niche = "clothing"
+    bot.process(db, [*jackets, ghost], S, alert=False)
+    r = db.get("olx:200")
+    assert r["model_key"] == "stone island|ghost jacket" and r["est_value_ron"]
+    assert "compared with Stone Island jackets in general" in r["reason"]
+
+
+def test_replicas_dont_set_the_market():
+    db = DB(":memory:")
+    fakes = [olx.parse_offer({**offer(100 + i, f"Geaca Moncler v{i}", 1250), "category": {"id": 2075},
+                              "description": "marimi disponibile S M L XL"}) for i in range(6)]
+    one = olx.parse_offer({**offer(200, "Geaca barbati moncler", 600), "category": {"id": 2075}})
+    for l in [*fakes, one]:
+        l.niche = "clothing"
+    bot.process(db, [*fakes, one], S, alert=False)
+    r = db.get("olx:200")
+    assert r["model_key"] == "moncler|puffer" and r["tier"] == "mid" and "under 900" in r["reason"]

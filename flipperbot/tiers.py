@@ -256,7 +256,7 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         if floor:
             comps = [p for p in comps if p >= floor]  # replicas priced like replicas don't set the market
             sold = [p for p in (sold or []) if p >= floor]
-            if price < floor and "broken" not in f:
+            if price < floor:  # a stain or a broken zip doesn't make a genuine one this cheap
                 what = f"{ident.brand.name} {ident.family}"
                 if "new" in f:
                     return Verdict("suspect", f"{what} new at {price} lei: under {floor}, a genuine one never sells this "
@@ -267,7 +267,7 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
     if use_sold:
         comps = list(sold)
     market = market_price(comps) if (use_sold or len(comps) >= s.min_comps) else None
-    if market and ident.niche == "clothing" and price < 0.35 * market and "broken" not in f and model_known \
+    if market and ident.niche == "clothing" and price < 0.35 * market and model_known \
             and seg in ("grail", "luxury", "premium"):
         return Verdict("suspect", f"{price} lei vs ~{market} usual: a third of what similar ones ask, nearly always a "
                                   "replica (or not what the title says)")

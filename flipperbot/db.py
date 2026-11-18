@@ -345,11 +345,13 @@ class DB:
         not shops and not sealed/new ones)."""
         rows = self.conn.execute(
             f"""SELECT key, price_ron, flags FROM listings
-               WHERE model_key=? AND price_ron IS NOT NULL AND price_ron > 0
+               WHERE model_key=? AND price_ron IS NOT NULL AND price_ron > 0 AND COALESCE(tier, '') != 'suspect'
                AND last_seen >= datetime('now', ?) {"AND COALESCE(business, 0) = 0" if used_only else ""}""",
             (model_key, f"-{days} days"),
         ).fetchall()
-        bad = {"lot", "replica", "part", "wanted", "service", "battery"} | ({"new"} if used_only else set())
+        # (clothes: replica shops and their "every size" stock, women's, fast fashion don't set a man's jacket's price)
+        bad = {"lot", "replica", "part", "wanted", "service", "battery", "dealer", "not_mens", "fast_fashion"} | (
+            {"new"} if used_only else set())
         out = []
         for r in rows:
             if r["key"] == exclude_key:

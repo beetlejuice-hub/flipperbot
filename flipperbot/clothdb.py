@@ -157,7 +157,7 @@ LINES: list[tuple[str, re.Pattern[str], str]] = [
     ("Rick Owens", _w(r"(geobasket|ramones|dunks|creatch|bauhaus|cargobelas|tecuatl|drkshdw)"), "{1}"),
 ]
 _LINE_FIX = {"retro x": "retro-x", "retrox": "retro-x", "snap t": "snap-t", "snapt": "snap-t", "nano puff": "nano puff",
-             "nanopuff": "nano puff", "bogo": "box logo", "lvc": "levi's vintage clothing", "tech": "tech fleece"}
+             "nanopuff": "nano puff", "bogo": "box logo", "ghost piece": "ghost", "lvc": "levi's vintage clothing", "tech": "tech fleece"}
 
 SIZE = re.compile(r"(?:(?<![a-z0-9'’])(?:marimea?|masura|size|mar\.?)\s?:?\s?(xxs|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4[4-9]|5[0-8])"
                   r"|(?<![a-z0-9'’])(xxs|xs|xl|xxl|xxxl|2xl|3xl)|(?<=[\s(,/-])(s|m|l)(?=\s*(?:$|[),/]|\s-)))(?![a-z0-9])")
@@ -205,9 +205,15 @@ def _line(b: Brand, title: str) -> str:
     return ""
 
 
+PUFFER_BRANDS = {"Moncler", "Canada Goose", "Parajumpers", "Moose Knuckles", "Mackage", "Herno", "Moncler Grenoble"}
+
+
 def kind_of(b: Brand, title: str) -> str | None:
     """The kind of item, with a named line's own kind where the title's word misleads ("Geaca Moncler Maya": a puffer)."""
     kind = item_type(title)
+    if b.name in PUFFER_BRANDS and kind in ("jacket", None) and not re.search(r"(?<![a-z])(subtire|usoara|softshell|"
+                                                                             r"windbreaker|de primavara|primavara)", title):
+        return "puffer" if kind else kind  # a Moncler "geaca" is a down jacket; a light one says so
     line = _line(b, title)
     if line and b.name in LINE_KIND and kind in (None, "jacket", "coat"):
         if b.name == "The North Face" and not line.startswith("nuptse"):
@@ -229,6 +235,8 @@ def match(title: str, full: str) -> TechMatch | None:
         return None
     kind = kind_of(b, title)
     line = _line(b, title)
+    if not line and b.name in PUFFER_BRANDS and kind == "puffer":
+        return TechMatch(b, "puffer", b.segment)
     if line and (b.name in NO_SUFFIX or not kind or kind in line):
         model = line
         if b.name == "Supreme" and kind:

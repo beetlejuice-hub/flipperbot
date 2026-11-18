@@ -110,7 +110,20 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=used_only, broken=broken_comps) \
         if ident.model_key else []
     sold = db.sold(ident.model_key, used_only=used_only)
+    broader = None
+    if l.niche == "clothing" and ident.brand and len(comps) < s.min_comps and not sold:
+        # Few of this line (a Stone Island Ghost jacket): compare with the brand's same kind of item, cautiously.
+        from . import clothdb
+
+        kind = clothdb.kind_of(ident.brand, clothdb.clean(normalize(l.title)))
+        key = f"{ident.brand.name.lower()}|{kind}" if kind else None
+        if key and key != ident.model_key:
+            more = db.comparable_prices(key, exclude_key=l.key, used_only=used_only)
+            if len(more) >= s.min_comps:
+                comps, broader = more, f"{ident.brand.name} {kind}s in general"
     verdict = judge(l, ident, comps, s, db.model_price(ident.model_key), sold=[p for p, _ in sold])
+    if broader and verdict.est_value_ron:
+        verdict.reason += f" · few of this line for sale: compared with {broader}"
     from . import retail
     from .tiers import with_retail
 

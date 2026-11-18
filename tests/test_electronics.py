@@ -68,7 +68,11 @@ def test_a_cheap_ps5_against_other_ps5s():
 def test_the_category_is_on_and_searched():
     assert "electronics" in S.niches and niches.get("electronics").icon == "🎮"
     db = DB(":memory:")
-    searches = bot.pick_searches(db, S)
+    searches = []
+    for _ in range(len(S.niches)):  # categories take turns: electronics comes up within a round
+        searches = bot.pick_searches(db, S)
+        if any(n == "electronics" for q, c, n in searches):
+            break
     assert ("1878" in {c for q, c, n in searches if n == "electronics"})
     assert sum(1 for q, c, n in searches if q and n == "electronics") == S.searches_per_poll
 

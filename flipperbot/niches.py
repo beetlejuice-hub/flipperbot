@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import camdb, legodb, phonedb, sneakerdb, techdb, tooldb, watchdb
+from . import camdb, clothdb, legodb, phonedb, sneakerdb, techdb, tooldb, watchdb
 from .watchdb import Brand
 
 
@@ -240,6 +240,46 @@ SNEAKERS = Niche(
 )
 
 
+CLOTHING = Niche(
+    key="clothing", label="Clothing", icon="👕", noun="piece of men's clothing",
+    brands=clothdb.BRANDS,
+    valuable_segments=frozenset({"grail", "luxury", "premium"}),
+    categories=(),  # the men's clothing categories hold every no-name shirt: the title must name a brand
+    # men's winter jackets, jackets, hoodies, sweatshirts/pullovers (more in the searches)
+    feeds=("2071", "2075", "2012", "2058"),
+    words=("geaca", "geci", "jacheta", "jacket", "puffer", "puf", "parka", "palton", "vesta", "hanorac", "hoodie", "bluza",
+           "pulover", "sweater", "cardigan", "tricou", "t-shirt", "tee", "camasa", "shirt", "overshirt", "pantaloni", "pants",
+           "cargo", "blugi", "jeans", "trening", "tracksuit", "polar", "fleece", "shell", "nuptse", "sapca", "caciula",
+           "geanta", "rucsac", "borseta", "inel", "lant", "bomber", "windbreaker", "anorak", "gilet", "polo", "short",
+           "pantaloni scurti", "haine", "compleu"),
+    not_words=tuple(clothdb.NOT_MENS) + ("parfum", "ochelari", "ceas", "adidasi", "sneakers", "pantofi", "incaltaminte",
+                                        "papuci", "sandale", "telefon", "husa"),
+    search_pool=("stone island", "cp company", "arcteryx", "moncler barbati", "canada goose", "the north face nuptse",
+                 "patagonia", "barbour", "carhartt", "stussy", "supreme", "polo bear ralph lauren", "levis 501 vintage",
+                 "our legacy", "acne studios", "rick owens", "margiela", "raf simons", "helmut lang", "chrome hearts",
+                 "kapital", "corteiz", "aime leon dore", "fear of god", "nike acg", "belstaff", "parajumpers",
+                 "stone island vintage", "massimo osti", "salomon geaca", "arc'teryx beta", "carhartt detroit"),
+    focus_pool=("lot haine barbati", "haine de firma lot", "geaca de munte", "geaca ceara", "geaca de vanatoare",
+                "haine vechi de firma", "debarasare haine", "geaca vintage", "geaca gore-tex", "geaca militara",
+                "tricou vintage", "lot geci", "haine de firma barbati", "pulover vintage"),
+    facebook_queries=("stone island", "arcteryx", "moncler", "carhartt", "the north face", "patagonia", "geaca de firma",
+                      "haine de firma"),
+    strong_words=("stone island", "arcteryx", "arc'teryx", "moncler", "canada goose", "carhartt", "north face", "patagonia",
+                  "barbour", "ralph lauren", "supreme", "stussy", "cp company", "c.p. company", "rick owens", "margiela"),
+    repair_ron={"grail": 150, "luxury": 150, "premium": 80, "basic": 40, "fast": 20},  # cleaning, a zip, a small mend
+    claude_checks="""- Men's clothing: name the brand, the exact line and the kind of item (an Alpha SV, a Nuptse 1996, a Stone
+     Island Ghost overshirt), size from the label, condition (pilling, stains, holes, zips, cuffs, down loft).
+   - Fakes are most of the cheap "luxury" in Romania: check the brand's tells in the category notes (Stone Island
+     badge and Certilogo, Moncler NFC/QR tag, Canada Goose disc patch and hologram, Arc'teryx bird embroidery and
+     AquaGuard zips, TNF embroidery, Supreme box logo, Chrome Hearts silver stamps, Ralph Lauren pony). Read every
+     label in the photos: care tags, wash tags, country, codes. "premium", "super calitate", "1:1", every size in
+     stock, a disguised brand name ("mo n cler"), stock photos or a shop-like seller mean a replica. If the photos
+     don't show the labels and tags, authenticity is "unsure" and the first question for the seller asks for them.
+   - Price against SOLD prices for this line and condition (Vinted, Grailed, Vestiaire, eBay sold), not asking
+     prices; outerwear sells in autumn and winter, M and L fastest.""",
+)
+
+
 LOTS = Niche(
     key="lots", label="Lots & clear-outs", icon="📦", noun="lot of mixed second-hand items",
     brands=[],
@@ -262,7 +302,7 @@ LOTS = Niche(
 )
 
 
-ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS, PHONES, TOOLS, LEGO, SNEAKERS, LOTS)}
+ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS, PHONES, TOOLS, LEGO, SNEAKERS, CLOTHING, LOTS)}
 
 
 def get(key: str | None) -> Niche:

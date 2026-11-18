@@ -287,7 +287,8 @@ def _smart_words(t: str) -> str:
     return re.sub(r"(apple watch|iwatch) (\d{1,2})(?![0-9])", r"\1 series \2", t)
 
 
-CATALOGS = {"electronics": "techdb", "phones": "phonedb", "tools": "tooldb", "lego": "legodb", "sneakers": "sneakerdb"}
+CATALOGS = {"electronics": "techdb", "phones": "phonedb", "tools": "tooldb", "lego": "legodb", "sneakers": "sneakerdb",
+            "clothing": "clothdb"}
 
 
 def _catalog(niche: str):

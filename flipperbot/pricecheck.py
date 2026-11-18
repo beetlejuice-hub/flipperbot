@@ -40,7 +40,13 @@ def price_links(r: Any) -> list[list[str]]:
         "tools": ["eMAG new", f"https://www.emag.ro/search/{quote_plus(q)}"],
         "lego": ["BrickLink", f"https://www.bricklink.com/v2/search.page?q={quote_plus(q.replace('lego ', '').replace(' sealed', ''))}"],
         "sneakers": ["StockX", f"https://stockx.com/search?s={quote_plus(q)}"],
+        # Grailed: what designer, archive and streetwear pieces really go for (sold listings)
+        "clothing": ["Grailed", f"https://www.grailed.com/shop?query={quote_plus(q)}"],
     }.get(niche)
+    if niche in ("clothing", "sneakers"):  # the clothes market people resell on: one click, opened by you in your browser
+        shop = [shop, ["Vinted", f"https://www.vinted.ro/catalog?search_text={quote_plus(q)}"]]
+        return [["eBay sold", f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(q)}&LH_Sold=1&LH_Complete=1"], *shop,
+                ["OLX", f"https://www.olx.ro/oferte/q-{quote_plus(q.replace(' ', '-'))}/"]]
     return [
         ["eBay sold", f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(q)}&LH_Sold=1&LH_Complete=1"],
         *([shop] if shop else []),

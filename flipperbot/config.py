@@ -77,9 +77,11 @@ class Settings:
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
     niches: list[str] = field(default_factory=lambda: ["watches", "cameras", "electronics", "phones", "tools", "lego", "sneakers",
-                                                       "lots"])
-    # Each poll covers this many categories, taking turns (watches every time), so OLX isn't asked too much at once.
+                                                       "clothing", "lots"])
+    # Each poll covers this many categories, taking turns (the every_poll ones every time), so OLX isn't asked too
+    # much at once.
     niches_per_poll: int = 3
+    every_poll: list[str] = field(default_factory=lambda: ["watches", "clothing"])
     # Lots and clear-outs (lots.py): the free score a lot needs for a cheap look at its photos (Haiku, 3 photos),
     # how many lots a day get that look, and how many per poll.
     # New prices in shops (retail.py): how many models a day get looked up (one Claude call with web search).

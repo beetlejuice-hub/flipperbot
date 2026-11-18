@@ -94,7 +94,7 @@ def _name(model_key: str, niche: str | None) -> str:
     brand, _, model = model_key.partition("|")
     words = " ".join(dict.fromkeys(f"{brand} {model}".replace("|", " ").split()))
     return words + {"watches": "", "electronics": "", "phones": " (phone)", "tools": " (power tool)",
-                    "lego": " (LEGO set)", "sneakers": " (sneakers)", "cameras": ""}.get(niche or "", "")
+                    "lego": " (LEGO set)", "sneakers": " (sneakers)", "clothing": " (men's)", "cameras": ""}.get(niche or "", "")
 
 
 def candidates(db: DB, limit: int = 15) -> list[tuple[str, str]]:

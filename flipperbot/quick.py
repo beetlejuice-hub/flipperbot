@@ -61,7 +61,7 @@ def listing_line(i: int, r: Any) -> str:
     desc = re.sub(r"\s+", " ", r["description"] or "")[:300]
     niche = r["niche"] if "niche" in r.keys() else ""
     kind = {"cameras": "camera/lens", "electronics": "console/PC/laptop/part", "phones": "phone", "tools": "power tool",
-            "lego": "LEGO", "sneakers": "sneakers"}.get(niche or "", "watch")
+            "lego": "LEGO", "sneakers": "sneakers", "clothing": "men's clothing"}.get(niche or "", "watch")
     model = (r["model_key"] or "").replace("|", " ") or "model not recognized"
     return (f"[{i}] ({kind}) {r['title']} | {r['price_ron']} lei | {r['city'] or ''} | model: {model} | "
             f"bot: {(r['reason'] or '')[:160]} | {desc}")

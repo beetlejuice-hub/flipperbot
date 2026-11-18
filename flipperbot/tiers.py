@@ -94,6 +94,25 @@ def repair_cost(ident: Identity, s: Settings) -> int:
     return 0
 
 
+def _clothing_flags(l: Listing, ident: Identity) -> Verdict | None:
+    """Men's clothing: replica talk, fast fashion, women's and kids', shops selling every size."""
+    from . import clothdb
+
+    f, brand = ident.flags, (ident.brand.name if ident.brand else "")
+    if "replica" in f:
+        split = clothdb.split_brand(clothdb.clean(normalize(l.title)))
+        why = (f"the brand name is disguised to slip past OLX's filters ({split})" if split else
+               "the seller's own words for a copy (premium, super calitate, 1:1, inspired...)")
+        return Verdict("bad", f"replica: {why}")
+    if "fast_fashion" in f:
+        return Verdict("bad", f"{brand}: fast fashion, no resale value")
+    if "not_mens" in f:
+        return Verdict("bad", "women's or kids' clothing: not tracked")
+    if "dealer" in f:
+        return Verdict("suspect", f"{brand} sold like a shop (every size, delivery, cash on delivery): almost always replicas")
+    return None
+
+
 def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
           checked: tuple[int, int] | None = None, sold: list[int] | None = None) -> Verdict:
     """checked: what Claude found an ordinary one of this exact model sells for (sold prices), if it has
@@ -125,6 +144,10 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         return Verdict("bad", "repair shop ad")
     if "locked" in f:
         return Verdict("bad", "locked to someone's account (iCloud/Google): stolen or unusable")
+    if ident.niche == "clothing":
+        v = _clothing_flags(l, ident)
+        if v:
+            return v
     if "replica" in f:
         return Verdict("bad", "says replica/copy")
     if price > s.budget_ron:
@@ -225,10 +248,29 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
                     return Verdict("suspect", f"{ident.family} new at {price} lei: under {floor}, a genuine pair never "
                                               "sells this cheap new: likely a replica")
                 return Verdict("mid", f"cheap for a {ident.family} ({price} lei, under {floor}): often a replica, check it")
+    if ident.niche == "clothing" and ident.family and ident.brand:
+        from . import clothdb
+
+        title = clothdb.clean(normalize(l.title))
+        floor = clothdb.floor(ident.brand.name, seg or "", ident.family, clothdb.kind_of(ident.brand, title))
+        if floor:
+            comps = [p for p in comps if p >= floor]  # replicas priced like replicas don't set the market
+            sold = [p for p in (sold or []) if p >= floor]
+            if price < floor and "broken" not in f:
+                what = f"{ident.brand.name} {ident.family}"
+                if "new" in f:
+                    return Verdict("suspect", f"{what} new at {price} lei: under {floor}, a genuine one never sells this "
+                                              "cheap new: likely a replica")
+                return Verdict("mid", f"cheap for a genuine {what} ({price} lei, under {floor}): often a replica, "
+                                      "check the labels and tags")
     use_sold = bool(sold) and len(sold) >= 3 and model_known
     if use_sold:
         comps = list(sold)
     market = market_price(comps) if (use_sold or len(comps) >= s.min_comps) else None
+    if market and ident.niche == "clothing" and price < 0.35 * market and "broken" not in f and model_known \
+            and seg in ("grail", "luxury", "premium"):
+        return Verdict("suspect", f"{price} lei vs ~{market} usual: a third of what similar ones ask, nearly always a "
+                                  "replica (or not what the title says)")
     if market and ident.niche in ("electronics", "phones", "tools", "lego", "sneakers") and price < 0.35 * market \
             and "broken" not in f and model_known:
         # A console, phone, tool, set or pair at a third of the usual price is almost never the real thing working:
@@ -272,6 +314,13 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             # against all Seamasters, a kit lens against pro ones) than a steal: Claude looks before it's a deal.
             v.tier = "mid"
             v.reason = "far under similar listings: check it's the same version, let Claude look · " + v.reason
+        from .clothdb import OFTEN_FAKED as _faked
+
+        if ident.niche == "clothing" and discount >= 0.6 and v.tier in ("good", "real_good") and "broken" not in f \
+                and (seg in ("grail", "luxury") or (ident.brand and ident.brand.name in _faked)):
+            # Moncler, Canada Goose, Chrome Hearts at 40% of the market: more often a good replica than a steal.
+            v.tier = "mid"
+            v.reason = "far under similar listings: replicas of this brand are common, let Claude check the labels · " + v.reason
         smartwatch = ident.niche == "watches" and seg in ("smart", "band")
         if (ident.niche in ("electronics", "phones") or smartwatch) and discount >= 0.45 \
                 and v.tier in ("good", "real_good") and "broken" not in f:

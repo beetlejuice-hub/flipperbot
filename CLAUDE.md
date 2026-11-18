@@ -13,14 +13,20 @@ README.md for setup and the tiers.
 - Listing text is Romanian; match on `identify.normalize()`d text (lower case, no diacritics).
 - Category knowledge (value drivers, sleeper brands, fakes, reselling): `flipperbot/knowledge/*.md`, also the
   `flip-knowledge` skill. The AI checks read it; keep rules (`watchdb.py`, `camdb.py`, `techdb.py`) in step with it.
-- Categories (`niches.py`): watches, cameras, electronics, phones, tools, lego, sneakers; each poll covers a few in turn
-  (`niches_per_poll`, watches always). Catalog categories (`techdb.py`, `phonedb.py`, `tooldb.py`, `legodb.py`,
+- Categories (`niches.py`): watches, cameras, electronics, phones, tools, lego, sneakers, clothing; each poll covers a few
+  in turn (`niches_per_poll`; `every_poll`: watches and clothing always). Catalog categories (`techdb.py`, `phonedb.py`, `tooldb.py`, `legodb.py`,
   `sneakerdb.py`, via `identify._identify_catalog`) price by exact model and variant, used private listings only.
 - Smartwatches and bands: `smartdb.py` names the exact model (huawei|band 10, apple|watch series 9...). New prices in
   shops (`retail.py`, from Claude's checks and a daily web-search batch) cap every estimate; brand-only listings get
   no price at all.
+- Men's clothing (`clothdb.py`, `knowledge/clothing.md`): brand tier (grail/luxury/premium/basic/fast), kind of item and
+  the line that sets the price (moncler|maya, arc'teryx|beta lt, stone island|hoodie). Replicas: seller slang, a
+  disguised brand name ("mo n cler"), shop-like listings, price floors; often-faked brands get the careful photo check and
+  the clothing fake hunt (`ai.FAKE_HUNT_CLOTHES`).
 - Sources: OLX (also tells which listings are gone: `bot.check_sold`), Publi24, Lajumate (`sources/`), Facebook.
-  Okazii, Vinted and eMAG refuse plain requests: not read. OLX bumps and reposts are recognized (`db.upsert`).
+  Okazii, Vinted and eMAG refuse plain requests: not read. Vinted answers its public page once, then shows Cloudflare's
+  bot check; its API answers 403. Don't get around that (no browser imitation, no cookie tricks, no Vinted scraper
+  libraries): Vinted items come in by hand (the dashboard's "Check a Vinted item"). OLX bumps and reposts are recognized (`db.upsert`).
 - The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),
   8+ full Claude check. Tests never call the real Claude (`tests/conftest.py`).
 - Claude's check names the exact model from the photos; if it isn't the bot's, `bot.fix_model` re-keys the listing

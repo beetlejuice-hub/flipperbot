@@ -103,7 +103,7 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         ident = apply_model_fix(ident, stored["model_fix"], l.niche)
     # Electronics: a sealed new console asks far more than a used one; compare used with used.
     # (LEGO prices sealed sets as their own model instead; the rest compare a used one with used private listings.)
-    used_only = l.niche in ("electronics", "phones", "tools", "sneakers") and "new" not in ident.flags
+    used_only = l.niche in ("electronics", "phones", "tools", "sneakers", "clothing") and "new" not in ident.flags
     # Catalog categories: a broken one is compared with other broken ones of the model, not with working ones minus
     # a repair guess (a "pentru piese" iPhone isn't a working iPhone minus 400 lei).
     broken_comps = l.niche in ("electronics", "phones", "tools") and "broken" in ident.flags
@@ -255,13 +255,14 @@ def pick_searches(db: DB, s: Settings) -> list[Search]:
     out: list[Search] = []
     keys = list(s.niches)
     if s.niches_per_poll and len(keys) > s.niches_per_poll:
-        # Watches every poll; the other categories take turns.
-        rest = [k for k in keys if k != "watches"]
-        start = db.kv_get("niche_cursor", 0) % len(rest)
-        take = s.niches_per_poll - (1 if "watches" in keys else 0)
+        # Watches and clothing (every_poll) every poll; the other categories take turns.
+        always = [k for k in keys if k in s.every_poll]
+        rest = [k for k in keys if k not in always]
+        start = db.kv_get("niche_cursor", 0) % max(len(rest), 1)
+        take = max(s.niches_per_poll - len(always), 1)
         picked = [rest[(start + i) % len(rest)] for i in range(min(take, len(rest)))]
         db.kv_set("niche_cursor", start + len(picked))
-        keys = (["watches"] if "watches" in keys else []) + picked
+        keys = always + picked
     for key in keys:
         n = niches.get(key)
         search_pool = s.search_pool if key == "watches" else list(n.search_pool)

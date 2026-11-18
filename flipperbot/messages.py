@@ -20,6 +20,8 @@ QUESTIONS = {
     "tools": ["Merge fără probleme? Un video scurt cu ea pornită?", "Câți acumulatori (ce Ah) și încărcător are?"],
     "lego": ["Este complet, cu minifigurinele, instrucțiunile și cutia?", "Sau e sigilat? O poză cu cutia din toate părțile?"],
     "sneakers": ["Ce mărime scrie pe eticheta din interior?", "Aveți cutia originală sau bonul? Poze cu talpa și eticheta?"],
+    "clothing": ["Ce mărime scrie pe eticheta din interior? Îmi puteți trimite poze cu toate etichetele (gât, compoziție, codul)?",
+                 "Are pete, găuri sau scame? De unde a fost cumpărată (bon, magazin)?"],
     "lots": ["Se vinde tot lotul împreună?", "Puteți trimite poze mai de aproape cu obiectele din imagini?"],
 }
 

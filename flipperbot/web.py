@@ -129,7 +129,7 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "message": _message(r),
         "listed_at": r["created_at"] or None, "currency": r["currency"], "price_orig": r["price_orig"],
         "retail": _retail(r, db), "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
-        "size": _size(r),
+        "size": _size(r), "alive_checked_at": r["alive_checked_at"], "gone_reason": r["gone_reason"],
         "repost_of": r["repost_of"], "gone_at": r["gone_at"], "gone_reason": r["gone_reason"],
         "days_up": _days_up(r), "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
@@ -142,7 +142,8 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
 # What the bot finds interesting and you haven't decided on yet: deals, lots, old watches whose model
 # isn't clear, sellers who don't know what they have. Only recently seen ones (still for sale).
 # Interesting: score 5+ that you haven't decided on, still for sale and freshly posted.
-INTERESTING = f"""triage IS NULL AND hidden = 0 AND COALESCE(score, 0) >= 5 AND last_seen >= datetime('now', '-3 days')
+INTERESTING = f"""triage IS NULL AND hidden = 0 AND gone_at IS NULL AND COALESCE(score, 0) >= 5
+    AND last_seen >= datetime('now', '-3 days')
     AND (COALESCE(orig_created_at, created_at, '') = '' OR substr(COALESCE(orig_created_at, created_at), 1, 10) >= date('now', '-{MAX_LISTING_AGE_DAYS} days')
          OR reason LIKE '%price was just cut%')"""
 
@@ -386,6 +387,13 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                 return self._send(403, b"forbidden", "text/plain")
             if urlparse(self.path).path == "/api/manual":
                 return self._add_by_hand()
+            m = re.fullmatch(r"/api/alive/([\w:.-]+)", unquote(urlparse(self.path).path))
+            if m:  # you're opening it: is it still up? (one OLX request for its seller, at most every 15 min)
+                from . import bot
+
+                db = DB(s.db_path)
+                row = bot.check_alive(db, s, m.group(1))
+                return self._json(listing_json(row, db) if row else {"error": "unknown listing"}, 200 if row else 404)
             # Browsers send the listing key URL-encoded ("olx%3A123"): decode before matching.
             m = re.fullmatch(r"/api/(star|unstar|hide|unhide|ai|skip|fake|bought|resold|unbought)/([\w:.-]+)",
                              unquote(urlparse(self.path).path))
@@ -498,7 +506,11 @@ input[type=search], select { font: inherit; padding: 7px 10px; border: 1px solid
 input[type=search] { flex: 1; min-width: 0; }
 main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+.card .x { position: absolute; top: 8px; right: 8px; z-index: 2; width: 30px; height: 30px; border-radius: 50%; border: none;
+  background: rgba(0,0,0,.55); color: #fff; font-size: 17px; line-height: 30px; text-align: center; cursor: pointer; padding: 0; }
+.card .x:hover { background: rgba(0,0,0,.8); }
+.card.gone { opacity: .55; }
 .ph { aspect-ratio: 4 / 3; background: var(--bad-bg); display: grid; place-items: center; font-size: 40px; color: var(--muted); overflow: hidden; }
 .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
@@ -774,6 +786,17 @@ function botWas(l, lo) {
 }
 
 // The Interesting tab: decide, and the card leaves the list. Keys C / S / F act on the top card.
+// You're opening it on OLX: check in the background that it's still up. If it's gone, the card says so (and it
+// leaves Interesting); the OLX tab opens either way.
+async function checkAlive(l, el) {
+  if (l.source !== "olx" || l.gone_at) return;
+  try {
+    const got = await api(`/api/alive/${encodeURIComponent(l.key)}`, { method: "POST", headers: { "X-Flipperbot": "1" } });
+    Object.assign(l, got); el.redraw && el.redraw();
+    if (got.gone_at) { el.classList.add("gone"); refreshStats(); }
+  } catch {}
+}
+
 async function decide(l, el, action) {
   el.classList.add("leaving");
   try { await act(action, l.key); } catch (err) { el.classList.remove("leaving"); alert(err.message); return; }
@@ -809,7 +832,10 @@ function card(l) {
     } }, aiLabel);
     if (waiting && !el.polling) poll(l, el);
     el.replaceChildren(
-      h("a", { class: "ph", href: l.url, target: "_blank", rel: "noopener noreferrer" }, img),
+      // ✕: not for me. Hidden from every list (the Hidden tab keeps it, to undo).
+      l.hidden ? null : h("button", { class: "x", title: "Hide (not interested)", "aria-label": "Hide",
+                                      onclick: () => decide(l, el, "hide") }, "✕"),
+      h("a", { class: "ph", href: l.url, target: "_blank", rel: "noopener noreferrer", onclick: () => checkAlive(l, el) }, img),
       h("div", { class: "body" },
         h("div", { class: "row" },
           h("span", { class: "score s" + (l.score == null ? "x" : l.score >= 8 ? "hi" : l.score >= 5 ? "mid" : l.score >= 1 ? "lo" : "zero") },
@@ -818,7 +844,9 @@ function card(l) {
           /^(Claude|quick AI)/.test(l.score_why || "") ? null : h("span", { class: "pill t-" + l.tier }, LABEL[l.tier] || l.tier)),
         l.score_why ? h("div", { class: "why" }, l.score_why) : null,
         priceBox(l),
-        h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.title),
+        h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer", onclick: () => checkAlive(l, el) }, l.title),
+        l.gone_at && l.gone_reason !== "sold" ? h("div", { class: "liq liq-slow" },
+          `Gone from ${siteName(l.source)} ${ago(l.gone_at)} (${l.gone_reason || "removed"})`) : null,
         h("div", { class: "reason" }, l.reason || ""),
         l.gone_reason === "sold" ? h("div", { class: "liq liq-fast" },
           `🏷️ Sold ${ago(l.gone_at)} for ~${lei(l.price)}` + (l.days_up != null ? ` after ${l.days_up} days up` : "")
@@ -840,9 +868,10 @@ function card(l) {
           l.first_price ? `price cut from ${lei(l.first_price)}` : "",
           l.listed_at ? `listed ${ago(l.listed_at)}` : "",
           l.first_posted ? `reposted: first posted ${ago(l.first_posted)}` : "",
-          l.bumps ? `bumped${l.bumps > 1 ? " " + l.bumps + "×" : ""} (reactualizat)` : "", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
+          l.bumps ? `bumped${l.bumps > 1 ? " " + l.bumps + "×" : ""} (reactualizat)` : "",
+          !l.gone_at && l.alive_checked_at ? `confirmed up ${ago(l.alive_checked_at)}` : "", l.city, l.negotiable ? "negotiable" : "", l.delivery ? "OLX delivery" : "", "found " + ago(l.first_seen)].filter(Boolean).join(" · ")),
         view === "interesting" ? triageActions(l, el) : h("div", { class: "actions" },
-          h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer" }, `Open on ${siteName(l.source)} ↗`),
+          h("a", { class: "primary", href: l.url, target: "_blank", rel: "noopener noreferrer", onclick: () => checkAlive(l, el) }, `Open on ${siteName(l.source)} ↗`),
           h("button", { onclick: async () => { Object.assign(l, await act(l.starred ? "unstar" : "star", l.key)); draw(); refreshStats(); } }, l.starred ? "★ Starred" : "☆ Star"),
           h("button", { onclick: async () => { await act(l.hidden ? "unhide" : "hide", l.key); el.remove(); refreshStats(); } }, l.hidden ? "Unhide" : "Hide"),
           // gone from OLX: nothing to buy or check any more (unless it's one of your own flips)

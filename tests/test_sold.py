@@ -99,3 +99,43 @@ def test_a_starter_price_book_listing_is_refreshed_by_its_title():
     r = bot.refresh_listing(db, S, "olx:1", seller_listings=lambda *a, **k: 1 / 0,
                             search=lambda q, **kw: [listing(1, "Iphone 14 promax 128 gb", 1670, iso(4), "s9")])
     assert r["price_ron"] == 1670 and r["seller_id"] == "s9"
+
+
+def test_a_listing_you_open_is_checked_and_a_sold_one_leaves_interesting():
+    from flipperbot import web
+    from flipperbot.models import Listing
+
+    s = Settings()
+    db = DB(":memory:")
+    l = Listing("olx", "1", "u", "Seiko SKX007 automatic", price_ron=400, seller_id="s1", created_at="2026-11-20T10:00:00+00:00")
+    db.upsert(l)
+    db.conn.execute("UPDATE listings SET score=7, last_seen=datetime('now', '-1 hour') WHERE key='olx:1'")
+    db.conn.commit()
+    assert [r["key"] for r in web.query(db, "interesting")] == ["olx:1"]
+    calls = []
+
+    def gone(seller, **kw):
+        calls.append(seller)
+        return [], True  # the seller has nothing up any more
+
+    r = bot.check_alive(db, s, "olx:1", seller_listings=gone)
+    assert calls == ["s1"] and r["gone_reason"] == "sold"
+    assert web.query(db, "interesting") == []
+    bot.check_alive(db, s, "olx:1", seller_listings=gone)
+    assert calls == ["s1"]  # gone already: not asked again
+
+
+def test_interesting_listings_are_checked_first():
+    from flipperbot.models import Listing
+
+    s = Settings()
+    s.sold_checks_per_poll = 1
+    db = DB(":memory:")
+    for i, (seller, score) in enumerate([("old", 2), ("hot", 7)]):
+        db.upsert(Listing("olx", str(i), "u", f"Seiko SKX007 v{i}", price_ron=400, seller_id=seller))
+        db.conn.execute("UPDATE listings SET score=?, model_key='seiko|SKX007', last_seen=datetime('now', '-3 hours') "
+                        "WHERE key=?", (score, f"olx:{i}"))
+    db.conn.commit()
+    asked = []
+    bot.check_sold(db, s, seller_listings=lambda seller, **kw: (asked.append(seller), ([], False))[1], log=lambda m: None)
+    assert asked == ["hot"]

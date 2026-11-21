@@ -583,59 +583,96 @@ def reprice_model(db: DB, s: Settings, model_key: str | None, skip: str | None =
 def check_sold(db: DB, s: Settings, seller_listings: Callable[..., Any] = olx.seller_listings,
                log: Callable[[str], None] = print) -> dict[str, int]:
     """Which listings are really gone, and why. For a few private sellers whose priced listings the searches
-    haven't shown for a day, ask OLX for the seller's listings still up: one missing is gone, and
+    haven't shown for a while, ask OLX for the seller's listings still up: one missing is gone, and
       expired   if it was up ~4 weeks since its last refresh (OLX ends ads after 30 days unless renewed),
       reposted  if the seller has a new listing of the same item,
       sold      otherwise.
     The sold ones are the price book's best prices: what similar ones really went for, and how fast."""
-    from .db import _days_between, _title_words, now as db_now
-
-    # Sellers of listings worth your attention (5+) every 6 hours, so their prices stay current; the rest of the
-    # priced private listings once a day, to learn what sold.
+    # First the listings you'd look at (Interesting: 5+, not decided, not hidden) not confirmed up for 2 hours, so
+    # a sold one leaves the list before you click it; then other 5+ ones every 6 hours (their prices stay current);
+    # then the rest of the priced private listings once a day, to learn what sold.
     sellers = [r["seller_id"] for r in db.conn.execute(
         """SELECT seller_id FROM listings WHERE source='olx' AND COALESCE(seller_id, '') != '' AND gone_at IS NULL
            AND model_key LIKE '%|%' AND COALESCE(business, 0) = 0 AND last_seen >= datetime('now', '-30 days')
-           AND ((COALESCE(score, 0) >= 5 AND last_seen < datetime('now', '-6 hours')
+           AND ((COALESCE(score, 0) >= 5 AND hidden = 0 AND triage IS NULL AND last_seen < datetime('now', '-2 hours')
+                 AND COALESCE(alive_checked_at, '') < datetime('now', '-2 hours'))
+                OR (COALESCE(score, 0) >= 5 AND last_seen < datetime('now', '-6 hours')
                  AND COALESCE(alive_checked_at, '') < datetime('now', '-6 hours'))
                 OR (last_seen < datetime('now', '-1 day') AND COALESCE(alive_checked_at, '') < datetime('now', '-1 day')))
-           GROUP BY seller_id ORDER BY MAX(COALESCE(score, 0) >= 5) DESC, MAX(last_seen) DESC LIMIT ?""",
+           GROUP BY seller_id
+           ORDER BY MAX(COALESCE(score, 0) >= 5 AND hidden = 0 AND triage IS NULL) DESC, MAX(COALESCE(score, 0) >= 5) DESC,
+                    MAX(last_seen) DESC LIMIT ?""",
         (s.sold_checks_per_poll,))]
     counts = {"sold": 0, "expired": 0, "reposted": 0, "up": 0}
     for i, seller in enumerate(sellers):
         if i:
             time.sleep(random.uniform(*s.pause_between_requests_s))
-        up, complete = seller_listings(seller, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s)
-        ids = {l.source_id for l in up}
-        current = {l.source_id: l for l in up}
-        t = db_now()
-        for r in db.conn.execute("""SELECT * FROM listings WHERE source='olx' AND seller_id=? AND gone_at IS NULL
-                                    AND last_seen >= datetime('now', '-30 days')""", (seller,)).fetchall():
-            if r["source_id"] in ids:
-                # still up: store what it says NOW (a new price is re-judged), not just that it's there
-                l = current[r["source_id"]]
-                l.niche = r["niche"] or "watches"
-                process(db, [l], s, alert=True)
-                db.conn.execute("UPDATE listings SET last_seen=?, alive_checked_at=? WHERE key=?", (t, t, r["key"]))
-                counts["up"] += 1
-                continue
-            if not complete:
-                db.conn.execute("UPDATE listings SET alive_checked_at=? WHERE key=?", (t, r["key"]))
-                continue  # a big seller: missing from the first pages proves nothing
-            words = _title_words(r["title"])
-            again = any(len(words & (w := _title_words(l.title))) / max(1, len(words | w)) >= 0.7 for l in up)
-            if again:
-                reason = "reposted"
-            elif _days_between(r["refreshed_at"] or r["created_at"], t) >= 28:
-                reason = "expired"
-            else:
-                reason = "sold"
-            db.conn.execute("UPDATE listings SET gone_at=?, gone_reason=?, alive_checked_at=? WHERE key=?", (t, reason, t, r["key"]))
-            counts[reason] += 1
-        db.conn.commit()
+        for k, n in check_seller(db, s, seller, seller_listings).items():
+            counts[k] += n
     if sellers:
         log(f"  still up? {len(sellers)} sellers: {counts['sold']} sold, {counts['expired']} expired, "
             f"{counts['reposted']} reposted, {counts['up']} still up")
     return counts
+
+
+def check_seller(db: DB, s: Settings, seller: str, seller_listings: Callable[..., Any] = olx.seller_listings,
+                 pages: int = 2) -> dict[str, int]:
+    """One seller's listings that we know: which are still up (and at what price), which are gone and why."""
+    from .db import _days_between, _title_words, now as db_now
+
+    counts = {"sold": 0, "expired": 0, "reposted": 0, "up": 0}
+    up, complete = seller_listings(seller, pages=pages, eur_to_ron=s.eur_to_ron, pause=s.pause_between_requests_s)
+    ids = {l.source_id for l in up}
+    current = {l.source_id: l for l in up}
+    t = db_now()
+    for r in db.conn.execute("""SELECT * FROM listings WHERE source='olx' AND seller_id=? AND gone_at IS NULL
+                                AND last_seen >= datetime('now', '-30 days')""", (seller,)).fetchall():
+        if r["source_id"] in ids:
+            # still up: store what it says NOW (a new price is re-judged), not just that it's there
+            l = current[r["source_id"]]
+            l.niche = r["niche"] or "watches"
+            process(db, [l], s, alert=True)
+            db.conn.execute("UPDATE listings SET last_seen=?, alive_checked_at=? WHERE key=?", (t, t, r["key"]))
+            counts["up"] += 1
+            continue
+        if not complete:
+            db.conn.execute("UPDATE listings SET alive_checked_at=? WHERE key=?", (t, r["key"]))
+            continue  # a big seller: missing from the first pages proves nothing
+        words = _title_words(r["title"])
+        again = any(len(words & (w := _title_words(l.title))) / max(1, len(words | w)) >= 0.7 for l in up)
+        if again:
+            reason = "reposted"
+        elif _days_between(r["refreshed_at"] or r["created_at"], t) >= 28:
+            reason = "expired"
+        else:
+            reason = "sold"
+        db.conn.execute("UPDATE listings SET gone_at=?, gone_reason=?, alive_checked_at=? WHERE key=?", (t, reason, t, r["key"]))
+        counts[reason] += 1
+    db.conn.commit()
+    return counts
+
+
+def check_alive(db: DB, s: Settings, key: str, seller_listings: Callable[..., Any] = olx.seller_listings,
+                search: Callable[..., Any] = olx.search, fresh_min: int = 15) -> Any:
+    """Is this one listing still up? Asked when you open it: its seller's listings (or, with no seller known, a search
+    for its title). Not again within fresh_min minutes. Returns the row as it is now (gone_at set if it's gone)."""
+    from .db import _days_between, now as db_now
+
+    r = db.get(key)
+    if r is None or r["source"] != "olx" or r["gone_at"]:
+        return r
+    if r["alive_checked_at"] and _days_between(r["alive_checked_at"], db_now()) * 1440 < fresh_min:
+        return r
+    try:
+        if r["seller_id"]:
+            check_seller(db, s, r["seller_id"], seller_listings, pages=3)
+        else:
+            refresh_listing(db, s, key, seller_listings=seller_listings, search=search)
+            db.conn.execute("UPDATE listings SET alive_checked_at=? WHERE key=?", (db_now(), key))
+            db.conn.commit()
+    except Exception:  # OLX not answering: nothing learned
+        return db.get(key)
+    return db.get(key)
 
 
 def refresh_listing(db: DB, s: Settings, key: str, seller_listings: Callable[..., Any] = olx.seller_listings,

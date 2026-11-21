@@ -68,7 +68,7 @@ class Settings:
     feed_pages: int = 3
     # Each poll asks OLX which listings of this many private sellers are still up, to learn what sold
     # (and for how much, how fast). One request per seller.
-    sold_checks_per_poll: int = 6
+    sold_checks_per_poll: int = 10
     # Other marketplaces read like OLX (plain requests only): a few searches per category every so often.
     # Okazii, Vinted and eMAG refuse plain requests, so they're not here.
     more_sources: list[str] = field(default_factory=lambda: ["publi24", "lajumate"])

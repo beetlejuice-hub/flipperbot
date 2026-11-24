@@ -274,6 +274,20 @@ _TRADE = re.compile(r"(?<![a-z])(sch|schimb|schimburi|schimbat|accept variante|v
                     r"tausch|la schimb|plus diferenta|cu diferenta)(?![a-z])")
 
 
+# "fara defecte", "nu are probleme", "niciun pixel mort", "zero zgarieturi": what it does NOT have, said away
+# before the damage words are looked for (else "nu are defecte" reads as "defecte").
+NEGATED = re.compile(
+    r"(?<![a-z])(?:fara|nu are|nu prezinta|nu a avut|nici o|nicio|niciun|nici un|zero|lipsa de)\s+"
+    r"(?:nici\s+o\s+|nicio\s+|niciun\s+)?"
+    r"(?:(?:defecte|defect|defectiuni|probleme|problema|zgarieturi|zgarietura|fisuri|fisura|lovituri|lovitura|ciobituri|"
+    r"pixeli morti|pixel mort|pete|pata|gauri|gaura|urme de uzura|uzura|scame|rupturi|decolorari|imperfectiuni|erori|"
+    r"eroare|reparatii|interventii|piese schimbate)(?:\s*(?:,|si|sau|ori|/)\s*)?)+")
+
+
+def _without_negations(text: str) -> str:
+    return NEGATED.sub(" ", text)
+
+
 def _without_trade_talk(description: str) -> str:
     """Drop sentences about swapping ("accept schimb cu Omega sau Rolex"): those brands are what the
     seller wants, not what's for sale."""
@@ -307,7 +321,7 @@ def _identify_catalog(title: str, description: str, niche: str) -> Identity:
     clean = getattr(cat, "clean", techdb.clean)
     cleaned = clean(normalize(title))
     title_n = clean(normalize(_SWAP.sub("", cleaned).strip() or cleaned))
-    full_n = clean(normalize(f"{title} . {_without_trade_talk(description)}"))
+    full_n = _without_negations(clean(normalize(f"{title} . {_without_trade_talk(description)}")))
     m = cat.match(title_n, full_n)
     flags: set[str] = set()
     if _any(full_n, cat.BROKEN) or _any(full_n, ["pentru piese", "defect", "defecta"]):
@@ -365,7 +379,7 @@ def identify(title: str, description: str = "", niche: str = "watches") -> Ident
                         collectible=list(info.get("groups") or []))
     title = _smart_words(_SWAP.sub("", normalize(title)).strip() or title)
     title_n = normalize(title)
-    full_n = _smart_words(normalize(f"{title} . {description}"))
+    full_n = _without_negations(_smart_words(normalize(f"{title} . {description}")))
 
     # The title is what the seller is selling; the description often name-drops
     # other brands ("like Rolex"), so it only counts if the title has none.

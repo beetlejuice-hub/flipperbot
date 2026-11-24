@@ -109,6 +109,17 @@ def _size(r: Any) -> str | None:
     return sneakerdb.size(text) if r["niche"] == "sneakers" else clothdb.size(text)
 
 
+def _sold_evidence(r: Any, db: DB | None) -> dict[str, Any] | None:
+    """What this model really sold for lately (listings that disappeared as sold, and your own resales)."""
+    if db is None or "|" not in (r["model_key"] or ""):
+        return None
+    used = r["niche"] in ("electronics", "phones", "tools", "sneakers", "clothing") and "new" not in (r["flags"] or "")
+    prices = sorted(p for p, _d in db.sold(r["model_key"], used_only=used))
+    if not prices:
+        return None
+    return {"n": len(prices), "low": prices[0], "high": prices[-1], "median": prices[len(prices) // 2]}
+
+
 def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
     photos = json.loads(r["photos"] or "[]")
     a = json.loads(r["ai"]) if r["ai"] else None
@@ -130,6 +141,8 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "listed_at": r["created_at"] or None, "currency": r["currency"], "price_orig": r["price_orig"],
         "retail": _retail(r, db), "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
         "size": _size(r), "alive_checked_at": r["alive_checked_at"], "gone_reason": r["gone_reason"],
+        "sold_evidence": _sold_evidence(r, db),
+        "fixer": json.loads(r["fixer"]) if r["fixer"] else None,
         "repost_of": r["repost_of"], "gone_at": r["gone_at"], "gone_reason": r["gone_reason"],
         "days_up": _days_up(r), "first_price": _first_price(r, db), "price_links": price_links(r),
         "starred": bool(r["starred"]), "hidden": bool(r["hidden"]), "ai": a, "triage": r["triage"],
@@ -164,6 +177,8 @@ VIEWS = {
     # lots and clear-outs worth a look, newest first by score: the photo look and Claude's item lists live here
     "lots": ("niche = 'lots' AND hidden = 0 AND COALESCE(score, 0) >= 3 AND last_seen >= datetime('now', '-7 days')", "rank"),
     "hidden": ("hidden=1", "new"),
+    # faulty, but worth fixing: biggest profit-if-fixed first
+    "fixers": (f"fixer IS NOT NULL AND json_extract(fixer, '$.worth_it') = 1 AND hidden=0 AND {RECENT}", "fix"),
     # older links
     "deals": ("COALESCE(score, 0) >= 6 AND hidden=0", "rank"),
     "maybe": ("score BETWEEN 3 AND 5 AND hidden=0", "rank"),
@@ -187,6 +202,7 @@ ORDER = {
     "ai": "ai_at IS NULL, ai_at DESC",
     "gone": "gone_at DESC",
     "cheap": "price_ron ASC",
+    "fix": "json_extract(fixer, '$.profit_if_fixed') IS NULL, json_extract(fixer, '$.profit_if_fixed') DESC",
 }
 
 
@@ -226,6 +242,7 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "sold_tracked": c.execute(f"SELECT COUNT(*) FROM listings WHERE gone_reason='sold' {nf}", na).fetchone()[0],
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
         "lots": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['lots'][0]}").fetchone()[0],
+        "fixers": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['fixers'][0]} {nf}", na).fetchone()[0],
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
         "priced_models": c.execute(
             "SELECT COUNT(*) FROM (SELECT model_key FROM listings WHERE model_key LIKE '%|%' GROUP BY model_key HAVING COUNT(*) >= ?)",
@@ -511,6 +528,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 18px 20px 60px; }
   background: rgba(0,0,0,.55); color: #fff; font-size: 17px; line-height: 30px; text-align: center; cursor: pointer; padding: 0; }
 .card .x:hover { background: rgba(0,0,0,.8); }
 .card.gone { opacity: .55; }
+.fix { margin: 6px 0; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 8px; font-size: 13px; }
+.fix .pos { color: var(--good, #1a7f37); } .fix .neg { color: var(--sus); }
 .ph { aspect-ratio: 4 / 3; background: var(--bad-bg); display: grid; place-items: center; font-size: 40px; color: var(--muted); overflow: hidden; }
 .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
@@ -634,6 +653,7 @@ const TABS = [
   ["checked", "Claude checked", null],
   ["hidden", "Hidden", null],
   ["lots", "📦 Lots", s => s.lots],
+  ["fixers", "🔧 Fixer-uppers", s => s.fixers],
   ["sold", "🏷️ Sold", s => s.sold_tracked],
   ["flips", "💰 My flips", null],
   ["radar", "📈 Trends", null],
@@ -642,6 +662,7 @@ const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "li
 const EMPTY = {
   interesting: "Nothing scored 5+ that you haven't decided on. The bot checks every 5–10 minutes; good finds land here.",
   sold: "No sales seen yet. Every poll the bot asks OLX which listings of a few sellers are still up; the ones gone (not expired) land here with what they sold for. It starts after the bot has run a day.",
+  fixers: "No faulty items worth fixing right now. The bot reads what's wrong from each faulty listing, looks up the usual fix and its cost, and lists the ones that sell for clearly more fixed than they cost plus the repair.",
   lots: "No lots worth a look yet. The bot searches lots and clear-outs in turn with the other categories; the best get a quick look at their photos.",
   top: "Nothing at 8–10 yet: those need an AI to agree.", mid: "Nothing at 5–7.", low: "Nothing at 1–4.",
   removed: "Nothing removed.",
@@ -716,6 +737,9 @@ function aiBox(a, l) {
       typeof a.confidence === "number" ? ` · ${a.confidence}% sure` : "", a.offer_ron ? ` · offer ${lei(a.offer_ron)}` : ""),
     names && h("div", {}, names),
     h("div", {}, `authenticity: ${a.authenticity || "?"} · resale ${lei(a.resale_ron_low)}–${lei(a.resale_ron_high)}` + (a.repair_cost_ron ? ` · repair ~${lei(a.repair_cost_ron)}` : "")),
+    a.condition_grade ? h("div", {}, `condition: ${a.condition_grade.replace(/_/g, " ")}`
+      + (a.fault ? ` · fault: ${a.fault}` : "") + (a.fixable && a.fixable !== "n/a" ? ` · fixable: ${a.fixable}` : "")
+      + (a.value_if_fixed_ron ? ` · ~${lei(a.value_if_fixed_ron)} fixed` : "")) : null,
     a.summary && h("div", { class: "reason" }, a.summary),
     // the fake checks: what failed or couldn't be read, and the skeptical second check
     (a.authenticity_checks || []).filter(c => c && c.result && c.result !== "pass").length
@@ -804,6 +828,15 @@ async function decide(l, el, action) {
   refreshStats();
 }
 
+function fixBox(f) {  // a faulty item: what's wrong, the fix, and what fixing it leaves
+  return h("div", { class: "fix" },
+    h("b", {}, `🔧 ${f.fault}`), ` → ${f.fix}`,
+    h("div", {}, `~${f.cost[0]}–${lei(f.cost[1])} · ${f.how === "DIY" ? "do it yourself" : "a repair shop"} · ${f.odds} odds it works`),
+    f.working_low != null ? h("div", {}, `Working ones sell ~${f.working_low.toLocaleString("ro-RO")}–${lei(f.working_high)}: `,
+      h("b", { class: f.profit_if_fixed > 0 ? "pos" : "neg" }, `${f.profit_if_fixed > 0 ? "+" : ""}${lei(f.profit_if_fixed)} if fixed`),
+      " (after the high repair cost)") : h("div", {}, "Not enough working ones listed to say what it's worth fixed."));
+}
+
 function triageActions(l, el) {
   return h("div", { class: "triage" },
     h("button", { class: "t-claude", title: "C", onclick: () => decide(l, el, "ai") }, "🤖 Let Claude check"),
@@ -851,6 +884,11 @@ function card(l) {
         l.gone_reason === "sold" ? h("div", { class: "liq liq-fast" },
           `🏷️ Sold ${ago(l.gone_at)} for ~${lei(l.price)}` + (l.days_up != null ? ` after ${l.days_up} days up` : "")
           + (l.first_price && l.first_price !== l.price ? ` (first asked ${lei(l.first_price)})` : "")) : null,
+        l.sold_evidence && l.gone_reason !== "sold" ? h("div", { class: "liq liq-fast" },
+          `🏷️ Sold lately: ${l.sold_evidence.n} at ` + (l.sold_evidence.low === l.sold_evidence.high ? lei(l.sold_evidence.low)
+            : `${l.sold_evidence.low.toLocaleString("ro-RO")}–${lei(l.sold_evidence.high)}`)
+          + (l.sold_evidence.n > 2 ? ` (middle ${lei(l.sold_evidence.median)})` : "")) : null,
+        l.fixer ? fixBox(l.fixer) : null,
         l.quick && l.quick.looked ? lookBox(l.quick) : null,
         l.message ? h("details", { class: "msg" }, h("summary", {}, "✉️ Message to the seller"),
           h("pre", {}, l.message), h("button", { class: "copy", onclick: e => {

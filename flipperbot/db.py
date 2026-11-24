@@ -88,7 +88,9 @@ class DB:
                     # the price as the seller wrote it (e.g. 450 in EUR), next to price_ron
                     "price_orig REAL",
                     # the exact model as Claude read it from the photos, when the title misled the bot
-                    "model_fix TEXT"):  # your call on an Interesting listing: claude / skip / fake
+                    "model_fix TEXT",
+                    # a faulty item worth fixing: the fault, the fix, its cost, and profit if fixed (repairs.py)
+                    "fixer TEXT"):  # your call on an Interesting listing: claude / skip / fake
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
@@ -340,7 +342,7 @@ class DB:
         return out
 
     def comparable_prices(self, model_key: str, exclude_key: str | None = None, days: int = 365,
-                          used_only: bool = False, broken: bool = False) -> list[int]:
+                          used_only: bool = False, broken: bool = False, new_only: bool = False) -> list[int]:
         """Asking prices of working, single, real items of this model (used_only: private sellers' used ones,
         not shops and not sealed/new ones)."""
         rows = self.conn.execute(
@@ -358,7 +360,7 @@ class DB:
                 continue
             flags = set(json.loads(r["flags"] or "[]"))
             # broken=True: other broken ones of the model (a parts phone is priced like parts phones)
-            if bad & flags or (("broken" in flags) != broken):
+            if bad & flags or (("broken" in flags) != broken) or (new_only and "new" not in flags):
                 continue
             out.append(r["price_ron"])
         return out

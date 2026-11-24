@@ -269,10 +269,16 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
                                               "cheap new: likely a replica")
                 return Verdict("mid", f"cheap for a genuine {what} ({price} lei, under {floor}): often a replica, "
                                       "check the labels and tags")
+    # Sold ones are the hard evidence: what people really paid. 3+ set the market by themselves; 1-2 count three
+    # times as much as an asking price each (an Xbox that sold at 1,500 and 1,700 pulls the estimate there).
     use_sold = bool(sold) and len(sold) >= 3 and model_known
+    blended = 0
     if use_sold:
         comps = list(sold)
-    market = market_price(comps) if (use_sold or len(comps) >= s.min_comps) else None
+    elif sold and model_known and (len(sold) >= 2 or len(comps) >= s.min_comps - 1):
+        blended = len(sold)
+        comps = list(comps) + [p for p in sold for _ in range(3)]
+    market = market_price(comps) if (use_sold or blended or len(comps) >= s.min_comps) else None
     if market and ident.niche == "clothing" and price < 0.35 * market and model_known \
             and (seg in ("grail", "luxury") or (ident.brand and ident.brand.name in _clothes_faked())):
         return Verdict("suspect", f"{price} lei vs ~{market} usual: a third of what similar ones ask, nearly always a "
@@ -290,13 +296,18 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         profit = low - price - repair  # counted from the cautious end
         discount = 1 - price / market
         what = " ".join(dict.fromkeys((ident.model_key or "?").replace("|", " ").split()))  # "seiko seiko 5" -> "seiko 5"
-        detail = (f"{what}: {price} lei, {round(discount * 100)}% under what similar ones sold for (~{market}, "
-                  f"{len(comps)} sold lately); realistic sale ~{low}–{high}" if use_sold else
-                  f"{what}: {price} lei, {round(discount * 100)}% under what similar ones ask (~{market}, "
-                  f"{len(comps)} listings); realistic sale ~{low}–{high}")
+        if use_sold:
+            basis = f"what similar ones sold for (~{market}, {len(comps)} sold lately)"
+        elif blended:
+            asking = len(comps) - 3 * blended
+            basis = (f"similar ones (~{market}: {blended} sold at {', '.join(str(p) for p in sorted(set(sold))[:3])}"
+                     + (f", {asking} for sale" if asking else "") + ")")
+        else:
+            basis = f"what similar ones ask (~{market}, {len(comps)} listings)"
+        detail = f"{what}: {price} lei, {round(discount * 100)}% under {basis}; realistic sale ~{low}–{high}"
         if repair:
             detail += f", repair ~{repair}"
-        v = Verdict("bad", detail, est_value_ron=low, profit_ron=profit, est_high_ron=high, comps=len(comps))
+        v = Verdict("bad", detail, est_value_ron=low, profit_ron=profit, est_high_ron=high, comps=len(comps) - 2 * blended)
         if discount >= s.real_good_discount and profit >= s.real_good_profit_ron:
             v.tier = "real_good"
         elif discount >= s.good_discount and profit >= s.good_profit_ron:

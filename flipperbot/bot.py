@@ -94,6 +94,10 @@ def recent_price_cut(db: DB, l: Listing, days: int = 14) -> bool:
         l.previous_price_ron and l.price_ron and l.price_ron < l.previous_price_ron)
 
 
+# What new (sealed, with tags) adds over a used one, where there aren't enough new ones to compare with.
+NEW_UPLIFT = {"electronics": 1.15, "phones": 1.15, "tools": 1.2, "sneakers": 1.3, "clothing": 1.35, "cameras": 1.15}
+
+
 def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) -> Any:
     # OLX has its own "brand" field on watch listings; count it as part of the description.
     brand_field = l.params.get("brand") if isinstance(l.params.get("brand"), str) else ""
@@ -110,6 +114,21 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     comps = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=used_only, broken=broken_comps) \
         if ident.model_key else []
     sold = db.sold(ident.model_key, used_only=used_only)
+    new_note = None
+    if "new" in ident.flags and l.niche in NEW_UPLIFT and ident.model_key and "broken" not in ident.flags:
+        # New (sealed, with tags) is worth more than used: compared with other new ones, or with used ones plus
+        # what new usually adds; the shop price caps it either way (with_retail).
+        new_comps = db.comparable_prices(ident.model_key, exclude_key=l.key, new_only=True)
+        if len(new_comps) >= s.min_comps:
+            comps, sold, new_note = new_comps, [], "new: compared with other new ones"
+        else:
+            used = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=True)
+            used_sold = db.sold(ident.model_key, used_only=True)
+            if len(used) + len(used_sold) >= s.min_comps - 1:
+                k = NEW_UPLIFT[l.niche]
+                comps = [round(p * k) for p in used]
+                sold = [(round(p * k), d) for p, d in used_sold]
+                new_note = f"new: used ones +{round((k - 1) * 100)}%"
     broader = None
     if l.niche == "clothing" and ident.brand and len(comps) < s.min_comps and not sold:
         # Few of this line (a Stone Island Ghost jacket): compare with the brand's same kind of item, cautiously.
@@ -124,6 +143,8 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     verdict = judge(l, ident, comps, s, db.model_price(ident.model_key), sold=[p for p, _ in sold])
     if broader and verdict.est_value_ron:
         verdict.reason += f" · few of this line for sale: compared with {broader}"
+    if new_note and verdict.est_value_ron:
+        verdict.reason += f" · {new_note}"
     from . import retail
     from .tiers import with_retail
 
@@ -168,10 +189,28 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         # (which estimates a price) or for you, not a good one.
         verdict.tier = "mid"
         verdict.reason = "no price estimate yet · " + verdict.reason
+    fixer = fixer_upper(db, l, ident, s)
+    if fixer and fixer["odds"] == "low" and verdict.tier in ("good", "real_good"):
+        # Cheap, but the fix is a gamble (a dead board, a locked or "for parts" smartwatch): a look, not a deal.
+        from .repairs import line
+
+        verdict.tier = "mid"
+        verdict.reason = line(fixer) + " · " + verdict.reason
+    elif fixer and fixer.get("worth_it") and verdict.tier in ("bad", "mid"):
+        # Faulty, but fixed it sells like a working one: worth a look, with the sums.
+        from .repairs import line
+
+        verdict.tier = "mid"
+        verdict.reason = line(fixer) + " · " + verdict.reason
     db.set_verdict(l.key, ident, verdict)
     from .scoring import rule_score
 
     rs, rwhy = rule_score(verdict.tier, ident.flags, verdict.reason, verdict.profit_ron, liq, age, s.good_profit_ron)
+    if fixer and fixer.get("worth_it"):
+        big = fixer["profit_if_fixed"] >= s.real_good_profit_ron
+        rs, rwhy = max(rs, 6 if fixer["odds"] == "high" and big else 5 if fixer["odds"] == "high" else 4), \
+            f"fixer-upper: ~{fixer['profit_if_fixed']} lei if fixed ({fixer['odds']} odds)"
+    db.conn.execute("UPDATE listings SET fixer=? WHERE key=?", (json.dumps(fixer) if fixer else None, l.key))
     if l.niche == "lots" and verdict.tier != "bad":
         from .lots import prefilter
 
@@ -181,6 +220,24 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
     db.conn.commit()
     db.update_score(l.key)
     return db.get(l.key)
+
+
+def fixer_upper(db: DB, l: Listing, ident: Any, s: Settings) -> dict | None:
+    """A faulty listing: what's probably wrong, the fix, and what it'd be worth fixed (working ones of the model)."""
+    from . import repairs
+    from .tiers import realistic_range
+
+    if not ident.flags & {"broken", "battery", "worn_shutter"} or not l.price_ron:
+        return None
+    working = None
+    if "|" in (ident.model_key or ""):
+        comps = db.comparable_prices(ident.model_key, exclude_key=l.key, used_only=l.niche != "watches")
+        comps += [p for p, _d in db.sold(ident.model_key, used_only=l.niche != "watches")] * 2
+        if len(comps) >= s.min_comps:
+            working = realistic_range(comps, bool(ident.refs))
+    text = normalize(f"{l.title} . {l.description}")
+    niche = "smartwatches" if l.niche in (None, "watches") and ident.segment in ("smart", "band") else (l.niche or "watches")
+    return repairs.assess(niche, text, set(ident.flags), l.price_ron, working, s.good_profit_ron)
 
 
 def apply_model_fix(ident: Any, model_text: str, niche: str | None) -> Any:

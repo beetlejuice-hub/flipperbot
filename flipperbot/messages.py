@@ -54,6 +54,11 @@ def message(row: Any, ai: dict[str, Any] | None = None, good_profit: int = 150) 
         asks = [str(q).strip() for q in (ai.get("questions_for_seller") or []) if str(q).strip()][:2]
         if ai.get("ask_seller"):
             asks = [str(ai["ask_seller"]).strip()] + asks[:1]
+    faulty = "fixer" in row.keys() and bool(row["fixer"])
+    if not asks and faulty:
+        # faulty: what's wrong decides whether it's a 150-lei fix or a dead board
+        asks = ["Ce anume nu funcționează exact și de când? Ce s-a întâmplat înainte (a căzut, s-a udat)?",
+                "A fost deschis sau dus la reparat până acum?"]
     asks = asks or QUESTIONS.get(niche, QUESTIONS["watches"])
     o = offer(row, ai, good_profit)
     lines = [f"Bună ziua! Mai este disponibil anunțul „{title}”?", *asks]

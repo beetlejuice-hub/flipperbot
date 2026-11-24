@@ -139,3 +139,33 @@ def test_interesting_listings_are_checked_first():
     asked = []
     bot.check_sold(db, s, seller_listings=lambda seller, **kw: (asked.append(seller), ([], False))[1], log=lambda m: None)
     assert asked == ["hot"]
+
+
+def test_one_or_two_sales_pull_the_estimate():
+    from flipperbot.identify import identify
+    from flipperbot.models import Listing
+    from flipperbot.tiers import judge
+
+    s = Settings()
+    t = "Xbox Series X 1TB"
+    ident = identify(t, "", "electronics")
+    asking = [2400, 2500, 2300, 2450]  # what people ask
+    alone = judge(Listing("olx", "1", "u", t, price_ron=1400), ident, asking, s)
+    with_sold = judge(Listing("olx", "1", "u", t, price_ron=1400), ident, asking, s, sold=[1500, 1700])
+    assert with_sold.est_value_ron < alone.est_value_ron  # the two real sales pull it down toward 1,500-1,700
+    assert "2 sold at 1500, 1700" in with_sold.reason
+    three = judge(Listing("olx", "1", "u", t, price_ron=1400), ident, asking, s, sold=[1500, 1600, 1700])
+    assert "sold for" in three.reason and three.est_high_ron <= 1700
+
+
+def test_new_is_priced_as_new():
+    s = Settings()
+    db = DB(":memory:")
+    used = [olx.parse_offer({**offer(100 + i, f"Xbox Series X 1TB v{i}", p), "category": {"id": 1878}})
+            for i, p in enumerate([2000, 2100, 1900, 2050, 2000])]
+    sealed = olx.parse_offer({**offer(200, "Xbox Series X 1TB sigilat", 1900), "category": {"id": 1878}})
+    for l in [*used, sealed]:
+        l.niche = "electronics"
+    bot.process(db, [*used, sealed], s, alert=False)
+    r = db.get("olx:200")
+    assert "new: used ones +15%" in r["reason"] and r["est_value_ron"] > 2000 * 0.95 * 1.0

@@ -29,5 +29,8 @@ README.md for setup and the tiers.
   libraries): Vinted items come in by hand (the dashboard's "Check a Vinted item"). OLX bumps and reposts are recognized (`db.upsert`).
 - The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),
   8+ full Claude check. Tests never call the real Claude (`tests/conftest.py`).
+- Prices: sold listings are the hard evidence (3+ set the market, 1-2 count 3x an asking price); new (sealed, with
+  tags) is compared with new ones or used ones + `bot.NEW_UPLIFT`. Faulty items: `repairs.py` reads the fault, the
+  usual fix, its cost and odds, and prices it against working ones (`fixer` column, the 🔧 Fixer-uppers tab).
 - Claude's check names the exact model from the photos; if it isn't the bot's, `bot.fix_model` re-keys the listing
   (`model_fix` column, kept on later polls) so its prices and the price book are for the right model.

@@ -370,6 +370,8 @@ def _identify_catalog(title: str, description: str, niche: str) -> Identity:
 def identify(title: str, description: str = "", niche: str = "watches") -> Identity:
     if niche in CATALOGS:
         return _identify_catalog(title, description, niche)
+    if niche == "cool":  # a cool find for your flat: no model, no price book; cool.prefilter() judges it
+        return Identity(brand=None, brands=[], refs=[], family=None, flags={"cool"}, niche="cool")
     if niche == "lots":  # a box of mixed things: no one model; lots.prefilter() judges it
         from . import lots
 

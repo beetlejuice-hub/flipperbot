@@ -314,6 +314,33 @@ CLOTHING = Niche(
 )
 
 
+COOL = Niche(
+    key="cool", label="Cool finds", icon="✨", noun="cool find for your own flat",
+    brands=[],
+    valuable_segments=frozenset(),
+    categories=(),  # everywhere: a listing counts when cool.prefilter() finds style, material or oddness at a small price
+    feeds=(),
+    words=(), not_words=(),
+    search_pool=("lampa vintage", "lampa retro", "veioza vintage", "lustra vintage", "lampa anii 70", "lampa space age",
+                 "lampa industriala", "lampa lava", "glob pamantesc vechi", "harta veche", "busola veche", "telescop vechi",
+                 "masina de scris", "telefon cu disc", "radio vechi cu lampi", "gramofon", "patefon", "tabla emailata",
+                 "reclama veche", "afis vechi", "poster vintage", "tablou vechi", "pictura veche", "statueta bronz",
+                 "vaza murano", "sticla murano", "ceramica vintage", "portelan vechi", "oglinda veche", "candelabru vechi",
+                 "scaun vintage", "fotoliu vintage", "fotoliu anii 60", "scaun thonet", "mobilier mid century",
+                 "comoda veche", "cufar vechi", "valiza veche", "kilim", "covor persan", "sifon vechi", "pendula veche",
+                 "barometru vechi", "jucarii vechi", "obiecte vechi de colectie", "obiecte ciudate", "curiozitati",
+                 "obiecte rsr", "obiecte comuniste", "obiecte sovietice", "neon", "semn vechi", "machete vechi",
+                 "aparat foto vechi decor", "diaproiector", "walkman", "boombox", "viniluri"),
+    focus_pool=("obiecte vechi", "vechituri", "debarasare pod", "obiecte de la bunici", "decoratiuni vintage",
+                "decor retro", "obiecte decor vechi", "lucruri vechi", "antichitati ieftine", "obiecte de colectie ieftine"),
+    facebook_queries=("vintage", "retro", "lampa vintage", "obiecte vechi", "mid century", "murano"),
+    strong_words=("vintage", "retro", "vechi", "veche", "antic", "murano", "mid century", "art deco"),
+    repair_ron={},
+    claude_checks="""- A cool find for the person's own flat, not for resale: what it is (maker, era, style), its condition, how
+     beautiful, unusual or characterful it is, and whether the price is fair for such a piece.""",
+)
+
+
 LOTS = Niche(
     key="lots", label="Lots & clear-outs", icon="📦", noun="lot of mixed second-hand items",
     brands=[],
@@ -337,7 +364,7 @@ LOTS = Niche(
 
 
 ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS, PHONES, TOOLS, LEGO, SNEAKERS, CLOTHING, BIKES,
-                                            LOTS)}
+                                            COOL, LOTS)}
 
 
 def get(key: str | None) -> Niche:

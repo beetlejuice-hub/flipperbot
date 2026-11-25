@@ -41,6 +41,11 @@ def is_relevant(l: Listing, niche: str | None = None) -> bool:
     wall clock. In the niche's OLX categories everything counts; elsewhere the title needs a
     niche word (Facebook) or a brand plus a niche word."""
     n = niches.get(niche or l.niche)
+    if n.key == "cool":
+        from .cool import prefilter as cool_prefilter
+        from .config import Settings as _S
+
+        return cool_prefilter(l.title, l.description, l.price_ron, len(l.photos), _S().cool_max_price)[0] >= 2
     if n.key == "lots":
         from .lots import prefilter
 
@@ -216,6 +221,10 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         from .lots import prefilter
 
         rs, rwhy, _info = prefilter(l.title, l.description, l.price_ron, len(l.photos))  # the photo look decides more
+    if l.niche == "cool":
+        from .cool import prefilter as cool_prefilter
+
+        rs, rwhy, _info = cool_prefilter(l.title, l.description, l.price_ron, len(l.photos), s.cool_max_price)
     db.conn.execute("UPDATE listings SET ebay=?, liquidity=?, rule_score=?, rule_why=? WHERE key=?",
                     (json.dumps(ebay_summary) if ebay_summary else None, json.dumps(liq) if liq else None, rs, rwhy, l.key))
     db.conn.commit()
@@ -569,6 +578,9 @@ def deliver(db: DB, s: Settings, log: Callable[[str], None] = print, extra_ai: i
         from . import lots
 
         lots.look(db, s, log)  # the best new lots: a cheap look at their photos
+        from . import cool
+
+        cool.look(db, s, log)  # the best new cool finds: a cheap look at their photos
     if not (s.ai_auto or s.ai_auto_real_good):
         return
     for r in pending_alerts(db, s):

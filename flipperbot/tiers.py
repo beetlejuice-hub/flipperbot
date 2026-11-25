@@ -139,6 +139,11 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
         if floor and price < floor:
             return Verdict("bad", f"{price} lei is too cheap to be a working {ident.family} (under {floor}): "
                                   "probably a part/accessory, a box, a game or bait")
+    if ident.niche == "cool":  # not a flip: how cool it is for its price (the photo look decides more)
+        from .cool import prefilter as cool_prefilter
+
+        score, why, _info = cool_prefilter(l.title, l.description, price, len(l.photos), s.cool_max_price)
+        return Verdict("mid" if score >= s.cool_min_score else "bad", why)
     if ident.niche == "lots":  # no one model to price: the free lot score decides who gets a look at the photos
         from .lots import prefilter
 

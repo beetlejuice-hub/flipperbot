@@ -172,5 +172,5 @@ def test_categories_take_turns_watches_every_poll():
     s = Settings()
     db = DB(":memory:")
     runs = [{n for q, c, n in bot.pick_searches(db, s)} for _ in range(len(s.niches))]
-    assert all({"watches", "clothing"} <= r and len(r) == s.niches_per_poll for r in runs)
+    assert all({"watches", "clothing", "cool"} <= r and len(r) == s.niches_per_poll for r in runs)
     assert set().union(*runs) == set(s.niches)  # every category gets its turn within a few polls

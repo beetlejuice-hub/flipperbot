@@ -155,12 +155,12 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
 # What the bot finds interesting and you haven't decided on yet: deals, lots, old watches whose model
 # isn't clear, sellers who don't know what they have. Only recently seen ones (still for sale).
 # Interesting: score 5+ that you haven't decided on, still for sale and freshly posted.
-INTERESTING = f"""triage IS NULL AND hidden = 0 AND gone_at IS NULL AND COALESCE(score, 0) >= 5
+INTERESTING = f"""triage IS NULL AND hidden = 0 AND gone_at IS NULL AND COALESCE(score, 0) >= 5 AND COALESCE(niche, '') != 'cool'
     AND last_seen >= datetime('now', '-3 days')
     AND (COALESCE(orig_created_at, created_at, '') = '' OR substr(COALESCE(orig_created_at, created_at), 1, 10) >= date('now', '-{MAX_LISTING_AGE_DAYS} days')
          OR reason LIKE '%price was just cut%')"""
 
-RECENT = "last_seen >= datetime('now', '-3 days') AND gone_at IS NULL"
+RECENT = "last_seen >= datetime('now', '-3 days') AND gone_at IS NULL AND COALESCE(niche, '') != 'cool'"
 
 VIEWS = {
     "interesting": (INTERESTING, "rank"),
@@ -177,6 +177,9 @@ VIEWS = {
     # lots and clear-outs worth a look, newest first by score: the photo look and Claude's item lists live here
     "lots": ("niche = 'lots' AND hidden = 0 AND COALESCE(score, 0) >= 3 AND last_seen >= datetime('now', '-7 days')", "rank"),
     "hidden": ("hidden=1", "new"),
+    # cool finds for your own flat: the coolest for the money first (out of the flip lists)
+    "cool": ("niche = 'cool' AND hidden = 0 AND gone_at IS NULL AND COALESCE(score, 0) >= 4 "
+             "AND last_seen >= datetime('now', '-7 days')", "rank"),
     # faulty, but worth fixing: biggest profit-if-fixed first
     "fixers": (f"fixer IS NOT NULL AND json_extract(fixer, '$.worth_it') = 1 AND hidden=0 AND {RECENT}", "fix"),
     # older links
@@ -243,6 +246,7 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
         "lots": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['lots'][0]}").fetchone()[0],
         "fixers": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['fixers'][0]} {nf}", na).fetchone()[0],
+        "cool": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['cool'][0]}").fetchone()[0],
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
         "priced_models": c.execute(
             "SELECT COUNT(*) FROM (SELECT model_key FROM listings WHERE model_key LIKE '%|%' GROUP BY model_key HAVING COUNT(*) >= ?)",
@@ -654,6 +658,7 @@ const TABS = [
   ["hidden", "Hidden", null],
   ["lots", "📦 Lots", s => s.lots],
   ["fixers", "🔧 Fixer-uppers", s => s.fixers],
+  ["cool", "✨ Cool finds", s => s.cool],
   ["sold", "🏷️ Sold", s => s.sold_tracked],
   ["flips", "💰 My flips", null],
   ["radar", "📈 Trends", null],
@@ -662,6 +667,7 @@ const LABEL = { real_good: "real good", good: "good", mid: "maybe", suspect: "li
 const EMPTY = {
   interesting: "Nothing scored 5+ that you haven't decided on. The bot checks every 5–10 minutes; good finds land here.",
   sold: "No sales seen yet. Every poll the bot asks OLX which listings of a few sellers are still up; the ones gone (not expired) land here with what they sold for. It starts after the bot has run a day.",
+  cool: "No cool finds yet. Every poll the bot searches for cheap, unusual things to keep (vintage lamps, Murano glass, old globes, retro objects…); the best get a quick look at their photos.",
   fixers: "No faulty items worth fixing right now. The bot reads what's wrong from each faulty listing, looks up the usual fix and its cost, and lists the ones that sell for clearly more fixed than they cost plus the repair.",
   lots: "No lots worth a look yet. The bot searches lots and clear-outs in turn with the other categories; the best get a quick look at their photos.",
   top: "Nothing at 8–10 yet: those need an AI to agree.", mid: "Nothing at 5–7.", low: "Nothing at 1–4.",
@@ -766,6 +772,15 @@ function lookBox(q) {
 // Asking price next to what it's worth: the bot's market estimate, else Claude's resale range.
 // Asking price next to ONE realistic estimate: Claude's range once it has checked (it looked at this exact
 // watch and at sold prices), else the bot's realistic range from similar listings. Profit from the low end.
+function coolBox(l) {  // a cool find: what it is and whether the price is fair, from the look at its photos
+  const q = l.quick && l.quick.cool ? l.quick : null;
+  return h("div", { class: "fix" },
+    h("b", {}, `✨ ${lei(l.price)}`), q && q.what ? ` · ${q.what}` : "",
+    q ? h("div", {}, [q.era_style, q.condition].filter(Boolean).join(" · ")) : h("div", {}, "Waiting for a look at its photos."),
+    q && q.usual_price_ron ? h("div", {}, `Usually ~${lei(q.usual_price_ron)} second-hand`,
+      q.usual_price_ron > l.price ? h("b", { class: "pos" }, ` (a bargain)`) : "") : null);
+}
+
 function priceBox(l) {
   const a = l.ai && !l.ai.error && l.ai.resale_ron_high ? l.ai : null;
   let lo = l.value, hi = l.value_high || l.value, profit = l.profit;
@@ -876,7 +891,7 @@ function card(l) {
           // the rules' first guess; once an AI has read the listing, its score is what counts
           /^(Claude|quick AI)/.test(l.score_why || "") ? null : h("span", { class: "pill t-" + l.tier }, LABEL[l.tier] || l.tier)),
         l.score_why ? h("div", { class: "why" }, l.score_why) : null,
-        priceBox(l),
+        l.niche === "cool" ? coolBox(l) : priceBox(l),
         h("a", { class: "title", href: l.url, target: "_blank", rel: "noopener noreferrer", onclick: () => checkAlive(l, el) }, l.title),
         l.gone_at && l.gone_reason !== "sold" ? h("div", { class: "liq liq-slow" },
           `Gone from ${siteName(l.source)} ${ago(l.gone_at)} (${l.gone_reason || "removed"})`) : null,

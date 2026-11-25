@@ -17,7 +17,7 @@ RULE_MAX = 7  # free rules alone never go above 7: an 8+ needs an AI to agree
 
 # Bump when the rules that judge or score a listing change: the bot then re-judges every stored listing
 # once at start, so an update never leaves old listings with stale or missing scores.
-RULES_VERSION = 19
+RULES_VERSION = 20
 
 # Reasons a listing is not worth anyone's time, from the tier's own reason text.
 _DEAD = ("someone buying", "repair shop", "replica", "over budget", "fashion brand", "part/accessory", "locked to",
@@ -149,6 +149,12 @@ def final_score(row: Any, good_profit: int = 150) -> tuple[int, str]:
         quick = json.loads(row["quick"]) if row["quick"] else None
     except (TypeError, ValueError, IndexError, KeyError):
         quick = None
+    if "niche" in row.keys() and row["niche"] == "cool":
+        # A cool find isn't a flip: the photo look's score is how cool it is for the money, with no resale maths.
+        if quick and quick.get("cool") and isinstance(quick.get("score"), (int, float)):
+            return max(0, min(10, int(quick["score"]))), "cool: " + str(quick.get("note") or "")[:100]
+        rule = row["rule_score"] if row["rule_score"] is not None else 1
+        return min(rule, 6), row["rule_why"] or ""
     got = quick_score(quick, row["price_ron"], good_profit)
     if got:
         return got

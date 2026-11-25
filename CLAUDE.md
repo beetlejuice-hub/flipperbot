@@ -13,9 +13,9 @@ README.md for setup and the tiers.
 - Listing text is Romanian; match on `identify.normalize()`d text (lower case, no diacritics).
 - Category knowledge (value drivers, sleeper brands, fakes, reselling): `flipperbot/knowledge/*.md`, also the
   `flip-knowledge` skill. The AI checks read it; keep rules (`watchdb.py`, `camdb.py`, `techdb.py`) in step with it.
-- Categories (`niches.py`): watches, bikes, electronics, phones, tools, lego, sneakers, clothing (cameras still known, off by
-  default; `niche_budgets` caps a category's price, bikes 1,500 lei); each poll covers a few
-  in turn (`niches_per_poll`; `every_poll`: watches and clothing always). Catalog categories (`techdb.py`, `phonedb.py`, `tooldb.py`, `legodb.py`,
+- Categories (`niches.py`): watches, bikes, electronics, phones, tools, lego, sneakers, clothing, cool (cameras still known,
+  off by default; `niche_budgets` can cap a category's price); each poll covers a few
+  in turn (`niches_per_poll`; `every_poll`: watches, clothing and cool always). Catalog categories (`techdb.py`, `phonedb.py`, `tooldb.py`, `legodb.py`,
   `sneakerdb.py`, via `identify._identify_catalog`) price by exact model and variant, used private listings only.
 - Smartwatches and bands: `smartdb.py` names the exact model (huawei|band 10, apple|watch series 9...). New prices in
   shops (`retail.py`, from Claude's checks and a daily web-search batch) cap every estimate; brand-only listings get
@@ -33,6 +33,9 @@ README.md for setup and the tiers.
 - Bicycles (`bikedb.py`, `knowledge/bikes.md`): brand + line (trek|marlin 7, rockrider|st 540), else brand + kind and
   wheel size; groupset and carbon read; the flip is buy tired, service, sell in spring (bike faults in `repairs.py`).
   Stolen-bike guards: "fara acte" on a good bike is suspect; half price for a premium one asks for invoice and serial.
+- Cool finds (`cool.py`, niche "cool"): cheap, unusual things to keep, not flips. A free score from style/material/oddness
+  words and price (strong words count double), then a Haiku look at 2 photos scores how cool it is for the money. Own tab
+  (✨), out of the flip lists, quick read and alerts.
 - Prices: sold listings are the hard evidence (3+ set the market, 1-2 count 3x an asking price); new (sealed, with
   tags) is compared with new ones or used ones + `bot.NEW_UPLIFT`. Faulty items: `repairs.py` reads the fault, the
   usual fix, its cost and odds, and prices it against working ones (`fixer` column, the 🔧 Fixer-uppers tab).

@@ -39,11 +39,15 @@ def test_parts_and_exercise_bikes_are_not_bikes():
     assert "part" in identify("Furca RockShox Judy 29", "", "bikes").flags
 
 
-def test_bikes_replace_cameras_with_a_1500_budget():
+def test_bikes_replace_cameras_with_no_special_limit():
     assert "bikes" in S.niches and "cameras" not in S.niches and niches.get("bikes").icon == "🚲"
-    v = verdict("Bicicleta Trek Marlin 7", 2200, "", [3000] * 6)
-    assert v.tier == "bad" and "over budget" in v.reason and "1500" in v.reason
-    assert S.niche_budgets.get("watches", S.budget_ron) == 5000  # other categories keep theirs
+    v = verdict("Bicicleta Trek Marlin 7", 2200, "", [3500, 3600, 3400, 3500, 3700, 3600])
+    assert "over budget" not in v.reason  # bikes over 1,500 lei count too (the general limit applies)
+    s = Settings()
+    s.niche_budgets = {"bikes": 1500}  # a limit per category still works if you set one
+    v = judge(Listing("olx", "1", "u", "Bicicleta Trek Marlin 7", price_ron=2200), identify("Bicicleta Trek Marlin 7", "", "bikes"),
+              [3000] * 6, s)
+    assert "over budget" in v.reason and "1500" in v.reason
 
 
 def test_stolen_bike_warnings():

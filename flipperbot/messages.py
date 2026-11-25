@@ -24,6 +24,8 @@ QUESTIONS = {
                  "Are pete, găuri sau scame? De unde a fost cumpărată (bon, magazin)?"],
     "bikes": ["Ce mărime are cadrul și ce schimbătoare/frâne are? Când a avut ultima revizie?",
               "Aveți factura sau seria cadrului (e sub pedalier)? O poză cu ea m-ar ajuta."],
+    "cool": ["Are ciobituri, fisuri sau alte defecte?",
+             "Puteți trimite o poză și cu partea de jos sau din spate (marcaje, semnătură, eticheta)?"],
     "lots": ["Se vinde tot lotul împreună?", "Puteți trimite poze mai de aproape cu obiectele din imagini?"],
 }
 

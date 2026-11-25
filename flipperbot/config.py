@@ -78,11 +78,11 @@ class Settings:
     blocked_backoff_min: int = 60
     # (cameras are still known: add "cameras" back here in config.toml to search them again)
     niches: list[str] = field(default_factory=lambda: ["watches", "bikes", "electronics", "phones", "tools", "lego", "sneakers",
-                                                       "clothing", "lots"])
+                                                       "clothing", "cool", "lots"])
     # Each poll covers this many categories, taking turns (the every_poll ones every time), so OLX isn't asked too
     # much at once.
-    niches_per_poll: int = 3
-    every_poll: list[str] = field(default_factory=lambda: ["watches", "clothing"])
+    niches_per_poll: int = 4
+    every_poll: list[str] = field(default_factory=lambda: ["watches", "clothing", "cool"])
     # Lots and clear-outs (lots.py): the free score a lot needs for a cheap look at its photos (Haiku, 3 photos),
     # how many lots a day get that look, and how many per poll.
     # New prices in shops (retail.py): how many models a day get looked up (one Claude call with web search).
@@ -107,7 +107,14 @@ class Settings:
     # Money
     budget_ron: int = 5000  # skip anything above what you'd pay
     # ...per category, where it's different (above it: "over budget", but it still prices the others)
-    niche_budgets: dict[str, int] = field(default_factory=lambda: {"bikes": 1500})
+    niche_budgets: dict[str, int] = field(default_factory=dict)
+    # Cool finds (cool.py): cheap, unusual things to keep. The most a find may cost, the free score that earns a quick
+    # look at its photos (Haiku, 2 photos), and how many looks a day / per round.
+    cool_max_price: int = 800
+    cool_min_score: int = 4
+    cool_look: bool = True
+    cool_look_daily: int = 25
+    cool_look_per_run: int = 4
     resale_haircut: float = 0.85  # listings ask more than things sell for
     battery_fix_ron: int = 40
     repair_ron: dict[str, int] = field(default_factory=lambda: dict(REPAIR_RON))

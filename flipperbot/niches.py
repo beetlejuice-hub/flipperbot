@@ -330,14 +330,21 @@ COOL = Niche(
                  "comoda veche", "cufar vechi", "valiza veche", "kilim", "covor persan", "sifon vechi", "pendula veche",
                  "barometru vechi", "jucarii vechi", "obiecte vechi de colectie", "obiecte ciudate", "curiozitati",
                  "obiecte rsr", "obiecte comuniste", "obiecte sovietice", "neon", "semn vechi", "machete vechi",
-                 "aparat foto vechi decor", "diaproiector", "walkman", "boombox", "viniluri"),
+                 "aparat foto vechi decor", "diaproiector", "walkman", "boombox", "viniluri",
+                 # new and modern: design pieces, art toys, fun gadgets, plants
+                 "lampa design", "lampa ciuperca", "lampa flos", "lampa artemide", "louis poulsen", "vitra", "hay design",
+                 "kartell", "alessi", "smeg", "bang olufsen", "teenage engineering", "polaroid", "instax", "ceas nixie",
+                 "lampa neon", "neon led", "bearbrick", "kaws", "lego art", "arcade", "pinball", "scaun panton",
+                 "fotoliu ou", "scaun design", "obiecte design", "decoratiuni moderne", "gadget ciudat", "lampa levitatie",
+                 "glob plasma", "skateboard deck", "monstera mare", "terariu", "print semnat", "tablou abstract"),
     focus_pool=("obiecte vechi", "vechituri", "debarasare pod", "obiecte de la bunici", "decoratiuni vintage",
                 "decor retro", "obiecte decor vechi", "lucruri vechi", "antichitati ieftine", "obiecte de colectie ieftine"),
-    facebook_queries=("vintage", "retro", "lampa vintage", "obiecte vechi", "mid century", "murano"),
-    strong_words=("vintage", "retro", "vechi", "veche", "antic", "murano", "mid century", "art deco"),
+    facebook_queries=("vintage", "retro", "lampa vintage", "obiecte vechi", "mid century", "murano", "lampa design", "vitra"),
+    strong_words=("vintage", "retro", "vechi", "veche", "antic", "murano", "mid century", "art deco", "design", "designer"),
     repair_ron={},
-    claude_checks="""- A cool find for the person's own flat, not for resale: what it is (maker, era, style), its condition, how
-     beautiful, unusual or characterful it is, and whether the price is fair for such a piece.""",
+    claude_checks="""- A cool find for the person's own flat, not for resale, new or old: what it is (maker, era, style), its
+     condition, how beautiful, unusual, fun or characterful it is, and whether the price is fair for such a piece.
+     Modern design, art toys, gadgets and plants count as much as vintage; generic mass-produced things don't.""",
 )
 
 

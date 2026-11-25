@@ -67,3 +67,20 @@ def test_searched_every_poll():
     assert "cool" in S.niches and "cool" in S.every_poll
     searches = bot.pick_searches(DB(":memory:"), S)
     assert sum(1 for q, c, n in searches if n == "cool" and q) == S.searches_per_poll
+
+
+def test_new_things_can_be_cool_too():
+    assert cool.prefilter("Lampa Hay Matin, design danez", "noua, in cutie", 250, 3)[0] >= 4
+    assert cool.prefilter("Bearbrick 400% editie limitata", "sigilat", 300, 3)[0] >= 4
+    assert cool.prefilter("Lampa ciuperca design minimalist", "", 90, 3)[0] >= 5
+    assert cool.prefilter("Ceas nixie handmade", "", 400, 3)[0] >= 4
+    assert cool.prefilter("Aparat de ras Braun", "nou", 80, 3)[0] <= 1  # an everyday shaver, not a find
+    assert cool.prefilter("Tablou nou", "livrare in 24h, comanda", 90, 3)[0] == 0  # a shop
+
+
+def test_brand_words_and_lookalikes_that_arent_finds():
+    assert cool.prefilter("Cizme dama ploaie masura 36", "kartell vitra hay design", 50, 3)[0] <= 1
+    assert cool.prefilter("Oglinda baie VitrA 70x55", "noua in cutie, design", 450, 3)[0] == 0
+    assert cool.prefilter("Lampa Stop Led Neon Mercedes Sprinter", "12V", 149, 3)[0] == 0
+    assert cool.prefilter("20 Neocaridina Yellow neon", "creveti", 8, 3)[0] == 0
+    assert cool.prefilter("Scaun transparent Kartell Lou Lou Ghost", "", 170, 3)[0] >= 5

@@ -33,7 +33,8 @@ README.md for setup and the tiers.
 - Bicycles (`bikedb.py`, `knowledge/bikes.md`): brand + line (trek|marlin 7, rockrider|st 540), else brand + kind and
   wheel size; groupset and carbon read; the flip is buy tired, service, sell in spring (bike faults in `repairs.py`).
   Stolen-bike guards: "fara acte" on a good bike is suspect; half price for a premium one asks for invoice and serial.
-- Cool finds (`cool.py`, niche "cool"): cheap, unusual things to keep, not flips. A free score from style/material/oddness
+- Cool finds (`cool.py`, niche "cool"): cheap, unusual things to keep, not flips, new or old (modern design by maker
+  name in the title, art toys, gadgets, plants, vintage). A free score from style/material/oddness
   words and price (strong words count double), then a Haiku look at 2 photos scores how cool it is for the money. Own tab
   (✨), out of the flip lists, quick read and alerts.
 - Prices: sold listings are the hard evidence (3+ set the market, 1-2 count 3x an asking price); new (sealed, with

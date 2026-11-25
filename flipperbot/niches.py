@@ -321,30 +321,32 @@ COOL = Niche(
     categories=(),  # everywhere: a listing counts when cool.prefilter() finds style, material or oddness at a small price
     feeds=(),
     words=(), not_words=(),
-    search_pool=("lampa vintage", "lampa retro", "veioza vintage", "lustra vintage", "lampa anii 70", "lampa space age",
-                 "lampa industriala", "lampa lava", "glob pamantesc vechi", "harta veche", "busola veche", "telescop vechi",
-                 "masina de scris", "telefon cu disc", "radio vechi cu lampi", "gramofon", "patefon", "tabla emailata",
-                 "reclama veche", "afis vechi", "poster vintage", "tablou vechi", "pictura veche", "statueta bronz",
-                 "vaza murano", "sticla murano", "ceramica vintage", "portelan vechi", "oglinda veche", "candelabru vechi",
-                 "scaun vintage", "fotoliu vintage", "fotoliu anii 60", "scaun thonet", "mobilier mid century",
-                 "comoda veche", "cufar vechi", "valiza veche", "kilim", "covor persan", "sifon vechi", "pendula veche",
-                 "barometru vechi", "jucarii vechi", "obiecte vechi de colectie", "obiecte ciudate", "curiozitati",
-                 "obiecte rsr", "obiecte comuniste", "obiecte sovietice", "neon", "semn vechi", "machete vechi",
-                 "aparat foto vechi decor", "diaproiector", "walkman", "boombox", "viniluri",
-                 # new and modern: design pieces, art toys, fun gadgets, plants
-                 "lampa design", "lampa ciuperca", "lampa flos", "lampa artemide", "louis poulsen", "vitra", "hay design",
-                 "kartell", "alessi", "smeg", "bang olufsen", "teenage engineering", "polaroid", "instax", "ceas nixie",
-                 "lampa neon", "neon led", "bearbrick", "kaws", "lego art", "arcade", "pinball", "scaun panton",
-                 "fotoliu ou", "scaun design", "obiecte design", "decoratiuni moderne", "gadget ciudat", "lampa levitatie",
-                 "glob plasma", "skateboard deck", "monstera mare", "terariu", "print semnat", "tablou abstract"),
-    focus_pool=("obiecte vechi", "vechituri", "debarasare pod", "obiecte de la bunici", "decoratiuni vintage",
-                "decor retro", "obiecte decor vechi", "lucruri vechi", "antichitati ieftine", "obiecte de colectie ieftine"),
-    facebook_queries=("vintage", "retro", "lampa vintage", "obiecte vechi", "mid century", "murano", "lampa design", "vitra"),
-    strong_words=("vintage", "retro", "vechi", "veche", "antic", "murano", "mid century", "art deco", "design", "designer"),
+    search_pool=(
+        # lights
+        "lampa ciuperca", "lampa design", "lampa space age", "lampa lava", "lampa neon", "semn neon", "neon led",
+        "lampa levitatie", "lampa luna", "lampa industriala", "lampa flos", "lampa artemide", "louis poulsen",
+        # design
+        "vitra", "hay design", "kartell", "alessi", "scaun panton", "fotoliu ou", "scaun suspendat", "bean bag",
+        "mobilier mid century", "scaun design", "obiecte design", "smeg",
+        # gadgets, retro tech, games
+        "ceas nixie", "ceas flip", "glob plasma", "game boy", "nintendo retro", "sega mega drive", "atari", "commodore 64",
+        "ipod classic", "tamagotchi", "walkman", "polaroid", "instax", "masina de scris", "telefon cu disc", "arcade",
+        "pinball", "jukebox", "bang olufsen", "teenage engineering", "sintetizator", "korg volca", "pocket operator",
+        # science and nature
+        "telescop", "microscop", "glob pamantesc", "meteorit", "fosila", "geoda", "minerale colectie", "plante carnivore",
+        "bonsai", "monstera mare", "terariu",
+        # collect, play, art
+        "bearbrick", "kaws", "lego art", "star wars colectie", "figurina anime", "skateboard deck", "longboard",
+        "poster film", "print semnat", "tablou abstract", "graffiti", "obiecte ciudate", "gadget ciudat", "robot jucarie"),
+    focus_pool=("obiecte ciudate", "curiozitati", "decor modern", "decoratiuni design", "gadget", "obiecte unicat",
+                "handmade design", "lucruri cool"),
+    facebook_queries=("lampa design", "mid century", "vitra", "game boy", "neon", "obiecte ciudate"),
+    strong_words=("design", "designer", "retro", "vintage", "mid century", "neon", "lampa", "nintendo"),
     repair_ron={},
     claude_checks="""- A cool find for the person's own flat, not for resale, new or old: what it is (maker, era, style), its
      condition, how beautiful, unusual, fun or characterful it is, and whether the price is fair for such a piece.
-     Modern design, art toys, gadgets and plants count as much as vintage; generic mass-produced things don't.""",
+     Modern design, art toys, retro tech, gadgets, science things and plants count; dusty antiques (vases, porcelain,
+     crystal, figurines, religious objects, granny decor) and generic mass-produced things don't.""",
 )
 
 

@@ -19,7 +19,7 @@ def listing(i, title, price, desc="", photos=3):
 def test_the_free_score():
     hi, why, _ = cool.prefilter("Lampa vintage anii 70 space age, crom", "", 80, 3)
     assert hi >= 5 and "cool find" in why
-    assert cool.prefilter("Vaza Murano sommerso", "sticla murano, anii 60", 250, 3)[0] >= 4
+    assert cool.prefilter("Vaza Murano sommerso", "sticla murano, anii 60", 250, 3)[0] == 0  # not their style
     assert cool.prefilter("Dulap vechi din lemn masiv", "", 200, 3)[0] == 0  # furniture to haul, not a find
     assert cool.prefilter("Lampa vintage alama", "", 2500, 3)[0] == 0  # over the cool-finds limit
     assert cool.prefilter("Lampa noua de birou", "", 60, 3)[0] <= 1  # nothing unusual
@@ -84,3 +84,42 @@ def test_brand_words_and_lookalikes_that_arent_finds():
     assert cool.prefilter("Lampa Stop Led Neon Mercedes Sprinter", "12V", 149, 3)[0] == 0
     assert cool.prefilter("20 Neocaridina Yellow neon", "creveti", 8, 3)[0] == 0
     assert cool.prefilter("Scaun transparent Kartell Lou Lou Ghost", "", 170, 3)[0] >= 5
+
+
+
+def test_dusty_antiques_are_not_their_style():
+    for title in ["Vaza cristal Bohemia", "Set cesti portelan", "Icoana pe lemn", "Bibelouri vechi", "Placi gramofon 78 rpm",
+                  "Statueta bronz", "Barometru vechi", "Clovn muzical ceramica"]:
+        assert cool.prefilter(title, "", 50, 3)[0] == 0, title
+    for title in ["Game Boy Color cu jocuri", "Ceas flip retro", "Korg Volca Beats", "Geoda ametist mare",
+                  "Plante carnivore in terariu", "Skateboard deck semnat"]:
+        assert cool.prefilter(title, "", 150, 3)[0] >= 4, title
+
+
+def test_a_few_of_each_kind_and_two_per_seller():
+    db = DB(":memory:")
+    cars = [listing(i, f"Macheta auto Hot Wheels model {i} retro rar", 30) for i in range(10)]
+    for l in cars:
+        l.seller_id = f"s{l.source_id}"
+    lamps = [listing(100 + i, f"Lampa ciuperca design {i}", 90) for i in range(3)]
+    shop = [listing(200 + i, f"Game Boy {['Color', 'Pocket', 'Advance', 'SP'][i]} retro", 150) for i in range(4)]
+    for l in lamps:
+        l.seller_id = f"l{l.source_id}"
+    for l in shop:
+        l.seller_id = "same seller"
+    bot.process(db, cars + lamps + shop, S)
+    keys = [x["key"] for x in web.query(db, "cool")]
+    titles = [db.get(k)["title"] for k in keys]
+    assert sum("Hot Wheels" in t for t in titles) == 3  # not ten toy cars
+    assert sum("Game Boy" in t for t in titles) == 2  # one seller: two at most
+    assert sum("Lampa" in t for t in titles) == 3
+
+
+
+def test_accessories_parties_and_shop_furniture_are_not_finds():
+    assert cool.prefilter("Protectii incheieturi skateboard longboard", "", 35, 3)[0] == 0
+    assert cool.prefilter("Banda masina scris, role noi", "", 30, 3)[0] == 0
+    assert cool.prefilter("Neon Led Boy or Girl Gender Reveal Petrecere", "", 89, 3)[0] == 0
+    assert cool.prefilter("Comoda cu 4 sertare ARDURA", "mid-century industrial scandinav design", 490, 3)[0] == 0
+    # style words stuffed in a description: a hint, not a find
+    assert cool.prefilter("Masuta de cafea", "design mid-century industrial scandinav bauhaus", 150, 3)[0] <= 4

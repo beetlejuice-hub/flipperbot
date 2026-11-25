@@ -226,8 +226,31 @@ def query(db: DB, view: str, q: str = "", sort: str = "", limit: int = 120, nich
         where += " AND (title LIKE ? OR model_key LIKE ? OR city LIKE ?)"
         args += [f"%{q}%"] * 3
     order = ORDER.get(sort or default_sort, ORDER["rank"])
-    rows = db.conn.execute(f"SELECT * FROM listings WHERE {where} ORDER BY {order} LIMIT ?", [*args, limit]).fetchall()
+    diverse = view == "cool" and not q
+    rows = db.conn.execute(f"SELECT * FROM listings WHERE {where} ORDER BY {order} LIMIT ?",
+                           [*args, limit * 6 if diverse else limit]).fetchall()
+    if diverse:
+        rows = _diverse(rows)[:limit]
     return [listing_json(r, db) for r in rows]
+
+
+def _diverse(rows: list[Any], per_group: int = 3, per_seller: int = 2) -> list[Any]:
+    """A few of each kind of thing (not twenty toy cars), and at most two from one seller, best first."""
+    from .cool import group
+
+    seen_group: dict[str, int] = {}
+    seen_seller: dict[str, int] = {}
+    out = []
+    for r in rows:
+        g = group(r["title"])
+        seller = r["seller_id"] or ""
+        if seen_group.get(g, 0) >= per_group or (seller and seen_seller.get(seller, 0) >= per_seller):
+            continue
+        seen_group[g] = seen_group.get(g, 0) + 1
+        if seller:
+            seen_seller[seller] = seen_seller.get(seller, 0) + 1
+        out.append(r)
+    return out
 
 
 def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
@@ -246,7 +269,7 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
         "lots": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['lots'][0]}").fetchone()[0],
         "fixers": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['fixers'][0]} {nf}", na).fetchone()[0],
-        "cool": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['cool'][0]}").fetchone()[0],
+        "cool": len(query(db, "cool")),
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
         "priced_models": c.execute(
             "SELECT COUNT(*) FROM (SELECT model_key FROM listings WHERE model_key LIKE '%|%' GROUP BY model_key HAVING COUNT(*) >= ?)",

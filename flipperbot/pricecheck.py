@@ -42,6 +42,8 @@ def price_links(r: Any) -> list[list[str]]:
         "sneakers": ["StockX", f"https://stockx.com/search?s={quote_plus(q)}"],
         # Grailed: what designer, archive and streetwear pieces really go for (sold listings)
         "clothing": ["Grailed", f"https://www.grailed.com/shop?query={quote_plus(q)}"],
+        # used bikes across Europe, with prices
+        "bikes": ["Buycycle", f"https://www.google.com/search?q={quote_plus('site:buycycle.com ' + q)}"],
     }.get(niche)
     if niche in ("clothing", "sneakers"):  # the clothes market people resell on: one click, opened by you in your browser
         shop = [shop, ["Vinted", f"https://www.vinted.ro/catalog?search_text={quote_plus(q)}"]]

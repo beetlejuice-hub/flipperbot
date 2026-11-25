@@ -156,8 +156,8 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             return v
     if "replica" in f:
         return Verdict("bad", "says replica/copy")
-    if price > s.budget_ron:
-        return Verdict("bad", f"over budget ({price} lei)")
+    if price > s.niche_budgets.get(ident.niche, s.budget_ron):
+        return Verdict("bad", f"over budget ({price} lei, your limit is {s.niche_budgets.get(ident.niche, s.budget_ron)})")
     if seg == "fashion" and "lot" not in f and "solid_gold" not in f:
         return Verdict("bad", f"{ident.brand.name}: fashion brand, poor resale")
     if "part" in f and "lot" not in f:
@@ -254,6 +254,19 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
                     return Verdict("suspect", f"{ident.family} new at {price} lei: under {floor}, a genuine pair never "
                                               "sells this cheap new: likely a replica")
                 return Verdict("mid", f"cheap for a {ident.family} ({price} lei, under {floor}): often a replica, check it")
+    if ident.niche == "bikes" and ident.brand:
+        from .bikedb import FLOORS as BIKE_FLOORS
+
+        adult = (ident.family or "").split(" ")[0] not in ("kids", "bmx")
+        floor = BIKE_FLOORS.get(seg or "") if adult else None
+        if floor:
+            comps = [p for p in comps if p >= floor * 0.6]  # scrap and kids' bikes don't set an adult bike's price
+        if "no_papers" in f and seg in ("premium", "mid") and not f & {"broken"}:
+            return Verdict("suspect", f"{ident.brand.name} sold 'without papers': could be stolen. Ask for the invoice and the "
+                                      "frame serial before anything")
+        if floor and price < floor and not f & {"broken"} and adult:
+            return Verdict("mid", f"{price} lei is very cheap for a working {ident.brand.name}: check it's the real thing, "
+                                  "complete, an adult bike, and not stolen (invoice, frame serial)")
     if ident.niche == "clothing" and ident.family and ident.brand:
         from . import clothdb
 
@@ -331,6 +344,12 @@ def judge(l: Listing, ident: Identity, comps: list[int], s: Settings,
             # against all Seamasters, a kit lens against pro ones) than a steal: Claude looks before it's a deal.
             v.tier = "mid"
             v.reason = "far under similar listings: check it's the same version, let Claude look · " + v.reason
+        if ident.niche == "bikes" and discount >= 0.5 and v.tier in ("good", "real_good") and seg in ("premium",) \
+                and "broken" not in f:
+            # Half price for a working Trek or Specialized: a find, or stolen. Worth a look, with the questions.
+            v.tier = "mid"
+            v.reason = ("half the usual price for a working one: ask for the invoice and frame serial (stolen bikes are "
+                        "common), let Claude look · " + v.reason)
         from .clothdb import OFTEN_FAKED as _faked
 
         if ident.niche == "clothing" and discount >= 0.6 and v.tier in ("good", "real_good") and "broken" not in f \

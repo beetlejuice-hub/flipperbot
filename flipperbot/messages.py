@@ -22,6 +22,8 @@ QUESTIONS = {
     "sneakers": ["Ce mărime scrie pe eticheta din interior?", "Aveți cutia originală sau bonul? Poze cu talpa și eticheta?"],
     "clothing": ["Ce mărime scrie pe eticheta din interior? Îmi puteți trimite poze cu toate etichetele (gât, compoziție, codul)?",
                  "Are pete, găuri sau scame? De unde a fost cumpărată (bon, magazin)?"],
+    "bikes": ["Ce mărime are cadrul și ce schimbătoare/frâne are? Când a avut ultima revizie?",
+              "Aveți factura sau seria cadrului (e sub pedalier)? O poză cu ea m-ar ajuta."],
     "lots": ["Se vinde tot lotul împreună?", "Puteți trimite poze mai de aproape cu obiectele din imagini?"],
 }
 

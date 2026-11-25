@@ -281,7 +281,7 @@ NEGATED = re.compile(
     r"(?:nici\s+o\s+|nicio\s+|niciun\s+)?"
     r"(?:(?:defecte|defect|defectiuni|probleme|problema|zgarieturi|zgarietura|fisuri|fisura|lovituri|lovitura|ciobituri|"
     r"pixeli morti|pixel mort|pete|pata|gauri|gaura|urme de uzura|uzura|scame|rupturi|decolorari|imperfectiuni|erori|"
-    r"eroare|reparatii|interventii|piese schimbate)(?:\s*(?:,|si|sau|ori|/)\s*)?)+")
+    r"eroare|reparatii|interventii|piese schimbate|rugina|urme de rugina|fisuri pe cadru)(?:\s*(?:,|si|sau|ori|/)\s*)?)+")
 
 
 def _without_negations(text: str) -> str:
@@ -302,7 +302,7 @@ def _smart_words(t: str) -> str:
 
 
 CATALOGS = {"electronics": "techdb", "phones": "phonedb", "tools": "tooldb", "lego": "legodb", "sneakers": "sneakerdb",
-            "clothing": "clothdb"}
+            "clothing": "clothdb", "bikes": "bikedb"}
 
 
 def _catalog(niche: str):

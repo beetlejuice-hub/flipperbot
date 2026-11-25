@@ -43,6 +43,7 @@ VALUE_WORDS = {
     "electronics": ["consola", "console", "nintendo", "gameboy", "game boy", "playstation", "ps1", "ps2", "sega", "xbox",
                     "laptop", "iphone", "telefoane", "ipod", "walkman", "casetofon"],
     "tools": ["makita", "dewalt", "milwaukee", "hilti", "bosch", "scule", "metabo", "festool"],
+    "bikes": ["bicicleta", "biciclete", "trek", "specialized", "cube", "brompton"],
     "collect": ["lego", "monede", "bancnote", "timbre", "medalii", "insigne", "militare", "vinyl", "viniluri", "discuri vinil",
                 "jucarii vechi", "trenulet", "piko", "matchbox", "carti vechi", "icoana", "icoane", "tablou", "tablouri",
                 "portelan", "cristal", "bronz"],

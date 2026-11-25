@@ -76,7 +76,8 @@ class Settings:
     more_sources_terms: int = 2  # searches per category per round, on each site
     pause_between_requests_s: tuple[float, float] = (3.0, 8.0)
     blocked_backoff_min: int = 60
-    niches: list[str] = field(default_factory=lambda: ["watches", "cameras", "electronics", "phones", "tools", "lego", "sneakers",
+    # (cameras are still known: add "cameras" back here in config.toml to search them again)
+    niches: list[str] = field(default_factory=lambda: ["watches", "bikes", "electronics", "phones", "tools", "lego", "sneakers",
                                                        "clothing", "lots"])
     # Each poll covers this many categories, taking turns (the every_poll ones every time), so OLX isn't asked too
     # much at once.
@@ -105,6 +106,8 @@ class Settings:
 
     # Money
     budget_ron: int = 5000  # skip anything above what you'd pay
+    # ...per category, where it's different (above it: "over budget", but it still prices the others)
+    niche_budgets: dict[str, int] = field(default_factory=lambda: {"bikes": 1500})
     resale_haircut: float = 0.85  # listings ask more than things sell for
     battery_fix_ron: int = 40
     repair_ron: dict[str, int] = field(default_factory=lambda: dict(REPAIR_RON))

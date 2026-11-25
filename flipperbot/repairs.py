@@ -126,6 +126,32 @@ FAULTS: list[Fault] = [
           "dirty / stained", "a deep clean", (30, 80), "DIY", "high"),
 ]
 
+# Bicycles: most "faults" are a weekend's work, which is the flip: buy it tired, service it, sell it ready to ride.
+FAULTS += [
+    Fault(("bikes",), ("cadru fisurat", "cadru crapat", "fisura cadru", "cadru indoit", "cadru rupt"),
+          "cracked or bent frame", "not fixable safely (aluminium); carbon repair is a specialist job", (300, 900), "service", "low"),
+    Fault(("bikes",), ("baterie defecta", "nu tine bateria", "baterie moarta", "acumulator defect", "motor defect", "display defect"),
+          "e-bike battery or motor", "a new battery or motor: often more than the bike is worth", (900, 2500), "service", "low"),
+    Fault(("bikes",), ("furca blocata", "furca nu", "suspensie blocata", "furca curge", "amortizor curge", "furca indoita"),
+          "suspension fork", "a fork service (or a new basic fork)", (150, 450), "service", "medium"),
+    Fault(("bikes",), ("janta stramba", "roata stramba", "acht", "spite rupte", "spita rupta", "janta indoita"),
+          "bent wheel", "true the wheel or a new wheel", (60, 300), "service", "high"),
+    Fault(("bikes",), ("pedalier", "joc la pedalier", "butuc", "rulmenti", "joc la roata"),
+          "bottom bracket / hub bearings", "new bearings or bottom bracket", (60, 200), "service", "high"),
+    Fault(("bikes",), ("nu schimba", "schimbator", "viteze", "sare lantul", "sar vitezele", "cablu rupt", "cabluri"),
+          "gears", "adjust or new cables and housing (a derailleur if bent)", (30, 200), "DIY", "high"),
+    Fault(("bikes",), ("frane", "frana", "nu franeaza", "placute", "saboti", "disc indoit"),
+          "brakes", "new pads/cables, bleed hydraulic brakes", (40, 200), "DIY", "high"),
+    Fault(("bikes",), ("lant ruginit", "ruginit", "ruginita", "rugina", "lant", "caseta uzata", "foi uzate"),
+          "rusty or worn drivetrain", "clean it, a new chain (and cassette if worn)", (50, 250), "DIY", "high"),
+    Fault(("bikes",), ("are pana", "pana la roata", "dezumflata", "dezumflate", "camera sparta", "cauciucuri uzate",
+                       "anvelope uzate", "cauciucuri crapate"),
+          "flat or worn tyres", "new tubes or tyres", (30, 200), "DIY", "high"),
+    Fault(("bikes",), ("necesita revizie", "necesita service", "a stat in curte", "a stat in garaj", "a stat afara",
+                       "nefolosita de ani", "nefolosita de mult", "necesita reparatii", "de reparat"),
+          "needs a full service", "a full service: clean, lube, adjust, tyres", (100, 300), "DIY", "high"),
+]
+
 # Faulty, but nothing names what's wrong: an unknown fault, priced as a gamble.
 UNKNOWN: dict[str, Fault] = {
     "electronics": Fault(("electronics",), (), "unknown fault (doesn't work)", "diagnose first: anything from a cable to the board",
@@ -134,6 +160,8 @@ UNKNOWN: dict[str, Fault] = {
     "watches": Fault(("watches",), (), "doesn't work", "a battery if quartz, a service if mechanical", (50, 600), "service", "medium"),
     "cameras": Fault(("cameras",), (), "unknown fault", "diagnose first", (150, 600), "service", "low"),
     "tools": Fault(("tools",), (), "unknown fault", "brushes or switch most often", (50, 250), "DIY", "medium"),
+    "bikes": Fault(("bikes",), (), "needs work (not said what)", "a full service, maybe tyres and a chain", (150, 400),
+                   "DIY", "medium"),
     "smartwatches": Fault(("smartwatches",), (), "dead, for parts or locked", "often account-locked or a dead board: a gamble",
                           (150, 600), "service", "low"),
 }
@@ -177,8 +205,15 @@ def diagnose(niche: str, text: str, flags: set[str]) -> Fault | None:
         return found[0]
     found.sort(key=lambda f: (-ODDS_RANK[f.odds], -f.cost[1]))
     worst = found[0]
-    return Fault(worst.niches, (), " + ".join(f.name for f in found), "; ".join(f.fix for f in found),
-                 (sum(f.cost[0] for f in found), sum(f.cost[1] for f in found)),
+    if niche == "bikes":  # one workshop session: the biggest job in full, the others overlap with it (half)
+        service = next((f for f in found if f.name == "needs a full service"), None)
+        top = service or max(found, key=lambda f: f.cost[1])
+        rest = [f for f in found if f is not top]
+        share = 4 if service else 2  # a full service already covers the chain, tyres, brakes and gears in part
+        cost = (top.cost[0] + sum(f.cost[0] for f in rest) // share, top.cost[1] + sum(f.cost[1] for f in rest) // share)
+    else:
+        cost = (sum(f.cost[0] for f in found), sum(f.cost[1] for f in found))
+    return Fault(worst.niches, (), " + ".join(f.name for f in found), "; ".join(f.fix for f in found), cost,
                  "service" if any(f.how == "service" for f in found) else "DIY", worst.odds)
 
 

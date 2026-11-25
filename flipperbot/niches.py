@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import camdb, clothdb, legodb, phonedb, sneakerdb, techdb, tooldb, watchdb
+from . import bikedb, camdb, clothdb, legodb, phonedb, sneakerdb, techdb, tooldb, watchdb
 from .watchdb import Brand
 
 
@@ -240,6 +240,40 @@ SNEAKERS = Niche(
 )
 
 
+BIKES = Niche(
+    key="bikes", label="Bikes", icon="🚲", noun="bicycle",
+    brands=bikedb.BRANDS,
+    valuable_segments=frozenset({"premium", "mid", "vintage"}),
+    categories=("987", "1584"),  # bicycles, kids' bicycles (not e-bikes 1585, parts 1587/1588, exercise bikes 989)
+    feeds=("987", "1584"),
+    words=("bicicleta", "biciclete", "bike", "mtb", "cursiera", "gravel", "bmx", "hardtail", "cadru"),
+    not_words=("fitness", "spinning", "eliptica", "stationara", "trotineta", "motocicleta", "scuter", "moped", "atv", "masina",
+               "papusa", "jucarie", "lego"),
+    search_pool=("bicicleta trek", "bicicleta specialized", "bicicleta cube", "bicicleta scott", "bicicleta giant",
+                 "bicicleta merida", "bicicleta kellys", "bicicleta author", "rockrider st 540", "rockrider st 520",
+                 "triban rc 520", "triban rc 120", "bicicleta cannondale", "bicicleta canyon", "bicicleta ctm",
+                 "bicicleta mtb 29", "bicicleta mtb 27.5", "bicicleta cursiera", "bicicleta gravel", "bicicleta deore",
+                 "bicicleta pegas", "brompton", "bicicleta copii 20", "bicicleta copii 24", "bicicleta trekking",
+                 "bicicleta ghost", "bicicleta orbea", "bicicleta bianchi", "bicicleta cursiera vintage"),
+    focus_pool=("bicicleta veche", "bicicleta de reparat", "bicicleta necesita revizie", "bicicleta din garaj",
+                "bicicleta stat in garaj", "bicicleta urgent", "bicicleta mutare", "biciclete lot", "bicicleta cursiera veche",
+                "bicicleta pliabila", "bicicleta vintage", "bicicleta ieftina", "bicicleta pentru piese", "bicicleta defecta"),
+    facebook_queries=("bicicleta", "bicicleta mtb", "bicicleta trek", "bicicleta cube", "bicicleta cursiera", "rockrider",
+                      "bicicleta de reparat"),
+    strong_words=("bicicleta", "biciclete", "mtb", "cursiera", "bike"),
+    repair_ron={"premium": 250, "mid": 200, "basic": 120, "vintage": 200},
+    claude_checks="""- Bicycles: name the brand, line and year if you can, the frame size (S/M/L or cm, from the photos or text), wheel
+     size, the groupset (read the derailleur and shifters: Tourney/Altus/Acera/Alivio/Deore/SLX/XT; Claris/Sora/Tiagra/
+     105/Ultegra; SRAM), brakes (rim, mechanical or hydraulic disc), the fork (spring or air: RockShox/Fox/Suntour) and
+     frame material. Condition from the photos: rust on the chain and cassette, worn tyres, bent wheels, cracks at the
+     welds and the head tube (a cracked frame is not worth buying), fork stanchion scratches.
+   - Price it as the flip: what it sells for in spring after a service and a wash, minus the service and parts it
+     needs (repair_cost_ron). Compare with sold or listed bikes of the same line and groupset (OLX, buycycle, Facebook).
+   - Stolen? A premium bike far under market, no invoice or serial mentioned, night photos at a block entrance, a seller
+     who doesn't know the size: say so in authenticity_notes and ask for the invoice and frame serial first.""",
+)
+
+
 CLOTHING = Niche(
     key="clothing", label="Clothing", icon="👕", noun="piece of men's clothing",
     brands=clothdb.BRANDS,
@@ -302,7 +336,8 @@ LOTS = Niche(
 )
 
 
-ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS, PHONES, TOOLS, LEGO, SNEAKERS, CLOTHING, LOTS)}
+ALL: dict[str, Niche] = {n.key: n for n in (WATCHES, CAMERAS, ELECTRONICS, PHONES, TOOLS, LEGO, SNEAKERS, CLOTHING, BIKES,
+                                            LOTS)}
 
 
 def get(key: str | None) -> Niche:

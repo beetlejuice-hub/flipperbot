@@ -13,7 +13,8 @@ README.md for setup and the tiers.
 - Listing text is Romanian; match on `identify.normalize()`d text (lower case, no diacritics).
 - Category knowledge (value drivers, sleeper brands, fakes, reselling): `flipperbot/knowledge/*.md`, also the
   `flip-knowledge` skill. The AI checks read it; keep rules (`watchdb.py`, `camdb.py`, `techdb.py`) in step with it.
-- Categories (`niches.py`): watches, cameras, electronics, phones, tools, lego, sneakers, clothing; each poll covers a few
+- Categories (`niches.py`): watches, bikes, electronics, phones, tools, lego, sneakers, clothing (cameras still known, off by
+  default; `niche_budgets` caps a category's price, bikes 1,500 lei); each poll covers a few
   in turn (`niches_per_poll`; `every_poll`: watches and clothing always). Catalog categories (`techdb.py`, `phonedb.py`, `tooldb.py`, `legodb.py`,
   `sneakerdb.py`, via `identify._identify_catalog`) price by exact model and variant, used private listings only.
 - Smartwatches and bands: `smartdb.py` names the exact model (huawei|band 10, apple|watch series 9...). New prices in
@@ -29,6 +30,9 @@ README.md for setup and the tiers.
   libraries): Vinted items come in by hand (the dashboard's "Check a Vinted item"). OLX bumps and reposts are recognized (`db.upsert`).
 - The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),
   8+ full Claude check. Tests never call the real Claude (`tests/conftest.py`).
+- Bicycles (`bikedb.py`, `knowledge/bikes.md`): brand + line (trek|marlin 7, rockrider|st 540), else brand + kind and
+  wheel size; groupset and carbon read; the flip is buy tired, service, sell in spring (bike faults in `repairs.py`).
+  Stolen-bike guards: "fara acte" on a good bike is suspect; half price for a premium one asks for invoice and serial.
 - Prices: sold listings are the hard evidence (3+ set the market, 1-2 count 3x an asking price); new (sealed, with
   tags) is compared with new ones or used ones + `bot.NEW_UPLIFT`. Faulty items: `repairs.py` reads the fault, the
   usual fix, its cost and odds, and prices it against working ones (`fixer` column, the 🔧 Fixer-uppers tab).

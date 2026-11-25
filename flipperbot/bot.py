@@ -95,7 +95,8 @@ def recent_price_cut(db: DB, l: Listing, days: int = 14) -> bool:
 
 
 # What new (sealed, with tags) adds over a used one, where there aren't enough new ones to compare with.
-NEW_UPLIFT = {"electronics": 1.15, "phones": 1.15, "tools": 1.2, "sneakers": 1.3, "clothing": 1.35, "cameras": 1.15}
+NEW_UPLIFT = {"electronics": 1.15, "phones": 1.15, "tools": 1.2, "sneakers": 1.3, "clothing": 1.35, "cameras": 1.15,
+              "bikes": 1.2}
 
 
 def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) -> Any:
@@ -107,7 +108,7 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         ident = apply_model_fix(ident, stored["model_fix"], l.niche)
     # Electronics: a sealed new console asks far more than a used one; compare used with used.
     # (LEGO prices sealed sets as their own model instead; the rest compare a used one with used private listings.)
-    used_only = l.niche in ("electronics", "phones", "tools", "sneakers", "clothing") and "new" not in ident.flags
+    used_only = l.niche in ("electronics", "phones", "tools", "sneakers", "clothing", "bikes") and "new" not in ident.flags
     # Catalog categories: a broken one is compared with other broken ones of the model, not with working ones minus
     # a repair guess (a "pentru piese" iPhone isn't a working iPhone minus 400 lei).
     broken_comps = l.niche in ("electronics", "phones", "tools") and "broken" in ident.flags

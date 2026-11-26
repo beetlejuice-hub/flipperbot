@@ -12,7 +12,8 @@
   digest           send the daily summary now
   ai <url|key>     run the Claude check on one stored listing now
   telegram-setup   find your Telegram chat id after you've messaged your bot
-  stats            what's in the database
+  stats            what's in the database (and how big it and the photos are)
+  tidy             clean up now: old and junk listings, old photos, big logs (it also runs by itself daily)
   lots [--look N]  search lots and clear-outs now, show the best by free score; --look N: Claude looks at N lots' photos
   radar            the trend radar now: hot items cheap on OLX, the watchlist, what's rising (also on the dashboard)
   radar-refresh    ask Claude now what's rising in value (it also does this by itself once a week)
@@ -53,6 +54,7 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("target")
     sub.add_parser("telegram-setup")
     sub.add_parser("stats")
+    sub.add_parser("tidy")
     lp = sub.add_parser("lots")
     lp.add_argument("--look", type=int, default=0)
     sub.add_parser("radar")
@@ -340,8 +342,21 @@ def main(argv: list[str] | None = None) -> None:
         if r["google_trends"]:
             print("\nGoogle Trends Romania today:", ", ".join(t["title"] for t in r["google_trends"]))
 
+    elif args.cmd == "tidy":
+        from . import tidy
+
+        print("Cleaning up (keeps what you starred, hid, bought, Claude checked, and recent sales)...")
+        out = tidy.run(db, s, vacuum=True)
+        print(f"removed {out['listings']} listings ({out['listings_left']} left), {out['photo_folders']} photo folders, "
+              f"{out['mb_freed']} MB freed")
+
     elif args.cmd == "stats":
         c = db.conn
+        from . import tidy
+
+        size = s.db_path.stat().st_size / 1e6 if s.db_path.exists() else 0
+        photos = tidy._folder_size(s.photos_dir) / 1e6
+        print(f"database: {size:.0f} MB, photos: {photos:.0f} MB; the daily clean-up would remove {tidy.preview(db)}")
         print("listings:", c.execute("SELECT COUNT(*) FROM listings").fetchone()[0])
         for r in c.execute("SELECT tier, COUNT(*) n FROM listings GROUP BY tier ORDER BY n DESC"):
             print(f"  {r['tier']}: {r['n']}")

@@ -770,7 +770,8 @@ def rescore_all(db: DB, s: Settings, log: Callable[[str], None] = print) -> dict
     """Judge and score every stored listing again with today's rules. Returns how many per tier."""
     from .scoring import RULES_VERSION
 
-    rows = db.all()
+    # newest first: what the dashboard shows is right within seconds, the old price book follows
+    rows = db.conn.execute("SELECT * FROM listings ORDER BY last_seen DESC").fetchall()
     for i, r in enumerate(rows, 1):
         l = row_to_listing(r)
         if is_relevant(l):
@@ -817,6 +818,14 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
 
     web.serve(s, background=True)
     print(f"flipperbot is running. Dashboard: {web.url(s)}")
+    try:
+        from . import tidy
+
+        if tidy.due(db):
+            db.beat("cleaning up old listings and photos")
+            tidy.run(db, s)  # less to re-judge, a lighter database
+    except Exception as e:  # never stops the bot
+        print(f"  clean-up error: {e!r}")
     db.beat("starting: re-judging the stored listings with today's rules")
     try:
         rescore_if_rules_changed(db, s)
@@ -854,6 +863,14 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
                     retail.look_up(db, s)  # new prices in shops for the most-listed models, once a day
             except Exception as e:  # never stops the main bot
                 print(f"  new-price look-up error: {e!r}")
+            try:
+                from . import tidy
+
+                if tidy.due(db):
+                    db.beat("cleaning up old listings and photos")
+                    tidy.run(db, s)  # once a day: junk and old listings, old photos, big logs
+            except Exception as e:  # never stops the main bot
+                print(f"  clean-up error: {e!r}")
             try:
                 from . import radar
 

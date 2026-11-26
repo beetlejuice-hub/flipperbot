@@ -67,12 +67,34 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# Indexes for what the dashboard tabs and the bot filter on (added after the columns exist).
+INDEXES = """
+CREATE INDEX IF NOT EXISTS listings_niche_seen ON listings(niche, last_seen);
+CREATE INDEX IF NOT EXISTS listings_seen ON listings(last_seen);
+CREATE INDEX IF NOT EXISTS listings_score ON listings(score);
+CREATE INDEX IF NOT EXISTS listings_seller ON listings(seller_id);
+CREATE INDEX IF NOT EXISTS listings_gone ON listings(gone_reason, gone_at);
+CREATE INDEX IF NOT EXISTS listings_first_seen ON listings(first_seen);
+CREATE INDEX IF NOT EXISTS prices_key ON prices(key);
+"""
+
+
 class DB:
+    _ready: set[str] = set()  # databases whose schema is already up to date in this process
+
     def __init__(self, path: Path | str):
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(path))
+        self.path = str(path)
+        # Wait for a busy database instead of failing (the bot and the dashboard share it)
+        self.conn = sqlite3.connect(str(path), timeout=15)
         self.conn.row_factory = sqlite3.Row
+        if str(path) != ":memory:":
+            # WAL: the dashboard reads while the bot writes, neither waits for the other
+            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.conn.execute("PRAGMA synchronous=NORMAL")
+            if str(path) in DB._ready:  # the dashboard opens it per request: the schema check once is enough
+                return
         self.conn.executescript(SCHEMA)
         # Columns added after the first release: add them to older databases.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(listings)")}
@@ -94,6 +116,9 @@ class DB:
             if col.split()[0] not in have:
                 self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col}")
         self.conn.commit()
+        self.conn.executescript(INDEXES)
+        if str(path) != ":memory:":
+            DB._ready.add(str(path))
 
     # -- listings ------------------------------------------------------------
 

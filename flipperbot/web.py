@@ -253,7 +253,28 @@ def _diverse(rows: list[Any], per_group: int = 3, per_seller: int = 2) -> list[A
     return out
 
 
+_STATS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
 def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
+    """The header's counts; the same for 15 seconds (every tab and every action asks for them)."""
+    import time
+
+    key = f"{getattr(db, 'path', '')}|{niche}"
+    hit = _STATS_CACHE.get(key)
+    if hit and time.time() - hit[0] < 15 and getattr(db, "path", ":memory:") != ":memory:":
+        return {**hit[1], **_live_stats(db, s)}
+    out = _stats(db, s, niche)
+    _STATS_CACHE[key] = (time.time(), out)
+    return out
+
+
+def _live_stats(db: DB, s: Settings) -> dict[str, Any]:
+    """What must be current even from the cache: the bot's heartbeat and Claude's queue."""
+    return {"heartbeat": db.kv_get("heartbeat"), "last_poll": db.kv_get("last_poll")}
+
+
+def _stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
     c = db.conn
     keys = niche_keys(niche)
     nf, na = (f"AND COALESCE(niche, 'watches') IN ({','.join('?' * len(keys))})", keys) if keys else ("", [])
@@ -269,7 +290,8 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         "interesting": c.execute(f"SELECT COUNT(*) FROM listings WHERE {INTERESTING} {nf}", na).fetchone()[0],
         "lots": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['lots'][0]}").fetchone()[0],
         "fixers": c.execute(f"SELECT COUNT(*) FROM listings WHERE {VIEWS['fixers'][0]} {nf}", na).fetchone()[0],
-        "cool": len(query(db, "cool")),
+        "cool": len(_diverse(c.execute(f"SELECT title, seller_id FROM listings WHERE {VIEWS['cool'][0]} "
+                                       f"ORDER BY {ORDER['rank']} LIMIT 720").fetchall())[:120]),
         "niches": [{"key": k, "label": niches.get(k).label, "icon": niches.get(k).icon} for k in s.niches],
         "priced_models": c.execute(
             "SELECT COUNT(*) FROM (SELECT model_key FROM listings WHERE model_key LIKE '%|%' GROUP BY model_key HAVING COUNT(*) >= ?)",
@@ -427,6 +449,10 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
             self._json(listing_json(db.get(row["key"]), db))
 
         def do_POST(self) -> None:
+            _STATS_CACHE.clear()  # you changed something: the counts are fresh on the next look
+            self._post()
+
+        def _post(self) -> None:
             if not self._host_ok() or self.headers.get("X-Flipperbot") != "1":
                 return self._send(403, b"forbidden", "text/plain")
             if urlparse(self.path).path == "/api/manual":
@@ -1078,7 +1104,22 @@ function radarView(r) {
   ].filter(Boolean);
 }
 
-async function load() {
+// Cards come in pages of 40 (a "Show more" button adds the next 40): a full page of 120 cards with photos is heavy.
+const PAGE = 40;
+let shown = [], shownSig = "", drawn = 0;
+function drawCards(rows, more) {
+  const grid = document.getElementById("grid");
+  const start = more ? drawn : 0;  // what was drawn, not what's left on screen (hidden cards are gone from it)
+  const cards = rows.slice(start, start + PAGE).map(card);
+  drawn = start + cards.length;
+  const old = grid.querySelector(".more"); if (old) old.remove();
+  if (more) grid.append(...cards); else grid.replaceChildren(...cards);
+  const left = rows.length - (start + cards.length);
+  if (left > 0) grid.append(h("div", { class: "section more" }, h("button", { class: "copy",
+    onclick: () => drawCards(shown, true) }, `Show ${Math.min(PAGE, left)} more (${left} left)`)));
+}
+
+async function load(auto) {
   const mine = ++loading;
   if (view === "flips") {
     const f = await api("/api/flips");
@@ -1097,7 +1138,10 @@ async function load() {
   const q = document.getElementById("q").value.trim(), sort = document.getElementById("sort").value;
   const rows = await api(`/api/listings?view=${view}&q=${encodeURIComponent(q)}&sort=${sort}&niche=${nicheParam()}`);
   if (mine !== loading) return;
-  document.getElementById("grid").replaceChildren(...rows.map(card));
+  const sig = view + "|" + rows.map(r => `${r.key}:${r.score}:${r.price}:${r.ai_at || ""}:${r.gone_at || ""}`).join(",");
+  if (auto && sig === shownSig) return;  // the timed refresh: nothing changed, so nothing redrawn (no jump while you scroll)
+  shown = rows; shownSig = sig;
+  drawCards(rows, false);
   document.getElementById("hint").hidden = view !== "interesting" || !rows.length;
   const empty = document.getElementById("empty");
   empty.hidden = rows.length > 0; empty.textContent = q ? "Nothing matches." : EMPTY[view];
@@ -1155,7 +1199,7 @@ addForm.addEventListener("submit", async e => {
 
 sortFor(view); drawTabs(); drawMode(); refreshStats(); load();
 setInterval(refreshStats, 60000);
-setInterval(() => { if (!document.hidden && !document.getElementById("q").value) load(); }, 120000);
+setInterval(() => { if (!document.hidden && !document.getElementById("q").value) load(true); }, 120000);
 </script>
 </body>
 </html>

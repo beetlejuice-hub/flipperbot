@@ -40,5 +40,8 @@ README.md for setup and the tiers.
 - Prices: sold listings are the hard evidence (3+ set the market, 1-2 count 3x an asking price); new (sealed, with
   tags) is compared with new ones or used ones + `bot.NEW_UPLIFT`. Faulty items: `repairs.py` reads the fault, the
   usual fix, its cost and odds, and prices it against working ones (`fixer` column, the 🔧 Fixer-uppers tab).
+- Staying light: SQLite in WAL mode with indexes for the tabs (`db.INDEXES`), the schema checked once per process;
+  `tidy.py` daily removes junk not seen for 2 weeks and anything not seen for 6 months (never starred, hidden, bought,
+  Claude-checked or recently sold), old photos and big logs; the dashboard draws 40 cards at a time.
 - Claude's check names the exact model from the photos; if it isn't the bot's, `bot.fix_model` re-keys the listing
   (`model_fix` column, kept on later polls) so its prices and the price book are for the right model.

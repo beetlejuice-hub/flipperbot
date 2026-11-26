@@ -87,7 +87,8 @@ From Terminal:
 | `flipperbot ai <olx link>` | Claude-check one listing now |
 | `flipperbot log` | what the bot is doing right now (Ctrl + C to leave) |
 | `flipperbot stop` / `flipperbot start` | turn the background bot off / on |
-| `flipperbot stats` | what's in the database |
+| `flipperbot stats` | what's in the database (and how big it and the photos are) |
+| `flipperbot tidy` | clean up now: old and junk listings, old photos, big logs (it also runs by itself daily) |
 | `flipperbot rescore` | re-judge everything (after changing thresholds) |
 
 Settings live in `~/.flipperbot/config.toml`; the database, photos and log in `~/.flipperbot/`.

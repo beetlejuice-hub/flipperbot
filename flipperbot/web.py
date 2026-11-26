@@ -89,11 +89,11 @@ def _retail(r: Any, db: DB | None) -> dict[str, Any] | None:
     return retail.get(db, r["model_key"]) if db is not None else None
 
 
-def _message(r: Any) -> str | None:
+def _message(r: Any, cut_pct: int | None = None) -> str | None:
     from .messages import for_row
 
     try:
-        return for_row(r)
+        return for_row(r, cut_pct=cut_pct)
     except Exception:  # a message is a nicety: never let it break the card
         return None
 
@@ -109,19 +109,25 @@ def _size(r: Any) -> str | None:
     return sneakerdb.size(text) if r["niche"] == "sneakers" else clothdb.size(text)
 
 
-def _sold_evidence(r: Any, db: DB | None) -> dict[str, Any] | None:
-    """What this model really sold for lately (listings that disappeared as sold, and your own resales)."""
-    if db is None or "|" not in (r["model_key"] or ""):
+def _market(r: Any, db: DB | None) -> dict[str, Any] | None:
+    """What this model really sold for lately, how fast, how much sellers dropped, the trend (market.py)."""
+    if db is None or "|" not in (r["model_key"] or "") or r["niche"] in ("cool", "lots"):
         return None
-    used = r["niche"] in ("electronics", "phones", "tools", "sneakers", "clothing") and "new" not in (r["flags"] or "")
-    prices = sorted(p for p, _d in db.sold(r["model_key"], used_only=used))
-    if not prices:
+    from . import market
+
+    used = r["niche"] in ("electronics", "phones", "tools", "sneakers", "clothing", "bikes") and "new" not in (r["flags"] or "")
+    try:
+        m = market.summary(db, r["model_key"], used_only=used, niche=r["niche"])
+    except Exception:  # the market box is a nicety: never let it break the card
         return None
-    return {"n": len(prices), "low": prices[0], "high": prices[-1], "median": prices[len(prices) // 2]}
+    if m:
+        m["line"] = market.line(m)
+    return m
 
 
 def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
     photos = json.loads(r["photos"] or "[]")
+    mk = _market(r, db)
     a = json.loads(r["ai"]) if r["ai"] else None
     if ai.is_limit_error(a):  # an older check that only hit the usage limit: not really checked
         a = None
@@ -137,11 +143,11 @@ def listing_json(r: Any, db: DB | None = None) -> dict[str, Any]:
         "quick": json.loads(r["quick"]) if r["quick"] else None,
         "liquidity": json.loads(r["liquidity"]) if r["liquidity"] else None,
         "deal": dict(d) if db is not None and (d := db.deal(r["key"])) else None,
-        "message": _message(r),
+        "message": _message(r, (mk or {}).get("cut_pct")),
         "listed_at": r["created_at"] or None, "currency": r["currency"], "price_orig": r["price_orig"],
         "retail": _retail(r, db), "bumps": r["bumps"] or 0, "first_posted": r["orig_created_at"],
         "size": _size(r), "alive_checked_at": r["alive_checked_at"], "gone_reason": r["gone_reason"],
-        "sold_evidence": _sold_evidence(r, db),
+        "market": mk,
         "fixer": json.loads(r["fixer"]) if r["fixer"] else None,
         "repost_of": r["repost_of"], "gone_at": r["gone_at"], "gone_reason": r["gone_reason"],
         "days_up": _days_up(r), "first_price": _first_price(r, db), "price_links": price_links(r),
@@ -205,6 +211,9 @@ ORDER = {
     "ai": "ai_at IS NULL, ai_at DESC",
     "gone": "gone_at DESC",
     "cheap": "price_ron ASC",
+    # quick flips: what similar ones take to sell (measured from sales when known), soonest first, then the profit
+    "fast": f"json_extract(liquidity, '$.median_days') IS NULL, json_extract(liquidity, '$.median_days') ASC, "
+            f"{PROFIT_SQL} IS NULL, {PROFIT_SQL} DESC",
     "fix": "json_extract(fixer, '$.profit_if_fixed') IS NULL, json_extract(fixer, '$.profit_if_fixed') DESC",
 }
 
@@ -416,6 +425,10 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                 if not path:
                     return self._send(404, b"not found", "text/plain")
                 self._send(200, path.read_bytes(), "image/jpeg")
+            elif u.path == "/api/market":
+                from . import market
+
+                self._json(market.hot(db, niche_keys(qs.get("niche", "")) or None))
             elif u.path == "/api/flips":
                 self._json(db.flips())
             elif u.path == "/api/radar":
@@ -672,7 +685,7 @@ dialog#add .row2 button.go { background: var(--accent); color: #fff; border-colo
     <details id="niches" class="multi"><summary>All categories</summary><div id="nicheList"></div></details>
     <input type="search" id="q" placeholder="Search title, model, city…">
     <select id="sort" aria-label="Sort">
-      <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option><option value="gone">Recently sold</option><option value="profit">Biggest profit (lei)</option><option value="profit_pct">Biggest profit (%)</option>
+      <option value="">Default</option><option value="posted">Newest posted</option><option value="rank">Best first</option><option value="new">Newest found</option><option value="ai">Latest checked by Claude</option><option value="cheap">Cheapest</option><option value="gone">Recently sold</option><option value="profit">Biggest profit (lei)</option><option value="profit_pct">Biggest profit (%)</option><option value="fast">Sells fastest</option>
     </select>
   </div>
 </div></header>
@@ -892,6 +905,29 @@ async function decide(l, el, action) {
   refreshStats();
 }
 
+function hotView(hot) {
+  const name = m => m.model.split("|").filter((w, i, a) => !i || !a[0].includes(w)).join(" ");
+  return h("div", { class: "section" },
+    h("h2", {}, "📊 What sells (last 2 months)"),
+    h("p", { class: "hint" }, "The models the bot saw sell most, how fast and for how much, and what's for sale now. Click one to see its listings."),
+    h("div", { class: "rows" }, ...hot.map(m => h("div", { class: "rowx", style: "cursor:pointer", onclick: () => {
+        document.getElementById("q").value = name(m); view = "low"; location.hash = "low"; drawTabs(); load(); } },
+      h("b", {}, name(m)), ` · ${m.n} sold, usually in ~${m.days} days, at ${m.low.toLocaleString("ro-RO")}–${lei(m.high)} (middle ${lei(m.median)})`,
+      m.trend_pct && Math.abs(m.trend_pct) >= 5 ? h("span", { class: m.trend_pct > 0 ? "pos" : "neg" }, ` · ${m.trend_pct > 0 ? "↑" : "↓"}${Math.abs(m.trend_pct)}%`) : "",
+      h("div", { class: "why" }, m.for_sale ? `${m.for_sale} for sale now, cheapest ${lei(m.cheapest)}`
+        + (m.cheapest_vs_median_pct != null ? ` (${m.cheapest_vs_median_pct > 0 ? "+" : ""}${m.cheapest_vs_median_pct}% vs what sold)` : "")
+        : "none for sale right now")))));
+}
+
+function marketBox(m) {  // what this model really sold for, how fast, and what to ask when you resell it
+  return h("div", { class: "fix" },
+    h("b", {}, "🏷️ What sold: "), m.line,
+    m.resell_ask ? h("div", {}, `Reselling: ask ~${lei(m.resell_ask)}, expect ~${m.days} days`
+      + (m.quick_price ? ` (or ~${lei(m.quick_price)} to sell within a week)` : "")) : null,
+    m.trend_pct && Math.abs(m.trend_pct) >= 5 ? h("div", { class: m.trend_pct > 0 ? "pos" : "neg" },
+      `${m.trend_pct > 0 ? "📈 Rising" : "📉 Falling"} ${Math.abs(m.trend_pct)}% this month`) : null);
+}
+
 function fixBox(f) {  // a faulty item: what's wrong, the fix, and what fixing it leaves
   return h("div", { class: "fix" },
     h("b", {}, `🔧 ${f.fault}`), ` → ${f.fix}`,
@@ -948,10 +984,7 @@ function card(l) {
         l.gone_reason === "sold" ? h("div", { class: "liq liq-fast" },
           `🏷️ Sold ${ago(l.gone_at)} for ~${lei(l.price)}` + (l.days_up != null ? ` after ${l.days_up} days up` : "")
           + (l.first_price && l.first_price !== l.price ? ` (first asked ${lei(l.first_price)})` : "")) : null,
-        l.sold_evidence && l.gone_reason !== "sold" ? h("div", { class: "liq liq-fast" },
-          `🏷️ Sold lately: ${l.sold_evidence.n} at ` + (l.sold_evidence.low === l.sold_evidence.high ? lei(l.sold_evidence.low)
-            : `${l.sold_evidence.low.toLocaleString("ro-RO")}–${lei(l.sold_evidence.high)}`)
-          + (l.sold_evidence.n > 2 ? ` (middle ${lei(l.sold_evidence.median)})` : "")) : null,
+        l.market && l.market.line && l.gone_reason !== "sold" ? marketBox(l.market) : null,
         l.fixer ? fixBox(l.fixer) : null,
         l.quick && l.quick.looked ? lookBox(l.quick) : null,
         l.message ? h("details", { class: "msg" }, h("summary", {}, "✉️ Message to the seller"),
@@ -962,7 +995,7 @@ function card(l) {
           l.price_links.flatMap(([name, href], i) => [i ? " · " : "", h("a", { href, target: "_blank", rel: "noopener noreferrer" }, name)])) : null,
         l.liquidity ? h("div", { class: "liq liq-" + l.liquidity.label.replace(" ", "-") },
           `⏱ sells ${l.liquidity.label}`, h("span", {}, l.liquidity.sold
-            ? ` · ${l.liquidity.sold} sold lately, in ~${l.liquidity.sold_days} days; ${l.liquidity.for_sale} for sale`
+            ? ` · ${l.liquidity.sold} sold lately${l.liquidity.brand_wide ? " (this brand, similar items)" : ""}, in ~${l.liquidity.sold_days} days; ${l.liquidity.for_sale} for sale`
             : ` · similar ones up ~${l.liquidity.median_days} days, ${l.liquidity.for_sale} for sale`)) : null,
         l.ebay && !(l.reason || "").startsWith("eBay:") ? h("div", { class: "checks" },
           `eBay (${l.ebay.n} listed, used): realistic ~${l.ebay.low.toLocaleString("ro-RO")}–${lei(l.ebay.high)}`) : null,
@@ -1142,6 +1175,10 @@ async function load(auto) {
   if (auto && sig === shownSig) return;  // the timed refresh: nothing changed, so nothing redrawn (no jump while you scroll)
   shown = rows; shownSig = sig;
   drawCards(rows, false);
+  if (view === "sold" && !q) {  // what sells: the models that sold most lately, how fast, for how much
+    const hot = await api(`/api/market?niche=${nicheParam()}`).catch(() => []);
+    if (mine === loading && hot.length) document.getElementById("grid").prepend(hotView(hot));
+  }
   document.getElementById("hint").hidden = view !== "interesting" || !rows.length;
   const empty = document.getElementById("empty");
   empty.hidden = rows.length > 0; empty.textContent = q ? "Nothing matches." : EMPTY[view];

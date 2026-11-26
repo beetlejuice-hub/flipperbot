@@ -175,6 +175,16 @@ def evaluate(db: DB, l: Listing, s: Settings, ebay_cached_only: bool = False) ->
         from .tiers import liquidity
 
         liq = liquidity(db.comparable_ages(ident.model_key, exclude_key=l.key), [d for _, d in sold])
+        if liq is None or not liq.get("sold"):
+            # Few sales of this exact model: the brand's sales in the category still say how fast such things go.
+            from . import market
+
+            wide = market.summary(db, ident.model_key, used_only=used_only, niche=l.niche) or {}
+            if wide.get("brand_days") is not None:
+                d = wide["brand_days"]
+                label = "fast" if d <= 7 else "normal" if d <= 21 else "slow" if d <= 45 else "very slow"
+                liq = {"label": label, "median_days": d, "for_sale": (liq or {}).get("for_sale", 0), "sold": wide["brand_n"],
+                       "sold_days": d, "brand_wide": True}
     if liq and verdict.tier in ("good", "real_good") and liq["label"] in ("slow", "very slow"):
         # A cheap buy you can't sell isn't a deal: similar ones sit for months.
         verdict.tier = "mid" if liq["label"] == "very slow" or verdict.tier == "good" else "good"

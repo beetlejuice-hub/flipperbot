@@ -37,6 +37,9 @@ README.md for setup and the tiers.
   name in the title, art toys, gadgets, plants, vintage). A free score from style/material/oddness
   words and price (strong words count double), then a Haiku look at 2 photos scores how cool it is for the money. Own tab
   (✨), out of the flip lists, quick read and alerts.
+- What sold (`market.py`): per model, the sold prices and range, days to sell, what the quick sales went for, how much
+  sellers dropped (price history), the month's trend, a resale ask; brand-wide speed when the model has few sales. Shown
+  on cards, in the Sold tab's "What sells", in Claude's prompt (`ai.sold_line`); offers follow the usual drop.
 - Prices: sold listings are the hard evidence (3+ set the market, 1-2 count 3x an asking price); new (sealed, with
   tags) is compared with new ones or used ones + `bot.NEW_UPLIFT`. Faulty items: `repairs.py` reads the fault, the
   usual fix, its cost and odds, and prices it against working ones (`fixer` column, the 🔧 Fixer-uppers tab).

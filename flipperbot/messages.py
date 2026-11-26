@@ -35,22 +35,25 @@ def _round(x: float) -> int:
     return int(x // step * step)
 
 
-def offer(row: Any, ai: dict[str, Any] | None, good_profit: int = 150) -> int | None:
+def offer(row: Any, ai: dict[str, Any] | None, good_profit: int = 150, cut_pct: int | None = None) -> int | None:
     """What to offer: Claude's offer if it gave one; else leave your margin under the low end of the realistic
-    sale price; never under 60% of the asking price (an insulting offer ends the talk), never over it."""
+    sale price; never over the asking price, and never so low it ends the talk: under 60% of it, or, when the bot
+    knows how much sellers of this model really drop before selling (cut_pct), much under that drop."""
     price = row["price_ron"]
     if not price:
         return None
     if ai and "error" not in ai and isinstance(ai.get("offer_ron"), (int, float)) and ai["offer_ron"] > 0:
         return min(price, int(ai["offer_ron"]))
+    # sellers of this model drop ~cut_pct%: an offer at about twice that is a fair opening, not an insult
+    floor = 1 - min(0.4, max(0.1, 2 * cut_pct / 100)) if cut_pct is not None else 0.6
     low = row["est_value_ron"]
     if not low:
-        return _round(price * 0.85)
+        return _round(price * (0.85 if cut_pct is None else max(floor, 1 - (cut_pct + 5) / 100)))
     target = low - good_profit
-    return max(_round(price * 0.6), min(price, _round(target))) if target < price else _round(price * 0.9)
+    return max(_round(price * floor), min(price, _round(target))) if target < price else _round(price * 0.9)
 
 
-def message(row: Any, ai: dict[str, Any] | None = None, good_profit: int = 150) -> str:
+def message(row: Any, ai: dict[str, Any] | None = None, good_profit: int = 150, cut_pct: int | None = None) -> str:
     niche = (row["niche"] if "niche" in row.keys() else None) or "watches"
     title = re.sub(r"\s+", " ", row["title"] or "").strip()[:60]
     asks = []
@@ -64,7 +67,7 @@ def message(row: Any, ai: dict[str, Any] | None = None, good_profit: int = 150) 
         asks = ["Ce anume nu funcționează exact și de când? Ce s-a întâmplat înainte (a căzut, s-a udat)?",
                 "A fost deschis sau dus la reparat până acum?"]
     asks = asks or QUESTIONS.get(niche, QUESTIONS["watches"])
-    o = offer(row, ai, good_profit)
+    o = offer(row, ai, good_profit, cut_pct)
     lines = [f"Bună ziua! Mai este disponibil anunțul „{title}”?", *asks]
     if o and row["price_ron"] and o < row["price_ron"]:
         lines.append(f"Dacă totul e în regulă, v-aș oferi {o} lei, cu ridicare personală sau plata la livrare.")
@@ -72,7 +75,7 @@ def message(row: Any, ai: dict[str, Any] | None = None, good_profit: int = 150) 
     return "\n".join(lines)
 
 
-def for_row(row: Any, good_profit: int = 150) -> str | None:
+def for_row(row: Any, good_profit: int = 150, cut_pct: int | None = None) -> str | None:
     """The message for a listing worth writing to (score 5+), or None."""
     if (row["score"] or 0) < 5:
         return None
@@ -80,4 +83,4 @@ def for_row(row: Any, good_profit: int = 150) -> str | None:
         ai = json.loads(row["ai"]) if row["ai"] else None
     except (TypeError, ValueError):
         ai = None
-    return message(row, ai, good_profit)
+    return message(row, ai, good_profit, cut_pct)

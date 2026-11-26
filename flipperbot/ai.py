@@ -442,6 +442,19 @@ def retail_line(db: DB, row: Any) -> str:
     return f"New in Romanian shops: ~{r['low']}-{r['high']} lei ({r.get('source') or 'web search'}, {str(r['at'])[:10]}). A used one is worth clearly less.\n"
 
 
+def sold_line(db: DB, row: Any) -> str:
+    """What this model really sold for on OLX lately: the hard evidence, before any asking price."""
+    from . import market
+
+    niche = (row["niche"] if "niche" in row.keys() else None) or "watches"
+    used = niche in ("electronics", "phones", "tools", "sneakers", "clothing", "bikes") and "new" not in (row["flags"] or "")
+    try:
+        m = market.line(market.summary(db, row["model_key"], used_only=used, niche=niche))
+    except Exception:
+        return ""
+    return f"What this model REALLY sold for on OLX (listings seen to sell, last price before they went): {m}.\n" if m else ""
+
+
 def liquidity_line(row: Any) -> str:
     try:
         q = json.loads(row["liquidity"]) if "liquidity" in row.keys() and row["liquidity"] else None
@@ -867,7 +880,7 @@ def check(db: DB, row: Any, s: Settings) -> dict[str, Any] | None:
         + (TOO_CHEAP_BLOCK.format(price=row["price_ron"], ref=row["est_value_ron"]) if cheap and niche == "watches" else ""),
         seller_listings=seller_listings(db, row),
         noun=niche_of(niche).noun, checks=niche_of(niche).claude_checks.strip().lstrip("- "),
-        ebay_line=model_line(row) + ebay_line(row) + liquidity_line(row) + retail_line(db, row),
+        ebay_line=model_line(row) + sold_line(db, row) + ebay_line(row) + liquidity_line(row) + retail_line(db, row),
     )
     lean = not db.kv_get("claude_no_lean_flags", False)
     try:

@@ -91,6 +91,9 @@ From Terminal:
 | `flipperbot tidy` | clean up now: old and junk listings, old photos, big logs (it also runs by itself daily) |
 | `flipperbot rescore` | re-judge everything (after changing thresholds) |
 
+How much of your Claude plan the bot uses by itself: the dashboard's 🤖 Claude switch (Off / Economy / Normal;
+Economy is the default: about a third of Normal and nothing at night). The header shows today's Claude calls.
+
 Settings live in `~/.flipperbot/config.toml`; the database, photos and log in `~/.flipperbot/`.
 The Mac has to be awake for it to work: it keeps itself from idle sleep, but closing the lid pauses it.
 

@@ -28,6 +28,9 @@ README.md for setup and the tiers.
   Okazii, Vinted and eMAG refuse plain requests: not read. Vinted answers its public page once, then shows Cloudflare's
   bot check; its API answers 403. Don't get around that (no browser imitation, no cookie tricks, no Vinted scraper
   libraries): Vinted items come in by hand (the dashboard's "Check a Vinted item"). OLX bumps and reposts are recognized (`db.upsert`).
+- Claude use (`budget.py`): the bot's automatic calls come out of the person's plan. Mode Off / Economy (default: about a
+  third of the config limits, fake check on Haiku, nothing 0:00-7:00) / Normal, switched on the dashboard (kv
+  `claude_mode`); `budget.effective()` gives each round its settings. Today's calls and API-price cost from claude.log.
 - The 0-10 score (`scoring.py`): 0 = removed, 1-7 free rules, quick AI (`quick.py`, haiku, text, batched),
   8+ full Claude check. Tests never call the real Claude (`tests/conftest.py`).
 - Bicycles (`bikedb.py`, `knowledge/bikes.md`): brand + line (trek|marlin 7, rockrider|st 540), else brand + kind and

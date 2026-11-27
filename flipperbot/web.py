@@ -275,12 +275,15 @@ def stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
         return {**hit[1], **_live_stats(db, s)}
     out = _stats(db, s, niche)
     _STATS_CACHE[key] = (time.time(), out)
-    return out
+    return {**out, **_live_stats(db, s)}
 
 
 def _live_stats(db: DB, s: Settings) -> dict[str, Any]:
-    """What must be current even from the cache: the bot's heartbeat and Claude's queue."""
-    return {"heartbeat": db.kv_get("heartbeat"), "last_poll": db.kv_get("last_poll")}
+    """What must be current even from the cache: the bot's heartbeat, Claude's mode and today's use."""
+    from . import budget
+
+    return {"heartbeat": db.kv_get("heartbeat"), "last_poll": db.kv_get("last_poll"), "claude_mode": budget.mode(db),
+            "claude_today": budget.today(), "claude_night": budget.night()}
 
 
 def _stats(db: DB, s: Settings, niche: str = "") -> dict[str, Any]:
@@ -470,6 +473,12 @@ def make_handler(s: Settings) -> type[BaseHTTPRequestHandler]:
                 return self._send(403, b"forbidden", "text/plain")
             if urlparse(self.path).path == "/api/manual":
                 return self._add_by_hand()
+            m = re.fullmatch(r"/api/claude-mode/(off|economy|normal)", urlparse(self.path).path)
+            if m:  # how much of your Claude plan the bot may use by itself
+                from . import budget
+
+                db = DB(s.db_path)
+                return self._json({"claude_mode": budget.set_mode(db, m.group(1)), "claude_today": budget.today()})
             m = re.fullmatch(r"/api/alive/([\w:.-]+)", unquote(urlparse(self.path).path))
             if m:  # you're opening it: is it still up? (one OLX request for its seller, at most every 15 min)
                 from . import bot
@@ -680,6 +689,9 @@ dialog#add .row2 button.go { background: var(--accent); color: #fff; border-colo
   <div class="top"><h1>flipperbot</h1><span class="status" id="status">loading…</span></div>
   <nav id="tabs"></nav>
   <div class="tools">
+    <select id="claudeMode" aria-label="Claude use" title="How much of your Claude plan the bot may use by itself">
+      <option value="off">🤖 Claude: Off</option><option value="economy">🤖 Claude: Economy</option><option value="normal">🤖 Claude: Normal</option>
+    </select>
     <button class="mode" id="clothesMode" title="Only clothing and sneakers: the clothes tracker">👕 Clothes</button>
     <button class="mode" id="addBtn" title="Paste a Vinted listing you found: the bot prices it and checks it for fakes">➕ Vinted item</button>
     <details id="niches" class="multi"><summary>All categories</summary><div id="nicheList"></div></details>
@@ -1055,14 +1067,29 @@ async function refreshStats() {
     stats.sold_tracked ? ` · ${stats.sold_tracked.toLocaleString("ro-RO")} sales seen` : "",
     !stats.ai_available ? " · Claude not installed"
       : stats.ai_paused_until ? ` · Claude hit your plan's usage limit: ${stats.ai_queue} waiting, resumes ~${stats.ai_paused_until}`
-      : ` · Claude ${stats.ai_used} checks today` + (stats.ai_queue ? `, ${stats.ai_queue} in queue` : ""),
+      : ` · Claude today: ${claudeUse(stats.claude_today)}` + (stats.ai_queue ? `, ${stats.ai_queue} in queue` : "")
+        + (stats.claude_mode === "off" ? " (automatic checks off)" : stats.claude_mode === "economy" && stats.claude_night ? " (paused for the night)" : ""),
     stats.telegram ? "" : " · Telegram not set up",
     !stats.facebook.state ? " · Facebook not set up" :
       stats.facebook.state === "logged_out" ? " · Facebook logged out: run flipperbot facebook-login" :
       stats.facebook.state === "error" ? " · Facebook: last run failed, retrying" :
       stats.facebook.at ? ` · Facebook checked ${ago(stats.facebook.at)}` : " · Facebook on");
+  const sel = document.getElementById("claudeMode");
+  if (stats.claude_mode && document.activeElement !== sel) sel.value = stats.claude_mode;
   drawTabs();
 }
+
+function claudeUse(u) {  // "23 calls (~$0.85)", with each kind in the tooltip
+  if (!u || !u.calls) return "no calls yet";
+  document.getElementById("status").title = Object.entries(u.kinds).map(([k, v]) => `${k}: ${v.calls} (~$${v.cost_usd.toFixed(2)})`).join("\n")
+    + "\n(cost at API prices: a guide to what uses the most of your plan)";
+  return `${u.calls} calls (~$${u.cost_usd.toFixed(2)})`;
+}
+
+document.getElementById("claudeMode").addEventListener("change", async e => {
+  try { await api(`/api/claude-mode/${e.target.value}`, { method: "POST", headers: { "X-Flipperbot": "1" } }); refreshStats(); }
+  catch (err) { alert(err.message); }
+});
 
 let loading = 0;
 // Bought it? Sold it? Each asks the price; the bot learns real prices and what makes money from these.

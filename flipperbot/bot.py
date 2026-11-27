@@ -851,8 +851,11 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
             if facebook_due(db, s):
                 db.beat("searching Facebook Marketplace")
                 poll_facebook(db, s)
+            from . import budget
+
+            se = budget.effective(db, s)  # Off / Economy / Normal, switched on the dashboard: how much Claude may do
             db.beat("checking the best finds with Claude")
-            deliver(db, s)
+            deliver(db, se)
             try:
                 db.beat("searching Publi24 and Lajumate")
                 poll_more(db, s)
@@ -868,9 +871,9 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
             try:
                 from . import retail
 
-                if retail.due(db, s):
+                if retail.due(db, se):
                     db.beat("looking up new prices in shops")
-                    retail.look_up(db, s)  # new prices in shops for the most-listed models, once a day
+                    retail.look_up(db, se)  # new prices in shops for the most-listed models, once a day
             except Exception as e:  # never stops the main bot
                 print(f"  new-price look-up error: {e!r}")
             try:
@@ -885,7 +888,7 @@ def run_forever(db: DB, s: Settings, digest_hour: int = 20) -> None:
                 from . import radar
 
                 db.beat("trend radar")
-                radar.tick(db, s)
+                radar.tick(db, se)
             except olx.Blocked:
                 raise
             except Exception as e:  # the radar never stops the main bot
